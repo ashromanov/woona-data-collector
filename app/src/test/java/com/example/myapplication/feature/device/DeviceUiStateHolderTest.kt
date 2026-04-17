@@ -351,4 +351,32 @@ class DeviceUiStateHolderTest {
         assertTrue(holder.uiState.showCaptureUi)
         assertTrue(holder.uiState.isReplayRunning)
     }
+
+    @Test
+    fun resetCaptureSession_clearsDiagnostics() {
+        val holder = DeviceUiStateHolder()
+
+        holder.applyPacketUpdate(
+            PacketProcessingUpdate(
+                packetsReceived = 1,
+                packetsLost = 0,
+                packetsRejected = 0,
+                timerRegressionRejects = 0,
+                chartSamplesByStream = emptyMap(),
+                diagnosticEvents = listOf(
+                    PacketDiagnosticEvent(
+                        id = 7L,
+                        type = PacketDiagnosticType.INFO,
+                        message = "BLE MTU changed: mtu=247 status=0",
+                    ),
+                ),
+            ),
+        )
+
+        holder.resetCaptureSession()
+
+        assertTrue(holder.uiState.diagnosticEvents.isEmpty())
+        assertEquals(0L, holder.uiState.packetsReceived)
+        assertTrue(holder.uiState.showCaptureUi)
+    }
 }

@@ -126,6 +126,63 @@ class DeviceScreenInsetsTest {
         )
     }
 
+    @Test
+    fun chartScreen_controlsStayWithinViewportWidth() {
+        composeRule.setContent {
+            MaterialTheme {
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    DeviceScreen(
+                        uiState = DeviceUiState(
+                            showCaptureUi = true,
+                            selectedTab = DeviceCaptureTab.CHART,
+                            chart = ChartUiState(
+                                canPanLeft = true,
+                                canPanRight = true,
+                                canZoomIn = true,
+                                canZoomOut = true,
+                            ),
+                        ),
+                        onSensorSelect = {},
+                        onChannelSelect = {},
+                        onTabSelect = {},
+                        onChartWindowSelect = {},
+                        onFollowLiveChange = {},
+                        onChartPanLeft = {},
+                        onChartPanRight = {},
+                        onChartZoomIn = {},
+                        onChartZoomOut = {},
+                        onChartZoomReset = {},
+                        onChartPanGesture = { _ -> },
+                        onChartZoomGesture = { _, _ -> },
+                        onStartScan = {},
+                        onConnect = {},
+                        onDisconnect = {},
+                        onSharePacketFile = {},
+                        onShareRawFile = {},
+                        onShareLogFile = {},
+                        showReplayAction = true,
+                        onReplayRequest = {},
+                    )
+                }
+            }
+        }
+
+        composeRule.waitForIdle()
+
+        val rootWidth = composeRule.activity.findViewById<View>(android.R.id.content).width.toFloat()
+        val presetBounds = composeRule.onNodeWithText("15m").assertExists().fetchSemanticsNode().boundsInRoot
+        val resetBounds = composeRule.onNodeWithText("Y Reset").assertExists().fetchSemanticsNode().boundsInRoot
+
+        assertTrue(
+            "Expected preset chip right edge ${presetBounds.right} to stay within root width $rootWidth",
+            presetBounds.right <= rootWidth,
+        )
+        assertTrue(
+            "Expected reset button right edge ${resetBounds.right} to stay within root width $rootWidth",
+            resetBounds.right <= rootWidth,
+        )
+    }
+
     private fun topSafeInsetPx(): Int {
         val insets = requireWindowInsets()
         val systemBarTop = insets.getInsets(WindowInsets.Type.systemBars()).top

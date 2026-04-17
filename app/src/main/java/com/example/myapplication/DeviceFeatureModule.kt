@@ -112,7 +112,7 @@ fun createDeviceFeatureController(
 
             override fun onError(message: String, throwable: Throwable?) {
                 mainHandler.post {
-                    uiStateHolder.showError(message)
+                    deviceFeatureController?.onSessionError(message) ?: uiStateHolder.showError(message)
                 }
                 Log.e("BLE_SESSION", message, throwable)
             }

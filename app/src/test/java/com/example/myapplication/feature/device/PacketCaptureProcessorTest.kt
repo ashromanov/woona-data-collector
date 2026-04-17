@@ -77,6 +77,128 @@ class PacketCaptureProcessorTest {
     }
 
     @Test
+    fun recordDiagnosticEvent_persistsInfoEventWithoutChangingPacketStats() {
+        val directory = Files.createTempDirectory("packet-processor-info").toFile()
+        val updates = mutableListOf<PacketProcessingUpdate>()
+        val latch = CountDownLatch(1)
+        val processor = PacketCaptureProcessor(
+            packetFileStore = BlePacketFileStore(directory = directory, timestampProvider = { 21L }),
+            rawFragmentFileStore = BleRawFragmentFileStore(directory = directory, timestampProvider = { 221L }),
+            diagnosticLogFileStore = BleDiagnosticLogFileStore(directory = directory, timestampProvider = { 2221L }),
+            onPacketProcessed = {
+                updates += it
+                latch.countDown()
+            },
+            onError = { message, throwable -> throw AssertionError(message, throwable) },
+        )
+
+        processor.recordDiagnosticEvent(
+            type = PacketDiagnosticType.INFO,
+            message = "BLE MTU changed: mtu=247 status=0",
+        )
+
+        assertTrue(latch.await(1, TimeUnit.SECONDS))
+        processor.close()
+
+        val update = updates.single()
+        assertEquals(0L, update.packetsReceived)
+        assertEquals(0L, update.packetsRejected)
+        assertEquals(PacketDiagnosticType.INFO, update.diagnosticEvents.single().type)
+        assertTrue(update.diagnosticEvents.single().message.contains("BLE MTU changed"))
+        val logFile = directory.listFiles()?.firstOrNull { it.name.startsWith("ble_log_") }
+        assertNotNull(logFile)
+        assertTrue(requireNotNull(logFile).readText().contains("INFO"))
+        assertTrue(requireNotNull(logFile).readText().contains("BLE MTU changed: mtu=247 status=0"))
+    }
+
+    @Test
+    fun resetSession_startsFreshDiagnosticLog() {
+        val directory = Files.createTempDirectory("packet-processor-reset-info").toFile()
+        val updates = mutableListOf<PacketProcessingUpdate>()
+        val latch = CountDownLatch(2)
+        var diagnosticTimestamp = 2_224L
+        val processor = PacketCaptureProcessor(
+            packetFileStore = BlePacketFileStore(directory = directory, timestampProvider = { 24L }),
+            rawFragmentFileStore = BleRawFragmentFileStore(directory = directory, timestampProvider = { 224L }),
+            diagnosticLogFileStore = BleDiagnosticLogFileStore(
+                directory = directory,
+                timestampProvider = { diagnosticTimestamp++ },
+            ),
+            onPacketProcessed = {
+                updates += it
+                latch.countDown()
+            },
+            onError = { message, throwable -> throw AssertionError(message, throwable) },
+        )
+
+        processor.recordDiagnosticEvent(
+            type = PacketDiagnosticType.INFO,
+            message = "BLE MTU changed: mtu=247 status=0",
+        )
+        val firstLogFile = processor.currentLogFile()
+        processor.resetSession()
+        processor.recordDiagnosticEvent(
+            type = PacketDiagnosticType.INFO,
+            message = "BLE PHY updated: txPhy=2 rxPhy=2 status=0",
+        )
+
+        assertTrue(latch.await(1, TimeUnit.SECONDS))
+        processor.close()
+
+        assertNotNull(firstLogFile)
+        assertEquals(2, updates.size)
+        assertEquals(0L, updates.last().diagnosticEvents.single().id)
+        val logFiles = directory.listFiles()?.filter { it.name.startsWith("ble_log_") }.orEmpty()
+        assertEquals(2, logFiles.size)
+        val latestLogFile = requireNotNull(processor.currentLogFile())
+        assertTrue(latestLogFile != firstLogFile)
+        assertTrue(requireNotNull(firstLogFile).readText().contains("BLE MTU changed: mtu=247 status=0"))
+        assertTrue(!requireNotNull(firstLogFile).readText().contains("BLE PHY updated: txPhy=2 rxPhy=2 status=0"))
+        assertTrue(latestLogFile.readText().contains("BLE PHY updated: txPhy=2 rxPhy=2 status=0"))
+    }
+
+    @Test
+    fun submit_rejectsOverlappingPacketStartAtFragmentBoundary() {
+        val directory = Files.createTempDirectory("packet-processor-overlap").toFile()
+        val updates = mutableListOf<PacketProcessingUpdate>()
+        val latch = CountDownLatch(2)
+        val processor = PacketCaptureProcessor(
+            packetFileStore = BlePacketFileStore(directory = directory, timestampProvider = { 23L }),
+            rawFragmentFileStore = BleRawFragmentFileStore(directory = directory, timestampProvider = { 223L }),
+            diagnosticLogFileStore = BleDiagnosticLogFileStore(directory = directory, timestampProvider = { 2223L }),
+            onPacketProcessed = {
+                updates += it
+                latch.countDown()
+            },
+            onError = { message, throwable -> throw AssertionError(message, throwable) },
+        )
+
+        val firstPacket = validPacket(counter = 10, timerMillis = 50, blocks = listOf(sensorBlock(2, listOf(listOf(10, 20)))))
+        val secondPacket = validPacket(counter = 11, timerMillis = 60, blocks = listOf(sensorBlock(2, listOf(listOf(30, 40)))))
+        processor.submit(firstPacket.copyOfRange(0, 20))
+        processor.submit(secondPacket)
+
+        assertTrue(latch.await(1, TimeUnit.SECONDS))
+        processor.close()
+
+        assertEquals(1L, updates.first().packetsRejected)
+        assertEquals(
+            "New packet start marker found before previous packet completed",
+            updates.first().lastPacketIssue,
+        )
+        assertTrue(
+            updates.first().diagnosticEvents.single().message.contains(
+                "reason=New packet start marker found before previous packet completed",
+            ),
+        )
+        val acceptedUpdate = updates.last()
+        assertEquals(1L, acceptedUpdate.packetsReceived)
+        assertEquals(1L, acceptedUpdate.packetsRejected)
+        assertTrue(acceptedUpdate.diagnosticEvents.last().message.contains("Accepted packet counter=11"))
+        assertNotNull(processor.currentFile())
+    }
+
+    @Test
     fun submit_reportsGapBeforeAcceptedPacket() {
         val directory = Files.createTempDirectory("packet-processor-gap").toFile()
         val updates = mutableListOf<PacketProcessingUpdate>()
@@ -237,6 +359,60 @@ class PacketCaptureProcessorTest {
         ).map { it.timeMillis })
     }
 
+    @Test
+    fun submit_logsQueuePressureWhenBacklogCrossesThreshold() {
+        val directory = Files.createTempDirectory("packet-processor-queue-pressure").toFile()
+        val updates = mutableListOf<PacketProcessingUpdate>()
+        val processor = PacketCaptureProcessor(
+            packetFileStore = BlePacketFileStore(directory = directory, timestampProvider = { 5L }),
+            rawFragmentFileStore = BleRawFragmentFileStore(directory = directory, timestampProvider = { 55L }),
+            diagnosticLogFileStore = BleDiagnosticLogFileStore(directory = directory, timestampProvider = { 555L }),
+            onPacketProcessed = { updates += it },
+            onError = { message, throwable -> throw AssertionError(message, throwable) },
+            maxPendingFragments = 4,
+        )
+
+        repeat(12) { counter ->
+            processor.submit(validPacket(counter = counter + 1, timerMillis = 100 + counter))
+        }
+        processor.close()
+
+        assertTrue(updates.any { update ->
+            update.diagnosticEvents.any { it.message.contains("Capture queue pressure") }
+        })
+    }
+
+    @Test
+    fun submit_logsPeriodicCaptureSummary() {
+        val directory = Files.createTempDirectory("packet-processor-summary").toFile()
+        val updates = mutableListOf<PacketProcessingUpdate>()
+        var now = 1_000L
+        val latch = CountDownLatch(3)
+        val processor = PacketCaptureProcessor(
+            packetFileStore = BlePacketFileStore(directory = directory, timestampProvider = { 6L }),
+            rawFragmentFileStore = BleRawFragmentFileStore(directory = directory, timestampProvider = { 66L }),
+            diagnosticLogFileStore = BleDiagnosticLogFileStore(directory = directory, timestampProvider = { 666L }),
+            onPacketProcessed = {
+                updates += it
+                latch.countDown()
+            },
+            onError = { message, throwable -> throw AssertionError(message, throwable) },
+            wallClockMillisProvider = { now },
+            summaryIntervalMillis = 1_000L,
+        )
+
+        processor.submit(validPacket(counter = 10, timerMillis = 50))
+        now = 2_500L
+        processor.submit(validPacket(counter = 11, timerMillis = 60))
+
+        assertTrue(latch.await(1, TimeUnit.SECONDS))
+        processor.close()
+
+        assertTrue(updates.any { update ->
+            update.diagnosticEvents.any { it.message.contains("Capture summary:") }
+        })
+    }
+
     private fun validPacket(
         counter: Int,
         timerMillis: Int,
@@ -245,7 +421,11 @@ class PacketCaptureProcessorTest {
         counter = counter,
         timerMillis = timerMillis,
         measurementCount = if (blocks.isEmpty()) 1 else blocks.size,
-        blocks = blocks,
+        blocks = if (blocks.isEmpty()) {
+            listOf(sensorBlock(sensorType = 1, channelSamples = listOf(emptyList())))
+        } else {
+            blocks
+        },
     )
 
     private fun invalidPacket(

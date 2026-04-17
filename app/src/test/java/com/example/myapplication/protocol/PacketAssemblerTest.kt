@@ -14,9 +14,10 @@ class PacketAssemblerTest {
         val packets = assembler.append(packet)
 
         assertEquals(1, packets.size)
-        assertArrayEquals(packet, packets.single().bytes)
-        assertEquals(7L, packets.single().counter)
-        assertTrue(packets.single().sensorBlocks.isEmpty())
+        val completed = packets.single() as PacketAssemblyResult.Completed
+        assertArrayEquals(packet, completed.packet.bytes)
+        assertEquals(7L, completed.packet.counter)
+        assertTrue(completed.packet.sensorBlocks.isEmpty())
     }
 
     @Test
@@ -29,8 +30,9 @@ class PacketAssemblerTest {
 
         assertTrue(firstHalf.isEmpty())
         assertEquals(1, secondHalf.size)
-        assertArrayEquals(packet, secondHalf.single().bytes)
-        assertEquals(42L, secondHalf.single().counter)
+        val completed = secondHalf.single() as PacketAssemblyResult.Completed
+        assertArrayEquals(packet, completed.packet.bytes)
+        assertEquals(42L, completed.packet.counter)
     }
 
     @Test
@@ -42,7 +44,7 @@ class PacketAssemblerTest {
         val packets = assembler.append(chunk)
 
         assertEquals(1, packets.size)
-        assertArrayEquals(packet, packets.single().bytes)
+        assertArrayEquals(packet, (packets.single() as PacketAssemblyResult.Completed).packet.bytes)
     }
 
     @Test
@@ -53,7 +55,10 @@ class PacketAssemblerTest {
 
         val packets = assembler.append(first + second)
 
-        assertEquals(listOf(1L, 2L), packets.map { it.counter })
+        assertEquals(
+            listOf(1L, 2L),
+            packets.map { (it as PacketAssemblyResult.Completed).packet.counter },
+        )
     }
 
     @Test
@@ -72,8 +77,9 @@ class PacketAssemblerTest {
         val packets = assembler.append(malformed + valid)
 
         assertEquals(1, packets.size)
-        assertEquals(5L, packets.single().counter)
-        assertArrayEquals(valid, packets.single().bytes)
+        val completed = packets.single() as PacketAssemblyResult.Completed
+        assertEquals(5L, completed.packet.counter)
+        assertArrayEquals(valid, completed.packet.bytes)
     }
 
     @Test
@@ -93,7 +99,7 @@ class PacketAssemblerTest {
             ),
         )
 
-        val completedPacket = assembler.append(packet).single()
+        val completedPacket = (assembler.append(packet).single() as PacketAssemblyResult.Completed).packet
 
         assertEquals(listOf(30f, 40f), completedPacket.channelSamples(sensorType = 2, channel = 2))
     }
@@ -111,14 +117,171 @@ class PacketAssemblerTest {
         assertTrue(secondHalf.isEmpty())
     }
 
+    @Test
+    fun append_rejectsOverlappingPacketStartAtChunkBoundary() {
+        val assembler = PacketAssembler()
+        val first = testPacket(
+            counter = 1,
+            measurementCount = 1,
+            blocks = listOf(sensorBlock(sensorType = 2, channelSamples = listOf(listOf(10, 20)))),
+        )
+        val second = testPacket(
+            counter = 2,
+            measurementCount = 1,
+            blocks = listOf(sensorBlock(sensorType = 2, channelSamples = listOf(listOf(30, 40)))),
+        )
+
+        val firstChunk = assembler.append(first.copyOfRange(0, 20))
+        val secondChunk = assembler.append(second)
+
+        assertTrue(firstChunk.isEmpty())
+        assertEquals(2, secondChunk.size)
+        assertEquals(
+            PacketAssemblyFailureReason.OVERLAPPING_PACKET_START,
+            (secondChunk.first() as PacketAssemblyResult.Rejected).reason,
+        )
+        val completed = secondChunk.last() as PacketAssemblyResult.Completed
+        assertEquals(2L, completed.packet.counter)
+        assertArrayEquals(second, completed.packet.bytes)
+    }
+
+    @Test
+    fun append_rejectsOverlappingPacketAfterShortBoundaryFragment() {
+        val assembler = PacketAssembler()
+        val first = testPacket(
+            counter = 1,
+            measurementCount = 1,
+            blocks = listOf(sensorBlock(sensorType = 2, channelSamples = listOf(listOf(10, 20)))),
+        )
+        val second = testPacket(
+            counter = 2,
+            measurementCount = 1,
+            blocks = listOf(sensorBlock(sensorType = 2, channelSamples = listOf(listOf(30, 40)))),
+        )
+
+        val firstChunk = assembler.append(first.copyOfRange(0, 20))
+        val overlapPrefix = assembler.append(second.copyOfRange(0, 8))
+        val overlapRemainder = assembler.append(second.copyOfRange(8, second.size))
+
+        assertTrue(firstChunk.isEmpty())
+        assertTrue(overlapPrefix.isEmpty())
+        assertEquals(2, overlapRemainder.size)
+        assertEquals(
+            PacketAssemblyFailureReason.OVERLAPPING_PACKET_START,
+            (overlapRemainder.first() as PacketAssemblyResult.Rejected).reason,
+        )
+        val completed = overlapRemainder.last() as PacketAssemblyResult.Completed
+        assertEquals(2L, completed.packet.counter)
+        assertArrayEquals(second, completed.packet.bytes)
+    }
+
+    @Test
+    fun append_keepsIncompletePacketWhenBoundaryHeaderPrefixTurnsOutInvalid() {
+        val assembler = PacketAssembler()
+        val packet = testPacket(
+            counter = 3,
+            measurementCount = 1,
+            payloadBytes = byteArrayOf(
+                0x33,
+                0x99.toByte(),
+                0x10,
+                0x20,
+                0x30,
+                0x40,
+                0x50,
+                0x60,
+            ),
+        )
+
+        val firstChunk = assembler.append(packet.copyOfRange(0, 16))
+        val ambiguousPrefix = assembler.append(packet.copyOfRange(16, 18))
+        val completedChunk = assembler.append(packet.copyOfRange(18, packet.size))
+
+        assertTrue(firstChunk.isEmpty())
+        assertTrue(ambiguousPrefix.isEmpty())
+        assertEquals(1, completedChunk.size)
+        val completed = completedChunk.single() as PacketAssemblyResult.Completed
+        assertEquals(3L, completed.packet.counter)
+        assertArrayEquals(packet, completed.packet.bytes)
+    }
+
+    @Test
+    fun append_keepsIncompletePacketWhenBoundaryHeaderLacksValidSensorBlocks() {
+        val assembler = PacketAssembler()
+        val packet = testPacket(
+            counter = 4,
+            measurementCount = 1,
+            payloadBytes = byteArrayOf(
+                0x33,
+                0x99.toByte(),
+                0xAA.toByte(),
+                0x55,
+                0x10,
+                0x00,
+                0x01,
+                0x01,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+            ),
+        )
+
+        val firstChunk = assembler.append(packet.copyOfRange(0, 16))
+        val candidateChunk = assembler.append(packet.copyOfRange(16, packet.size))
+
+        assertTrue(firstChunk.isEmpty())
+        assertEquals(1, candidateChunk.size)
+        val completed = candidateChunk.single() as PacketAssemblyResult.Completed
+        assertEquals(4L, completed.packet.counter)
+        assertArrayEquals(packet, completed.packet.bytes)
+    }
+
+    @Test
+    fun append_keepsIncompletePacketWhenBoundaryHeaderDoesNotAdvanceCounterOrTimer() {
+        val assembler = PacketAssembler()
+        val nestedPacket = testPacket(
+            counter = 5,
+            timerMillis = 100,
+            measurementCount = 1,
+            blocks = listOf(sensorBlock(sensorType = 2, channelSamples = listOf(listOf(10, 20)))),
+        )
+        val packet = testPacket(
+            counter = 5,
+            timerMillis = 100,
+            measurementCount = 1,
+            payloadBytes = nestedPacket,
+        )
+
+        val firstChunk = assembler.append(packet.copyOfRange(0, 16))
+        val boundaryCandidate = assembler.append(packet.copyOfRange(16, packet.size))
+
+        assertTrue(firstChunk.isEmpty())
+        assertEquals(1, boundaryCandidate.size)
+        val completed = boundaryCandidate.single() as PacketAssemblyResult.Completed
+        assertEquals(5L, completed.packet.counter)
+        assertArrayEquals(packet, completed.packet.bytes)
+    }
+
     private fun testPacket(
         counter: Int,
+        timerMillis: Int = counter,
         payloadSize: Int = 0,
         measurementCount: Int = 0,
         blocks: List<ByteArray> = emptyList(),
+        payloadBytes: ByteArray? = null,
     ): ByteArray {
         val blockPayload = blocks.fold(ByteArray(0)) { acc, block -> acc + block }
-        val resolvedPayloadSize = if (blocks.isNotEmpty()) blockPayload.size else payloadSize
+        val resolvedPayload = when {
+            payloadBytes != null -> payloadBytes
+            blocks.isNotEmpty() -> blockPayload
+            else -> ByteArray(payloadSize) { index -> (index + 16).toByte() }
+        }
+        val resolvedPayloadSize = resolvedPayload.size
         val length = 16 + resolvedPayloadSize
         return ByteArray(length).apply {
             this[0] = 0x33
@@ -132,14 +295,11 @@ class PacketAssemblerTest {
             this[8] = ((counter shr 8) and 0xFF).toByte()
             this[9] = ((counter shr 16) and 0xFF).toByte()
             this[10] = ((counter shr 24) and 0xFF).toByte()
-
-            if (blocks.isNotEmpty()) {
-                System.arraycopy(blockPayload, 0, this, 16, blockPayload.size)
-            } else {
-                for (index in 16 until length) {
-                    this[index] = index.toByte()
-                }
-            }
+            this[11] = (timerMillis and 0xFF).toByte()
+            this[12] = ((timerMillis shr 8) and 0xFF).toByte()
+            this[13] = ((timerMillis shr 16) and 0xFF).toByte()
+            this[14] = ((timerMillis shr 24) and 0xFF).toByte()
+            System.arraycopy(resolvedPayload, 0, this, 16, resolvedPayload.size)
         }
     }
 

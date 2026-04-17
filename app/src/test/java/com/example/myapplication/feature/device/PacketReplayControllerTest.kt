@@ -1,6 +1,7 @@
 package com.example.myapplication.feature.device
 
 import com.example.myapplication.protocol.RecordedPacketFileParser
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -45,6 +46,31 @@ class PacketReplayControllerTest {
 
         assertTrue(stoppedLatch.await(1, TimeUnit.SECONDS))
         assertTrue(errors.contains("Replay failed"))
+    }
+
+    @Test
+    fun startReplay_replaysValidPacketDump() {
+        val submittedFragments = mutableListOf<ByteArray>()
+        val completedLatch = CountDownLatch(1)
+        val controller = DebugPacketReplayController(
+            submitFragment = {
+                submittedFragments += it
+                PacketSubmitResult.ACCEPTED
+            },
+            onReplayStarted = {},
+            onReplayCompleted = { completedLatch.countDown() },
+            onReplayStopped = {},
+            onError = { message, throwable -> throw AssertionError(message, throwable) },
+            packetFileParser = RecordedPacketFileParser(),
+            packetIntervalMs = 1L,
+        )
+
+        val packet = validPacket()
+        controller.startReplay(packet)
+
+        assertTrue(completedLatch.await(1, TimeUnit.SECONDS))
+        assertEquals(1, submittedFragments.size)
+        assertArrayEquals(packet, submittedFragments.single())
     }
 
     private fun validPacket(): ByteArray {

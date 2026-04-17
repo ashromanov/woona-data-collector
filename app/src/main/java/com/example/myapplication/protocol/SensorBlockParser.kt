@@ -5,16 +5,42 @@ data class SensorBlock(
     val channelSamples: List<List<Float>>,
 )
 
+data class SensorBlockParseResult(
+    val blocks: List<SensorBlock>,
+    val parsedBlockCount: Int,
+    val consumedBytes: Int,
+    val isComplete: Boolean,
+)
+
 class SensorBlockParser {
     fun parse(packetBytes: ByteArray): List<SensorBlock> {
-        if (packetBytes.size < HEADER_SIZE) return emptyList()
+        return parseResult(packetBytes).blocks
+    }
+
+    fun parseResult(packetBytes: ByteArray): SensorBlockParseResult {
+        if (packetBytes.size < HEADER_SIZE) {
+            return SensorBlockParseResult(
+                blocks = emptyList(),
+                parsedBlockCount = 0,
+                consumedBytes = 0,
+                isComplete = false,
+            )
+        }
 
         val measurementCount = packetBytes[6].toInt() and 0xFF
         var blockOffset = HEADER_SIZE
         val blocks = mutableListOf<SensorBlock>()
+        var parsedBlockCount = 0
 
         repeat(measurementCount) {
-            if (blockOffset + BLOCK_HEADER_SIZE > packetBytes.size) return blocks
+            if (blockOffset + BLOCK_HEADER_SIZE > packetBytes.size) {
+                return SensorBlockParseResult(
+                    blocks = blocks.toList(),
+                    parsedBlockCount = parsedBlockCount,
+                    consumedBytes = blockOffset,
+                    isComplete = false,
+                )
+            }
 
             val blockSensorType = packetBytes[blockOffset].toInt() and 0xFF
             val channelCount = packetBytes[blockOffset + 1].toInt() and 0xFF
@@ -23,7 +49,14 @@ class SensorBlockParser {
 
             val blockPayloadSize = channelCount * samplesPerChannel * BYTES_PER_SAMPLE
             val nextBlockOffset = blockOffset + BLOCK_HEADER_SIZE + blockPayloadSize
-            if (nextBlockOffset > packetBytes.size) return blocks
+            if (nextBlockOffset > packetBytes.size) {
+                return SensorBlockParseResult(
+                    blocks = blocks.toList(),
+                    parsedBlockCount = parsedBlockCount,
+                    consumedBytes = blockOffset,
+                    isComplete = false,
+                )
+            }
 
             val channels = MutableList(channelCount) { mutableListOf<Float>() }
             var sampleOffset = blockOffset + BLOCK_HEADER_SIZE
@@ -42,9 +75,15 @@ class SensorBlockParser {
                 channelSamples = channels.map { it.toList() },
             )
             blockOffset = nextBlockOffset
+            parsedBlockCount++
         }
 
-        return blocks
+        return SensorBlockParseResult(
+            blocks = blocks.toList(),
+            parsedBlockCount = parsedBlockCount,
+            consumedBytes = blockOffset,
+            isComplete = blockOffset == packetBytes.size,
+        )
     }
 
     fun extractChannelSamples(

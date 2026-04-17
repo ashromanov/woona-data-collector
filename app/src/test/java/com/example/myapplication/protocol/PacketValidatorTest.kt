@@ -14,6 +14,7 @@ class PacketValidatorTest {
                 counter = 7,
                 timerMillis = 99,
                 measurementCount = 1,
+                blocks = listOf(sensorBlock(sensorType = 2, channelSamples = listOf(listOf(10, 20)))),
             ),
         )
 
@@ -42,7 +43,12 @@ class PacketValidatorTest {
 
     @Test
     fun validate_rejectsPacketWithLengthMismatch() {
-        val packet = testPacket(counter = 1, timerMillis = 10, measurementCount = 1).copyOf(17)
+        val packet = testPacket(
+            counter = 1,
+            timerMillis = 10,
+            measurementCount = 1,
+            blocks = listOf(sensorBlock(sensorType = 2, channelSamples = listOf(listOf(10, 20)))),
+        ).copyOf(17)
 
         val result = validator.validate(packet)
 
@@ -52,12 +58,27 @@ class PacketValidatorTest {
         )
     }
 
+    @Test
+    fun validate_acceptsPacketWithoutParsedSensorBlocks() {
+        val result = validator.validate(
+            packetBytes = testPacket(
+                counter = 7,
+                timerMillis = 99,
+                measurementCount = 1,
+            ),
+        )
+
+        assertTrue(result is PacketValidationResult.Accepted)
+    }
+
     private fun testPacket(
         counter: Int,
         timerMillis: Int,
         measurementCount: Int,
+        blocks: List<ByteArray> = emptyList(),
     ): ByteArray {
-        val length = 16
+        val payload = blocks.fold(ByteArray(0)) { acc, block -> acc + block }
+        val length = 16 + payload.size
         return ByteArray(length).apply {
             this[0] = 0x33
             this[1] = 0x99.toByte()
@@ -74,6 +95,34 @@ class PacketValidatorTest {
             this[12] = ((timerMillis shr 8) and 0xFF).toByte()
             this[13] = ((timerMillis shr 16) and 0xFF).toByte()
             this[14] = ((timerMillis shr 24) and 0xFF).toByte()
+            if (payload.isNotEmpty()) {
+                System.arraycopy(payload, 0, this, 16, payload.size)
+            }
+        }
+    }
+
+    private fun sensorBlock(
+        sensorType: Int,
+        channelSamples: List<List<Int>>,
+    ): ByteArray {
+        val channelCount = channelSamples.size
+        val samplesPerChannel = channelSamples.firstOrNull()?.size ?: 0
+        val payloadSize = channelCount * samplesPerChannel * 2
+
+        return ByteArray(6 + payloadSize).apply {
+            this[0] = sensorType.toByte()
+            this[1] = channelCount.toByte()
+            this[2] = (samplesPerChannel and 0xFF).toByte()
+            this[3] = ((samplesPerChannel shr 8) and 0xFF).toByte()
+
+            var offset = 6
+            channelSamples.forEach { samples ->
+                samples.forEach { sample ->
+                    this[offset] = (sample and 0xFF).toByte()
+                    this[offset + 1] = ((sample shr 8) and 0xFF).toByte()
+                    offset += 2
+                }
+            }
         }
     }
 }

@@ -1,6 +1,7 @@
 package com.example.myapplication.feature.device
 
 import com.example.myapplication.protocol.PacketAssembler
+import com.example.myapplication.protocol.PacketAssemblyResult
 import com.example.myapplication.protocol.PacketStatsTracker
 import com.example.myapplication.protocol.PacketValidationResult
 import com.example.myapplication.protocol.PacketValidator
@@ -31,6 +32,7 @@ data class PacketDiagnosticEvent(
 )
 
 enum class PacketDiagnosticType {
+    INFO,
     ACCEPTED,
     GAP,
     REJECTED,
@@ -44,6 +46,7 @@ enum class PacketSubmitResult {
 
 interface PacketCaptureController : AutoCloseable {
     fun submit(packetFragment: ByteArray): PacketSubmitResult
+    fun recordDiagnosticEvent(type: PacketDiagnosticType, message: String)
     fun stopCapture()
     fun updateSelection(sensorType: Int, channel: Int)
     fun resetSession()
@@ -63,10 +66,13 @@ class PacketCaptureProcessor(
     private val packetAssembler: PacketAssembler = PacketAssembler(),
     private val packetStats: PacketStatsTracker = PacketStatsTracker(),
     private val packetValidator: PacketValidator = PacketValidator(),
+    private val wallClockMillisProvider: () -> Long = System::currentTimeMillis,
+    private val summaryIntervalMillis: Long = DEFAULT_SUMMARY_INTERVAL_MS,
+    private val maxPendingFragments: Int = MAX_PENDING_FRAGMENTS,
 ) : PacketCaptureController {
     private val processingLock = Any()
     private val rawCaptureLock = Any()
-    private val queue = ArrayBlockingQueue<QueuedFragment>(MAX_PENDING_FRAGMENTS)
+    private val queue = ArrayBlockingQueue<QueuedFragment>(maxPendingFragments)
 
     @Volatile
     private var isAcceptingFragments = true
@@ -94,6 +100,9 @@ class PacketCaptureProcessor(
 
     private val rejectionCounts = linkedMapOf<String, Long>()
     private var nextDiagnosticEventId = 0L
+    private var maxObservedQueueDepth = 0
+    private var queueWarningLevel = -1
+    private var lastSummaryWallClockMillis = wallClockMillisProvider()
 
     private val workerThread = Thread(::runLoop, WORKER_THREAD_NAME).apply {
         priority = Thread.MAX_PRIORITY
@@ -118,7 +127,7 @@ class PacketCaptureProcessor(
             onError("Failed to persist raw BLE fragment", exception)
         }
 
-        return if (queue.offer(
+        val submitResult = if (queue.offer(
             QueuedFragment(
                 sessionId = sessionId,
                 bytes = packetFragment,
@@ -129,6 +138,37 @@ class PacketCaptureProcessor(
         } else {
             PacketSubmitResult.OVERFLOW
         }
+        val diagnosticUpdates = synchronized(processingLock) {
+            when (submitResult) {
+                PacketSubmitResult.ACCEPTED -> maybeBuildQueuePressureUpdatesLocked(fragmentSize = packetFragment.size)
+                PacketSubmitResult.OVERFLOW -> listOf(
+                    createStatsUpdateLocked(
+                        diagnosticEvents = listOf(
+                            createDiagnosticEvent(
+                                type = PacketDiagnosticType.INFO,
+                                message = "Capture queue overflow: depth=${queue.size}/$maxPendingFragments, fragmentBytes=${packetFragment.size}",
+                            ),
+                        ),
+                    ),
+                )
+                PacketSubmitResult.REJECTED -> emptyList()
+            }
+        }
+        diagnosticUpdates.forEach(onPacketProcessed)
+
+        return submitResult
+    }
+
+    override fun recordDiagnosticEvent(
+        type: PacketDiagnosticType,
+        message: String,
+    ) {
+        val update = synchronized(processingLock) {
+            val event = createDiagnosticEvent(type = type, message = message)
+            createStatsUpdateLocked(diagnosticEvents = listOf(event))
+        }
+
+        onPacketProcessed(update)
     }
 
     override fun updateSelection(sensorType: Int, channel: Int) {
@@ -158,6 +198,9 @@ class PacketCaptureProcessor(
                 receivedRawBytes = 0L
                 rejectionCounts.clear()
                 nextDiagnosticEventId = 0L
+                maxObservedQueueDepth = 0
+                queueWarningLevel = -1
+                lastSummaryWallClockMillis = wallClockMillisProvider()
                 packetFileStore.resetSession()
                 rawFragmentFileStore.resetSession()
                 diagnosticLogFileStore.resetSession()
@@ -236,106 +279,9 @@ class PacketCaptureProcessor(
 
             val packets = packetAssembler.append(fragment.bytes)
             for (packet in packets) {
-                when (val validation = packetValidator.validate(packet.bytes)) {
-                    is PacketValidationResult.Accepted -> {
-                        if (lastAcceptedTimerMillis != UNINITIALIZED_TIMER_MILLIS &&
-                            validation.packet.timerMillis < lastAcceptedTimerMillis
-                        ) {
-                            registerRejection(TIMER_REGRESSION_MESSAGE)
-                            timerRegressionRejects++
-                            val statsSnapshot = packetStats.snapshot()
-                            updates += PacketProcessingUpdate(
-                                packetsReceived = statsSnapshot.packetsReceived,
-                                packetsLost = statsSnapshot.packetsLost,
-                                packetsRejected = rejectedPackets,
-                                timerRegressionRejects = timerRegressionRejects,
-                                fragmentsReceived = receivedFragmentCount,
-                                rawBytesReceived = receivedRawBytes,
-                                chartSamplesByStream = emptyMap(),
-                                lastPacketIssue = TIMER_REGRESSION_MESSAGE,
-                                rejectionBreakdown = buildRejectionBreakdown(),
-                                diagnosticEvents = listOf(
-                                    createDiagnosticEvent(
-                                        type = PacketDiagnosticType.REJECTED,
-                                        message = buildRejectedPacketMessage(
-                                            reason = TIMER_REGRESSION_MESSAGE,
-                                            packetLength = validation.packet.bytes.size,
-                                            counter = validation.packet.counter,
-                                            timerMillis = validation.packet.timerMillis,
-                                        ),
-                                    ),
-                                ),
-                            )
-                            continue
-                        }
-
-                        val diagnosticEvents = mutableListOf<PacketDiagnosticEvent>()
-                        try {
-                            packetFileStore.append(validation.packet.bytes)
-                        } catch (exception: Exception) {
-                            registerRejection(PACKET_WRITE_FAILURE_MESSAGE)
-                            onError("Failed to append validated packet to output file", exception)
-                            updates += PacketProcessingUpdate(
-                                packetsReceived = packetStats.snapshot().packetsReceived,
-                                packetsLost = packetStats.snapshot().packetsLost,
-                                packetsRejected = rejectedPackets,
-                                timerRegressionRejects = timerRegressionRejects,
-                                fragmentsReceived = receivedFragmentCount,
-                                rawBytesReceived = receivedRawBytes,
-                                chartSamplesByStream = emptyMap(),
-                                lastPacketIssue = PACKET_WRITE_FAILURE_MESSAGE,
-                                rejectionBreakdown = buildRejectionBreakdown(),
-                                diagnosticEvents = listOf(
-                                    createDiagnosticEvent(
-                                        type = PacketDiagnosticType.REJECTED,
-                                        message = "Rejected packet reason=$PACKET_WRITE_FAILURE_MESSAGE, len=${validation.packet.bytes.size}, counter=${validation.packet.counter}, timer=${validation.packet.timerMillis}",
-                                    ),
-                                ),
-                            )
-                            continue
-                        }
-
-                        val previousTimerMillis = if (lastAcceptedTimerMillis == UNINITIALIZED_TIMER_MILLIS) {
-                            null
-                        } else {
-                            lastAcceptedTimerMillis
-                        }
-                        lastAcceptedTimerMillis = validation.packet.timerMillis
-                        val recordResult = packetStats.record(validation.packet.counter)
-                        if (recordResult.gapCount > 0) {
-                            diagnosticEvents += createDiagnosticEvent(
-                                type = PacketDiagnosticType.GAP,
-                                message = buildGapMessage(
-                                    expectedCounter = recordResult.expectedCounter,
-                                    actualCounter = recordResult.actualCounter,
-                                    gapCount = recordResult.gapCount,
-                                ),
-                            )
-                        }
-                        diagnosticEvents += createDiagnosticEvent(
-                            type = PacketDiagnosticType.ACCEPTED,
-                            message = buildAcceptedPacketMessage(validation.packet),
-                        )
-
-                        updates += PacketProcessingUpdate(
-                            packetsReceived = recordResult.snapshot.packetsReceived,
-                            packetsLost = recordResult.snapshot.packetsLost,
-                            packetsRejected = rejectedPackets,
-                            timerRegressionRejects = timerRegressionRejects,
-                            fragmentsReceived = receivedFragmentCount,
-                            rawBytesReceived = receivedRawBytes,
-                            chartSamplesByStream = buildChartSamplesByStream(
-                                packet = validation.packet,
-                                previousTimerMillis = if (recordResult.gapCount > 0) null else previousTimerMillis,
-                                startsNewSegment = recordResult.gapCount > 0,
-                            ),
-                            rejectionBreakdown = buildRejectionBreakdown(),
-                            diagnosticEvents = diagnosticEvents,
-                        )
-                    }
-
-                    is PacketValidationResult.Rejected -> {
-                        registerRejection(validation.reason.description)
+                when (packet) {
+                    is PacketAssemblyResult.Rejected -> {
+                        registerRejection(packet.reason.description)
                         val statsSnapshot = packetStats.snapshot()
                         updates += PacketProcessingUpdate(
                             packetsReceived = statsSnapshot.packetsReceived,
@@ -345,22 +291,148 @@ class PacketCaptureProcessor(
                             fragmentsReceived = receivedFragmentCount,
                             rawBytesReceived = receivedRawBytes,
                             chartSamplesByStream = emptyMap(),
-                            lastPacketIssue = validation.reason.description,
+                            lastPacketIssue = packet.reason.description,
                             rejectionBreakdown = buildRejectionBreakdown(),
                             diagnosticEvents = listOf(
                                 createDiagnosticEvent(
                                     type = PacketDiagnosticType.REJECTED,
                                     message = buildRejectedPacketMessage(
-                                        reason = validation.reason.description,
-                                        packetLength = packet.bytes.size,
+                                        reason = packet.reason.description,
                                     ),
                                 ),
                             ),
                         )
                     }
+
+                    is PacketAssemblyResult.Completed -> {
+                        when (val validation = packetValidator.validate(packet.packet.bytes)) {
+                            is PacketValidationResult.Accepted -> {
+                                if (lastAcceptedTimerMillis != UNINITIALIZED_TIMER_MILLIS &&
+                                    validation.packet.timerMillis < lastAcceptedTimerMillis
+                                ) {
+                                    registerRejection(TIMER_REGRESSION_MESSAGE)
+                                    timerRegressionRejects++
+                                    val statsSnapshot = packetStats.snapshot()
+                                    updates += PacketProcessingUpdate(
+                                        packetsReceived = statsSnapshot.packetsReceived,
+                                        packetsLost = statsSnapshot.packetsLost,
+                                        packetsRejected = rejectedPackets,
+                                        timerRegressionRejects = timerRegressionRejects,
+                                        fragmentsReceived = receivedFragmentCount,
+                                        rawBytesReceived = receivedRawBytes,
+                                        chartSamplesByStream = emptyMap(),
+                                        lastPacketIssue = TIMER_REGRESSION_MESSAGE,
+                                        rejectionBreakdown = buildRejectionBreakdown(),
+                                        diagnosticEvents = listOf(
+                                            createDiagnosticEvent(
+                                                type = PacketDiagnosticType.REJECTED,
+                                                message = buildRejectedPacketMessage(
+                                                    reason = TIMER_REGRESSION_MESSAGE,
+                                                    packetLength = validation.packet.bytes.size,
+                                                    counter = validation.packet.counter,
+                                                    timerMillis = validation.packet.timerMillis,
+                                                ),
+                                            ),
+                                        ),
+                                    )
+                                    continue
+                                }
+
+                                val diagnosticEvents = mutableListOf<PacketDiagnosticEvent>()
+                                try {
+                                    packetFileStore.append(validation.packet.bytes)
+                                } catch (exception: Exception) {
+                                    registerRejection(PACKET_WRITE_FAILURE_MESSAGE)
+                                    onError("Failed to append validated packet to output file", exception)
+                                    updates += PacketProcessingUpdate(
+                                        packetsReceived = packetStats.snapshot().packetsReceived,
+                                        packetsLost = packetStats.snapshot().packetsLost,
+                                        packetsRejected = rejectedPackets,
+                                        timerRegressionRejects = timerRegressionRejects,
+                                        fragmentsReceived = receivedFragmentCount,
+                                        rawBytesReceived = receivedRawBytes,
+                                        chartSamplesByStream = emptyMap(),
+                                        lastPacketIssue = PACKET_WRITE_FAILURE_MESSAGE,
+                                        rejectionBreakdown = buildRejectionBreakdown(),
+                                        diagnosticEvents = listOf(
+                                            createDiagnosticEvent(
+                                                type = PacketDiagnosticType.REJECTED,
+                                                message = "Rejected packet reason=$PACKET_WRITE_FAILURE_MESSAGE, len=${validation.packet.bytes.size}, counter=${validation.packet.counter}, timer=${validation.packet.timerMillis}",
+                                            ),
+                                        ),
+                                    )
+                                    continue
+                                }
+
+                                val previousTimerMillis = if (lastAcceptedTimerMillis == UNINITIALIZED_TIMER_MILLIS) {
+                                    null
+                                } else {
+                                    lastAcceptedTimerMillis
+                                }
+                                lastAcceptedTimerMillis = validation.packet.timerMillis
+                                val recordResult = packetStats.record(validation.packet.counter)
+                                if (recordResult.gapCount > 0) {
+                                    diagnosticEvents += createDiagnosticEvent(
+                                        type = PacketDiagnosticType.GAP,
+                                        message = buildGapMessage(
+                                            expectedCounter = recordResult.expectedCounter,
+                                            actualCounter = recordResult.actualCounter,
+                                            gapCount = recordResult.gapCount,
+                                        ),
+                                    )
+                                }
+                                diagnosticEvents += createDiagnosticEvent(
+                                    type = PacketDiagnosticType.ACCEPTED,
+                                    message = buildAcceptedPacketMessage(validation.packet),
+                                )
+
+                                updates += PacketProcessingUpdate(
+                                    packetsReceived = recordResult.snapshot.packetsReceived,
+                                    packetsLost = recordResult.snapshot.packetsLost,
+                                    packetsRejected = rejectedPackets,
+                                    timerRegressionRejects = timerRegressionRejects,
+                                    fragmentsReceived = receivedFragmentCount,
+                                    rawBytesReceived = receivedRawBytes,
+                                    chartSamplesByStream = buildChartSamplesByStream(
+                                        packet = validation.packet,
+                                        previousTimerMillis = if (recordResult.gapCount > 0) null else previousTimerMillis,
+                                        startsNewSegment = recordResult.gapCount > 0,
+                                    ),
+                                    rejectionBreakdown = buildRejectionBreakdown(),
+                                    diagnosticEvents = diagnosticEvents,
+                                )
+                            }
+
+                            is PacketValidationResult.Rejected -> {
+                                registerRejection(validation.reason.description)
+                                val statsSnapshot = packetStats.snapshot()
+                                updates += PacketProcessingUpdate(
+                                    packetsReceived = statsSnapshot.packetsReceived,
+                                    packetsLost = statsSnapshot.packetsLost,
+                                    packetsRejected = rejectedPackets,
+                                    timerRegressionRejects = timerRegressionRejects,
+                                    fragmentsReceived = receivedFragmentCount,
+                                    rawBytesReceived = receivedRawBytes,
+                                    chartSamplesByStream = emptyMap(),
+                                    lastPacketIssue = validation.reason.description,
+                                    rejectionBreakdown = buildRejectionBreakdown(),
+                                    diagnosticEvents = listOf(
+                                        createDiagnosticEvent(
+                                            type = PacketDiagnosticType.REJECTED,
+                                            message = buildRejectedPacketMessage(
+                                                reason = validation.reason.description,
+                                                packetLength = packet.packet.bytes.size,
+                                            ),
+                                        ),
+                                    ),
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
+            maybeCreateSummaryUpdateLocked()?.let(updates::add)
             updates
         }
 
@@ -438,6 +510,31 @@ class PacketCaptureProcessor(
         rejectionCounts[reason] = (rejectionCounts[reason] ?: 0L) + 1L
     }
 
+    private fun maybeBuildQueuePressureUpdatesLocked(fragmentSize: Int): List<PacketProcessingUpdate> {
+        val queueDepth = queue.size
+        maxObservedQueueDepth = maxOf(maxObservedQueueDepth, queueDepth)
+        val nextQueueWarningLevel = when {
+            queueDepth >= (maxPendingFragments * 9 / 10) -> 2
+            queueDepth >= (maxPendingFragments * 3 / 4) -> 1
+            queueDepth >= (maxPendingFragments / 2) -> 0
+            else -> -1
+        }
+        if (nextQueueWarningLevel <= queueWarningLevel) {
+            return emptyList()
+        }
+        queueWarningLevel = nextQueueWarningLevel
+        return listOf(
+            createStatsUpdateLocked(
+                diagnosticEvents = listOf(
+                    createDiagnosticEvent(
+                        type = PacketDiagnosticType.INFO,
+                        message = "Capture queue pressure: depth=$queueDepth/$maxPendingFragments (${queueDepth * 100 / maxPendingFragments}%), maxDepth=$maxObservedQueueDepth, fragmentBytes=$fragmentSize",
+                    ),
+                ),
+            ),
+        )
+    }
+
     private fun buildRejectionBreakdown(): String? {
         if (rejectionCounts.isEmpty()) return null
 
@@ -473,6 +570,39 @@ class PacketCaptureProcessor(
         return event
     }
 
+    private fun createStatsUpdateLocked(
+        chartSamplesByStream: Map<ChartStreamKey, List<ChartPoint>> = emptyMap(),
+        lastPacketIssue: String? = null,
+        rejectionBreakdown: String? = buildRejectionBreakdown(),
+        diagnosticEvents: List<PacketDiagnosticEvent> = emptyList(),
+    ): PacketProcessingUpdate {
+        val statsSnapshot = packetStats.snapshot()
+        return PacketProcessingUpdate(
+            packetsReceived = statsSnapshot.packetsReceived,
+            packetsLost = statsSnapshot.packetsLost,
+            packetsRejected = rejectedPackets,
+            timerRegressionRejects = timerRegressionRejects,
+            fragmentsReceived = receivedFragmentCount,
+            rawBytesReceived = receivedRawBytes,
+            chartSamplesByStream = chartSamplesByStream,
+            lastPacketIssue = lastPacketIssue,
+            rejectionBreakdown = rejectionBreakdown,
+            diagnosticEvents = diagnosticEvents,
+        )
+    }
+
+    private fun maybeCreateSummaryUpdateLocked(): PacketProcessingUpdate? {
+        val now = wallClockMillisProvider()
+        if (now - lastSummaryWallClockMillis < summaryIntervalMillis) return null
+        lastSummaryWallClockMillis = now
+        val statsSnapshot = packetStats.snapshot()
+        val event = createDiagnosticEvent(
+            type = PacketDiagnosticType.INFO,
+            message = "Capture summary: packets=${statsSnapshot.packetsReceived}, lost=${statsSnapshot.packetsLost}, rejected=$rejectedPackets, timerRegressionRejects=$timerRegressionRejects, fragments=$receivedFragmentCount, rawBytes=$receivedRawBytes, queueDepthCurrent=${queue.size}, queueDepthMax=$maxObservedQueueDepth",
+        )
+        return createStatsUpdateLocked(diagnosticEvents = listOf(event))
+    }
+
     private fun buildAcceptedPacketMessage(packet: com.example.myapplication.protocol.ValidatedPacket): String {
         return "Accepted packet counter=${packet.counter}, timer=${packet.timerMillis}, len=${packet.bytes.size}, meas=${packet.measurementCount}"
     }
@@ -487,13 +617,13 @@ class PacketCaptureProcessor(
 
     private fun buildRejectedPacketMessage(
         reason: String,
-        packetLength: Int,
+        packetLength: Int? = null,
         counter: Long? = null,
         timerMillis: Long? = null,
     ): String {
         val details = buildList {
             add("reason=$reason")
-            add("len=$packetLength")
+            if (packetLength != null) add("len=$packetLength")
             if (counter != null) add("counter=$counter")
             if (timerMillis != null) add("timer=$timerMillis")
         }
@@ -505,6 +635,7 @@ class PacketCaptureProcessor(
         const val CHART_DOWNSAMPLE_THRESHOLD = 500
         const val CHART_DOWNSAMPLE_STEP = 4
         const val QUEUE_POLL_TIMEOUT_MS = 100L
+        const val DEFAULT_SUMMARY_INTERVAL_MS = 5_000L
         const val WORKER_THREAD_NAME = "packet-capture-processor"
         const val UNINITIALIZED_TIMER_MILLIS = -1L
         const val TIMER_REGRESSION_MESSAGE = "Packet timer regressed"

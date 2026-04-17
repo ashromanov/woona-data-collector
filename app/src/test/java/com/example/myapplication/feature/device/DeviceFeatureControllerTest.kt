@@ -101,6 +101,26 @@ class DeviceFeatureControllerTest {
     }
 
     @Test
+    fun onSessionError_flushesBufferedTransportDiagnosticsBeforeShowingError() {
+        val packetCapture = FakePacketCaptureController()
+        val controller = createController(packetCaptureController = packetCapture)
+
+        controller.onConnectRequested("AA:BB")
+        controller.onTransportDiagnostic("BLE MTU changed: mtu=247 status=0")
+        controller.onTransportDiagnostic("BLE transport snapshot: profile=Default, mtu=247, phy=?, interval=n/a, latency=n/a, timeout=n/a")
+        controller.onSessionError("Service discovery failed: 133")
+
+        assertEquals(
+            listOf(
+                "BLE MTU changed: mtu=247 status=0",
+                "BLE transport snapshot: profile=Default, mtu=247, phy=?, interval=n/a, latency=n/a, timeout=n/a",
+            ),
+            packetCapture.recordedDiagnostics.map { it.message },
+        )
+        assertEquals("Service discovery failed: 133", controller.uiState.errorMessage)
+    }
+
+    @Test
     fun onSensorSelected_updatesCaptureSelection() {
         val packetCapture = FakePacketCaptureController()
         val controller = createController(packetCaptureController = packetCapture)

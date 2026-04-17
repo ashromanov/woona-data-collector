@@ -160,13 +160,7 @@ class DeviceFeatureController(
 
     fun onCaptureReady() {
         resetCaptureSession()
-        pendingTransportDiagnostics.forEach { message ->
-            packetCaptureController.recordDiagnosticEvent(
-                type = PacketDiagnosticType.INFO,
-                message = message,
-            )
-        }
-        pendingTransportDiagnostics.clear()
+        flushPendingTransportDiagnostics()
         awaitingCaptureReady = false
     }
 
@@ -180,6 +174,12 @@ class DeviceFeatureController(
             type = PacketDiagnosticType.INFO,
             message = message,
         )
+    }
+
+    fun onSessionError(message: String) {
+        flushPendingTransportDiagnostics()
+        awaitingCaptureReady = false
+        uiStateHolder.showError(message)
     }
 
     fun startReplay(fileBytes: ByteArray) {
@@ -210,6 +210,16 @@ class DeviceFeatureController(
         invalidateExportSnapshot()
         packetCaptureController.resetSession()
         uiStateHolder.resetCaptureSession()
+    }
+
+    private fun flushPendingTransportDiagnostics() {
+        pendingTransportDiagnostics.forEach { message ->
+            packetCaptureController.recordDiagnosticEvent(
+                type = PacketDiagnosticType.INFO,
+                message = message,
+            )
+        }
+        pendingTransportDiagnostics.clear()
     }
 
     private fun createShareIntent(

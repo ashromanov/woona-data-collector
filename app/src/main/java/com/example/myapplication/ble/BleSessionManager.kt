@@ -16,8 +16,10 @@ import android.bluetooth.le.ScanResult
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
+import java.util.Locale
 import java.util.UUID
 
 interface BleSessionListener {
@@ -62,6 +64,26 @@ class BleSessionManager(
     private var transportProfile = BleTransportProfile.DEFAULT
     @Volatile
     private var activeTransportProfile: BleTransportProfile? = null
+    private var negotiatedMtu: Int? = null
+    private var negotiatedTxPhy: Int? = null
+    private var negotiatedRxPhy: Int? = null
+    private var notificationCount = 0L
+    private var notificationGapSampleCount = 0L
+    private var notificationGapTotalMillis = 0L
+    private var notificationGapMaxMillis = 0L
+    private var longNotificationGapCount = 0L
+    private var lastNotificationElapsedRealtimeMs: Long? = null
+    private var lastLongGapLoggedElapsedRealtimeMs = 0L
+    private val transportSummaryRunnable = object : Runnable {
+        override fun run() {
+            if (sessionState != BleSessionState.CONNECTED || bluetoothGatt == null) return
+            emitDiagnostic(
+                message = buildTransportSummaryMessage(),
+                level = DiagnosticLevel.INFO,
+            )
+            scanHandler.postDelayed(this, TRANSPORT_SUMMARY_INTERVAL_MS)
+        }
+    }
 
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
@@ -97,6 +119,7 @@ class BleSessionManager(
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             when {
                 status != BluetoothGatt.GATT_SUCCESS -> {
+                    stopTransportSummaryLoop()
                     clearGattReference(gatt)
                     transition(BleSessionEvent.Failure)
                     listener.onError("GATT connection error: $status")
@@ -105,6 +128,7 @@ class BleSessionManager(
 
                 newState == BluetoothProfile.STATE_CONNECTED -> {
                     transition(BleSessionEvent.Connected)
+                    resetTransportDiagnostics()
                     val activeProfile = activeTransportProfile ?: transportProfile
                     if (
                         ContextCompat.checkSelfPermission(
@@ -112,6 +136,7 @@ class BleSessionManager(
                             Manifest.permission.BLUETOOTH_CONNECT,
                         ) != PackageManager.PERMISSION_GRANTED
                     ) {
+                        stopTransportSummaryLoop()
                         listener.onError("Missing BLUETOOTH_CONNECT permission before MTU request")
                         clearGattReference(gatt)
                         safeCloseGatt(gatt)
@@ -121,6 +146,10 @@ class BleSessionManager(
 
                     emitDiagnostic(
                         message = "BLE transport profile: ${activeProfile.title} (${activeProfile.shortDescription})",
+                        level = DiagnosticLevel.INFO,
+                    )
+                    emitDiagnostic(
+                        message = "Exact BLE connection interval, latency, and timeout are unavailable via the public Android SDK",
                         level = DiagnosticLevel.INFO,
                     )
 
@@ -173,6 +202,7 @@ class BleSessionManager(
                 }
 
                 newState == BluetoothProfile.STATE_DISCONNECTED -> {
+                    stopTransportSummaryLoop()
                     clearGattReference(gatt)
                     transition(BleSessionEvent.Disconnected)
                     safeCloseGatt(gatt)
@@ -189,6 +219,7 @@ class BleSessionManager(
                     Manifest.permission.BLUETOOTH_CONNECT,
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
+                stopTransportSummaryLoop()
                 listener.onError("Missing BLUETOOTH_CONNECT permission after MTU change")
                 clearGattReference(gatt)
                 safeCloseGatt(gatt)
@@ -198,6 +229,11 @@ class BleSessionManager(
 
             emitDiagnostic(
                 message = "BLE MTU changed: mtu=$mtu status=$status",
+                level = DiagnosticLevel.INFO,
+            )
+            negotiatedMtu = mtu
+            emitDiagnostic(
+                message = buildTransportSnapshotMessage(),
                 level = DiagnosticLevel.INFO,
             )
             if (status == BluetoothGatt.GATT_SUCCESS) {
@@ -218,6 +254,12 @@ class BleSessionManager(
                 message = "BLE PHY updated: txPhy=$txPhy rxPhy=$rxPhy status=$status",
                 level = DiagnosticLevel.INFO,
             )
+            negotiatedTxPhy = txPhy
+            negotiatedRxPhy = rxPhy
+            emitDiagnostic(
+                message = buildTransportSnapshotMessage(),
+                level = DiagnosticLevel.INFO,
+            )
         }
 
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
@@ -229,6 +271,7 @@ class BleSessionManager(
                     Manifest.permission.BLUETOOTH_CONNECT,
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
+                stopTransportSummaryLoop()
                 listener.onError("Missing BLUETOOTH_CONNECT permission during service discovery")
                 clearGattReference(gatt)
                 safeCloseGatt(gatt)
@@ -237,6 +280,7 @@ class BleSessionManager(
             }
 
             if (status != BluetoothGatt.GATT_SUCCESS) {
+                stopTransportSummaryLoop()
                 clearGattReference(gatt)
                 transition(BleSessionEvent.Failure)
                 listener.onError("Service discovery failed: $status")
@@ -249,6 +293,7 @@ class BleSessionManager(
             val descriptor = characteristic?.getDescriptor(descriptorUuid)
 
             if (service == null || characteristic == null || descriptor == null) {
+                stopTransportSummaryLoop()
                 clearGattReference(gatt)
                 transition(BleSessionEvent.Failure)
                 listener.onError("Required BLE service, characteristic, or descriptor missing")
@@ -258,6 +303,7 @@ class BleSessionManager(
 
             if (!gatt.setCharacteristicNotification(characteristic, true)) {
                 pendingNotificationDescriptorUuid = null
+                stopTransportSummaryLoop()
                 clearGattReference(gatt)
                 transition(BleSessionEvent.Failure)
                 listener.onError("Failed to register local BLE notification callback")
@@ -273,6 +319,7 @@ class BleSessionManager(
 
             if (writeResult != BluetoothStatusCodes.SUCCESS) {
                 pendingNotificationDescriptorUuid = null
+                stopTransportSummaryLoop()
                 clearGattReference(gatt)
                 transition(BleSessionEvent.Failure)
                 listener.onError("Failed to enable BLE notifications: $writeResult")
@@ -295,6 +342,7 @@ class BleSessionManager(
             pendingNotificationDescriptorUuid = null
 
             if (!hasConnectPermission()) {
+                stopTransportSummaryLoop()
                 listener.onError("Missing BLUETOOTH_CONNECT permission during notification setup")
                 clearGattReference(gatt)
                 safeCloseGatt(gatt)
@@ -303,6 +351,7 @@ class BleSessionManager(
             }
 
             if (status != BluetoothGatt.GATT_SUCCESS) {
+                stopTransportSummaryLoop()
                 clearGattReference(gatt)
                 transition(BleSessionEvent.Failure)
                 listener.onError("BLE descriptor write failed: $status")
@@ -310,6 +359,7 @@ class BleSessionManager(
                 return
             }
 
+            startTransportSummaryLoop()
             listener.onCaptureReady()
         }
 
@@ -318,6 +368,27 @@ class BleSessionManager(
             characteristic: BluetoothGattCharacteristic,
             value: ByteArray,
         ) {
+            val nowElapsedRealtimeMs = SystemClock.elapsedRealtime()
+            val previousNotificationElapsedRealtimeMs = lastNotificationElapsedRealtimeMs
+            lastNotificationElapsedRealtimeMs = nowElapsedRealtimeMs
+            notificationCount++
+            if (previousNotificationElapsedRealtimeMs != null) {
+                val gapMillis = (nowElapsedRealtimeMs - previousNotificationElapsedRealtimeMs).coerceAtLeast(0L)
+                notificationGapSampleCount++
+                notificationGapTotalMillis += gapMillis
+                notificationGapMaxMillis = maxOf(notificationGapMaxMillis, gapMillis)
+                val longGapThresholdMillis = longNotificationGapThresholdMillis()
+                if (gapMillis >= longGapThresholdMillis) {
+                    longNotificationGapCount++
+                    if (nowElapsedRealtimeMs - lastLongGapLoggedElapsedRealtimeMs >= LONG_GAP_LOG_COOLDOWN_MS) {
+                        lastLongGapLoggedElapsedRealtimeMs = nowElapsedRealtimeMs
+                        emitDiagnostic(
+                            message = "BLE notification gap: gap=${gapMillis}ms threshold=${longGapThresholdMillis}ms notifications=$notificationCount",
+                            level = DiagnosticLevel.WARNING,
+                        )
+                    }
+                }
+            }
             listener.onPacketReceived(value.clone())
         }
     }
@@ -440,6 +511,7 @@ class BleSessionManager(
     }
 
     override fun close() {
+        stopTransportSummaryLoop()
         stopScanning()
         forceCloseCurrentGatt()
     }
@@ -454,6 +526,7 @@ class BleSessionManager(
             bluetoothGatt = null
             pendingNotificationDescriptorUuid = null
             activeTransportProfile = null
+            resetTransportDiagnostics()
         }
     }
 
@@ -492,6 +565,65 @@ class BleSessionManager(
             DiagnosticLevel.WARNING -> Log.w(TAG, message)
         }
         listener.onDiagnosticMessage(message)
+    }
+
+    private fun resetTransportDiagnostics() {
+        negotiatedMtu = null
+        negotiatedTxPhy = null
+        negotiatedRxPhy = null
+        notificationCount = 0L
+        notificationGapSampleCount = 0L
+        notificationGapTotalMillis = 0L
+        notificationGapMaxMillis = 0L
+        longNotificationGapCount = 0L
+        lastNotificationElapsedRealtimeMs = null
+        lastLongGapLoggedElapsedRealtimeMs = 0L
+    }
+
+    private fun startTransportSummaryLoop() {
+        scanHandler.removeCallbacks(transportSummaryRunnable)
+        scanHandler.postDelayed(transportSummaryRunnable, TRANSPORT_SUMMARY_INTERVAL_MS)
+    }
+
+    private fun stopTransportSummaryLoop() {
+        scanHandler.removeCallbacks(transportSummaryRunnable)
+    }
+
+    private fun buildTransportSnapshotMessage(): String {
+        val mtu = negotiatedMtu?.toString() ?: "?"
+        val phy = when {
+            negotiatedTxPhy == null || negotiatedRxPhy == null -> "?"
+            else -> "${describePhy(negotiatedTxPhy)} / ${describePhy(negotiatedRxPhy)}"
+        }
+        return "BLE transport snapshot: profile=${(activeTransportProfile ?: transportProfile).title}, mtu=$mtu, phy=$phy, interval=n/a, latency=n/a, timeout=n/a"
+    }
+
+    private fun buildTransportSummaryMessage(): String {
+        val averageGapMillis = if (notificationGapSampleCount == 0L) {
+            "n/a"
+        } else {
+            formatMillis(notificationGapTotalMillis.toDouble() / notificationGapSampleCount.toDouble())
+        }
+        val maxGapMillis = if (notificationGapSampleCount == 0L) "n/a" else "${notificationGapMaxMillis}"
+        return "${buildTransportSnapshotMessage()}, notifications=$notificationCount, notifGapAvg=${averageGapMillis}ms, notifGapMax=${maxGapMillis}ms, notifGapLong=$longNotificationGapCount"
+    }
+
+    private fun longNotificationGapThresholdMillis(): Long {
+        return DEFAULT_LONG_NOTIFICATION_GAP_MS
+    }
+
+    private fun formatMillis(value: Double): String {
+        return String.format(Locale.US, "%.2f", value)
+    }
+
+    private fun describePhy(phy: Int?): String {
+        return when (phy) {
+            BluetoothDevice.PHY_LE_1M -> "1M"
+            BluetoothDevice.PHY_LE_2M -> "2M"
+            BluetoothDevice.PHY_LE_CODED -> "CODED"
+            null -> "?"
+            else -> phy.toString()
+        }
     }
 
     private fun forceCloseCurrentGatt() {
@@ -541,6 +673,9 @@ class BleSessionManager(
     private companion object {
         const val TAG = "BLE_SESSION"
         const val SCAN_TIMEOUT_MS = 10_000L
+        const val TRANSPORT_SUMMARY_INTERVAL_MS = 5_000L
+        const val DEFAULT_LONG_NOTIFICATION_GAP_MS = 100L
+        const val LONG_GAP_LOG_COOLDOWN_MS = 5_000L
     }
 }
 
