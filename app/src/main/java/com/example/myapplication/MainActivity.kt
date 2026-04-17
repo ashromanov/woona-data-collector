@@ -84,6 +84,24 @@ class MainActivity : ComponentActivity() {
                         onDisconnect = { deviceFeatureController.onDisconnectRequested() },
                         onSensorSelect = { type -> deviceFeatureController.onSensorSelected(type) },
                         onChannelSelect = { channel -> deviceFeatureController.onChannelSelected(channel) },
+                        onTabSelect = { tab -> deviceFeatureController.onTabSelected(tab) },
+                        onChartWindowSelect = { windowPreset ->
+                            deviceFeatureController.onChartWindowSelected(windowPreset)
+                        },
+                        onFollowLiveChange = { enabled ->
+                            deviceFeatureController.onFollowLiveChanged(enabled)
+                        },
+                        onChartPanLeft = { deviceFeatureController.onChartPanLeftRequested() },
+                        onChartPanRight = { deviceFeatureController.onChartPanRightRequested() },
+                        onChartZoomIn = { deviceFeatureController.onChartZoomInRequested() },
+                        onChartZoomOut = { deviceFeatureController.onChartZoomOutRequested() },
+                        onChartZoomReset = { deviceFeatureController.onChartZoomResetRequested() },
+                        onChartPanGesture = { deltaFraction ->
+                            deviceFeatureController.onChartPanned(deltaFraction)
+                        },
+                        onChartZoomGesture = { scaleFactor, anchorFractionY ->
+                            deviceFeatureController.onChartZoomChanged(scaleFactor, anchorFractionY)
+                        },
                         onSharePacketFile = {
                             deviceFeatureController.createPacketShareIntent(this)?.let(::startActivity)
                         },

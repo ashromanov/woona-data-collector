@@ -62,6 +62,37 @@ class DeviceFeatureControllerTest {
     }
 
     @Test
+    fun chartControls_updateUiViewportState() {
+        val controller = createController()
+
+        controller.onChartWindowSelected(ChartWindowPreset.FIVE_MINUTES)
+        controller.onFollowLiveChanged(enabled = false)
+
+        assertEquals(ChartWindowPreset.FIVE_MINUTES, controller.uiState.chart.windowPreset)
+        assertTrue(!controller.uiState.chart.isFollowingLive)
+    }
+
+    @Test
+    fun onTabSelected_updatesVisibleCaptureTabOnly() {
+        val controller = createController()
+
+        controller.onTabSelected(DeviceCaptureTab.CHART)
+
+        assertEquals(DeviceCaptureTab.CHART, controller.uiState.selectedTab)
+    }
+
+    @Test
+    fun chartZoomActions_updateViewportState() {
+        val controller = createController()
+
+        controller.onChartZoomChanged(scaleFactor = 0.5f)
+        controller.onChartPanned(deltaFraction = 0.25f)
+        controller.onChartZoomResetRequested()
+
+        assertEquals(ChartWindowPreset.THIRTY_SECONDS, controller.uiState.chart.windowPreset)
+    }
+
+    @Test
     fun startReplay_resetsCaptureAndShowsReplayUi() {
         val ble = FakeBleSessionController()
         val packetCapture = FakePacketCaptureController()

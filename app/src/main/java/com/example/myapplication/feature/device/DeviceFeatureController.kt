@@ -52,6 +52,53 @@ class DeviceFeatureController(
         syncProcessorSelection()
     }
 
+    fun onTabSelected(tab: DeviceCaptureTab) {
+        uiStateHolder.onTabSelected(tab)
+    }
+
+    fun onChartWindowSelected(windowPreset: ChartWindowPreset) {
+        uiStateHolder.onChartWindowSelected(windowPreset)
+    }
+
+    fun onFollowLiveChanged(enabled: Boolean) {
+        uiStateHolder.onFollowLiveChanged(enabled)
+    }
+
+    fun onChartPanLeftRequested() {
+        uiStateHolder.panChartLeft()
+    }
+
+    fun onChartPanRightRequested() {
+        uiStateHolder.panChartRight()
+    }
+
+    fun onChartJumpToLiveRequested() {
+        uiStateHolder.jumpToLive()
+    }
+
+    fun onChartZoomInRequested() {
+        uiStateHolder.zoomInChart()
+    }
+
+    fun onChartZoomOutRequested() {
+        uiStateHolder.zoomOutChart()
+    }
+
+    fun onChartZoomResetRequested() {
+        uiStateHolder.resetChartZoom()
+    }
+
+    fun onChartPanned(deltaFraction: Float) {
+        uiStateHolder.panChartByFraction(deltaFraction)
+    }
+
+    fun onChartZoomChanged(
+        scaleFactor: Float,
+        anchorFractionY: Float = 0.5f,
+    ) {
+        uiStateHolder.zoomChart(scaleFactor, anchorFractionY)
+    }
+
     fun onPause() {
         packetCaptureController.flush()
     }

@@ -20,32 +20,286 @@ class DeviceUiStateHolderTest {
     }
 
     @Test
-    fun onSensorTypeSelected_resetsChannelAndChartPoints() {
+    fun sensorAndChannelSelection_reusesPreservedStreamHistory() {
         val holder = DeviceUiStateHolder()
 
-        holder.onChannelSelected(3)
         holder.applyPacketUpdate(
             PacketProcessingUpdate(
                 packetsReceived = 1,
                 packetsLost = 0,
                 packetsRejected = 0,
                 timerRegressionRejects = 0,
-                chartSamples = listOf(1f, 2f, 3f),
-                diagnosticEvents = listOf(
-                    PacketDiagnosticEvent(
-                        id = 1L,
-                        type = PacketDiagnosticType.ACCEPTED,
-                        message = "Accepted packet counter=1",
+                chartSamplesByStream = mapOf(
+                    ChartStreamKey(sensorType = 2, channel = 1) to listOf(
+                        ChartPoint(timeMillis = 1_000L, value = 10f),
+                    ),
+                    ChartStreamKey(sensorType = 2, channel = 3) to listOf(
+                        ChartPoint(timeMillis = 1_000L, value = 30f),
+                    ),
+                    ChartStreamKey(sensorType = 4, channel = 1) to listOf(
+                        ChartPoint(timeMillis = 1_000L, value = 40f),
                     ),
                 ),
             ),
         )
 
-        holder.onSensorTypeSelected(4)
+        assertEquals(listOf(10f), holder.uiState.chart.points.map { it.value })
 
-        assertEquals(4, holder.uiState.selectedSensorType)
+        holder.onChannelSelected(3)
+        assertEquals(listOf(30f), holder.uiState.chart.points.map { it.value })
+
+        holder.onSensorTypeSelected(4)
         assertEquals(1, holder.uiState.selectedChannel)
-        assertEquals(emptyList<Float>(), holder.uiState.points)
+        assertEquals(listOf(40f), holder.uiState.chart.points.map { it.value })
+    }
+
+    @Test
+    fun chartWindowAndPan_updateViewportState() {
+        val holder = DeviceUiStateHolder()
+        holder.applyPacketUpdate(
+            PacketProcessingUpdate(
+                packetsReceived = 1,
+                packetsLost = 0,
+                packetsRejected = 0,
+                timerRegressionRejects = 0,
+                chartSamplesByStream = mapOf(
+                    ChartStreamKey(sensorType = 2, channel = 1) to listOf(
+                        ChartPoint(timeMillis = 0L, value = 1f),
+                        ChartPoint(timeMillis = 30_000L, value = 2f),
+                        ChartPoint(timeMillis = 60_000L, value = 3f),
+                        ChartPoint(timeMillis = 90_000L, value = 4f),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(60_000L, holder.uiState.chart.viewportStartMillis)
+        assertEquals(90_000L, holder.uiState.chart.viewportEndMillis)
+        assertTrue(holder.uiState.chart.isFollowingLive)
+
+        holder.onFollowLiveChanged(enabled = false)
+        holder.panChartLeft()
+        assertTrue(!holder.uiState.chart.isFollowingLive)
+        assertEquals(82_500L, holder.uiState.chart.viewportEndMillis)
+
+        holder.onChartWindowSelected(ChartWindowPreset.SIXTY_SECONDS)
+        assertEquals(60_000L, holder.uiState.chart.windowPreset.durationMillis)
+        assertEquals(22_500L, holder.uiState.chart.viewportStartMillis)
+
+        holder.jumpToLive()
+        assertTrue(holder.uiState.chart.isFollowingLive)
+        assertEquals(90_000L, holder.uiState.chart.viewportEndMillis)
+    }
+
+    @Test
+    fun chartHistory_isTrimmedToFifteenMinutes() {
+        val holder = DeviceUiStateHolder()
+
+        holder.applyPacketUpdate(
+            PacketProcessingUpdate(
+                packetsReceived = 1,
+                packetsLost = 0,
+                packetsRejected = 0,
+                timerRegressionRejects = 0,
+                chartSamplesByStream = mapOf(
+                    ChartStreamKey(sensorType = 2, channel = 1) to listOf(
+                        ChartPoint(timeMillis = 0L, value = 1f),
+                        ChartPoint(timeMillis = 100_000L, value = 2f),
+                        ChartPoint(timeMillis = 1_000_000L, value = 3f),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(100_000L, holder.uiState.chart.sessionStartMillis)
+        assertEquals(listOf(100_000L, 1_000_000L), holder.uiState.chart.points.map { it.timeMillis })
+    }
+
+    @Test
+    fun tabSelection_isUiOnlyAndPreservesChartState() {
+        val holder = DeviceUiStateHolder()
+        holder.applyPacketUpdate(
+            PacketProcessingUpdate(
+                packetsReceived = 1,
+                packetsLost = 0,
+                packetsRejected = 0,
+                timerRegressionRejects = 0,
+                chartSamplesByStream = mapOf(
+                    ChartStreamKey(sensorType = 2, channel = 1) to listOf(
+                        ChartPoint(timeMillis = 1_000L, value = 10f),
+                    ),
+                ),
+            ),
+        )
+
+        holder.onTabSelected(DeviceCaptureTab.CHART)
+
+        assertEquals(DeviceCaptureTab.CHART, holder.uiState.selectedTab)
+        assertEquals(listOf(10f), holder.uiState.chart.points.map { it.value })
+    }
+
+    @Test
+    fun yZoomAndGesturePan_updateStateWithoutChangingWindow() {
+        val holder = DeviceUiStateHolder()
+        holder.applyPacketUpdate(
+            PacketProcessingUpdate(
+                packetsReceived = 1,
+                packetsLost = 0,
+                packetsRejected = 0,
+                timerRegressionRejects = 0,
+                chartSamplesByStream = mapOf(
+                    ChartStreamKey(sensorType = 2, channel = 1) to listOf(
+                        ChartPoint(timeMillis = 0L, value = 1f),
+                        ChartPoint(timeMillis = 30_000L, value = 2f),
+                        ChartPoint(timeMillis = 60_000L, value = 3f),
+                        ChartPoint(timeMillis = 90_000L, value = 4f),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(32_768f, holder.uiState.chart.yAxisAbsRange, 0.01f)
+
+        holder.zoomInChart()
+        assertTrue(holder.uiState.chart.canZoomOut)
+        assertEquals(16_384f, holder.uiState.chart.yAxisAbsRange, 0.01f)
+        assertEquals(60_000L, holder.uiState.chart.viewportStartMillis)
+        assertEquals(90_000L, holder.uiState.chart.viewportEndMillis)
+
+        holder.onFollowLiveChanged(enabled = false)
+        holder.panChartByFraction(-0.5f)
+        assertEquals(45_000L, holder.uiState.chart.viewportStartMillis)
+        assertEquals(75_000L, holder.uiState.chart.viewportEndMillis)
+
+        holder.resetChartZoom()
+        assertEquals(32_768f, holder.uiState.chart.yAxisAbsRange, 0.01f)
+        assertEquals(45_000L, holder.uiState.chart.viewportStartMillis)
+        assertEquals(75_000L, holder.uiState.chart.viewportEndMillis)
+
+        holder.jumpToLive()
+        assertEquals(60_000L, holder.uiState.chart.viewportStartMillis)
+        assertEquals(90_000L, holder.uiState.chart.viewportEndMillis)
+    }
+
+    @Test
+    fun zoomInChart_reducesYAxisRangeEvenForShortSessions() {
+        val holder = DeviceUiStateHolder()
+        holder.applyPacketUpdate(
+            PacketProcessingUpdate(
+                packetsReceived = 1,
+                packetsLost = 0,
+                packetsRejected = 0,
+                timerRegressionRejects = 0,
+                chartSamplesByStream = mapOf(
+                    ChartStreamKey(sensorType = 2, channel = 1) to listOf(
+                        ChartPoint(timeMillis = 0L, value = 1f),
+                        ChartPoint(timeMillis = 5_000L, value = 2f),
+                        ChartPoint(timeMillis = 10_000L, value = 3f),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(0L, holder.uiState.chart.viewportStartMillis)
+        assertEquals(10_000L, holder.uiState.chart.viewportEndMillis)
+
+        holder.zoomInChart()
+
+        assertEquals(0L, holder.uiState.chart.viewportStartMillis)
+        assertEquals(10_000L, holder.uiState.chart.viewportEndMillis)
+        assertEquals(16_384f, holder.uiState.chart.yAxisAbsRange, 0.01f)
+    }
+
+    @Test
+    fun zoomInChart_keepsOffsetSignalCenteredInVisibleYAxisRange() {
+        val holder = DeviceUiStateHolder()
+        holder.applyPacketUpdate(
+            PacketProcessingUpdate(
+                packetsReceived = 1,
+                packetsLost = 0,
+                packetsRejected = 0,
+                timerRegressionRejects = 0,
+                chartSamplesByStream = mapOf(
+                    ChartStreamKey(sensorType = 2, channel = 1) to listOf(
+                        ChartPoint(timeMillis = 0L, value = 15_000f),
+                        ChartPoint(timeMillis = 5_000L, value = 16_000f),
+                        ChartPoint(timeMillis = 10_000L, value = 17_000f),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(16_000f, holder.uiState.chart.yAxisCenter, 0.01f)
+
+        holder.zoomInChart()
+
+        assertEquals(16_000f, holder.uiState.chart.yAxisCenter, 0.01f)
+        assertEquals(16_384f, holder.uiState.chart.yAxisAbsRange, 0.01f)
+    }
+
+    @Test
+    fun applyPacketUpdate_doesNotRecentreYAxisWhileZoomed() {
+        val holder = DeviceUiStateHolder()
+        holder.applyPacketUpdate(
+            PacketProcessingUpdate(
+                packetsReceived = 1,
+                packetsLost = 0,
+                packetsRejected = 0,
+                timerRegressionRejects = 0,
+                chartSamplesByStream = mapOf(
+                    ChartStreamKey(sensorType = 2, channel = 1) to listOf(
+                        ChartPoint(timeMillis = 0L, value = 15_000f),
+                        ChartPoint(timeMillis = 5_000L, value = 16_000f),
+                        ChartPoint(timeMillis = 10_000L, value = 17_000f),
+                    ),
+                ),
+            ),
+        )
+
+        holder.zoomInChart()
+
+        holder.applyPacketUpdate(
+            PacketProcessingUpdate(
+                packetsReceived = 2,
+                packetsLost = 0,
+                packetsRejected = 0,
+                timerRegressionRejects = 0,
+                chartSamplesByStream = mapOf(
+                    ChartStreamKey(sensorType = 2, channel = 1) to listOf(
+                        ChartPoint(timeMillis = 15_000L, value = 18_000f),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(16_000f, holder.uiState.chart.yAxisCenter, 0.01f)
+        assertEquals(16_384f, holder.uiState.chart.yAxisAbsRange, 0.01f)
+    }
+
+    @Test
+    fun panChartByFraction_doesNotCrashWhenSessionSpanIsShorterThanPreset() {
+        val holder = DeviceUiStateHolder()
+        holder.applyPacketUpdate(
+            PacketProcessingUpdate(
+                packetsReceived = 1,
+                packetsLost = 0,
+                packetsRejected = 0,
+                timerRegressionRejects = 0,
+                chartSamplesByStream = mapOf(
+                    ChartStreamKey(sensorType = 2, channel = 1) to listOf(
+                        ChartPoint(timeMillis = 0L, value = 1f),
+                        ChartPoint(timeMillis = 5_000L, value = 2f),
+                        ChartPoint(timeMillis = 10_000L, value = 3f),
+                    ),
+                ),
+            ),
+        )
+
+        holder.panChartByFraction(deltaFraction = -0.2f)
+
+        assertTrue(holder.uiState.chart.isFollowingLive)
+        assertEquals(0L, holder.uiState.chart.viewportStartMillis)
+        assertEquals(10_000L, holder.uiState.chart.viewportEndMillis)
     }
 
     @Test
@@ -58,7 +312,11 @@ class DeviceUiStateHolderTest {
                 packetsLost = 2,
                 packetsRejected = 1,
                 timerRegressionRejects = 1,
-                chartSamples = listOf(1f, 2f),
+                chartSamplesByStream = mapOf(
+                    ChartStreamKey(sensorType = 2, channel = 1) to listOf(
+                        ChartPoint(timeMillis = 2_000L, value = 1f),
+                    ),
+                ),
                 diagnosticEvents = listOf(
                     PacketDiagnosticEvent(
                         id = 2L,
@@ -77,7 +335,8 @@ class DeviceUiStateHolderTest {
         assertEquals(0L, holder.uiState.packetsLost)
         assertEquals(0L, holder.uiState.packetsRejected)
         assertEquals(0L, holder.uiState.timerRegressionRejects)
-        assertEquals(emptyList<Float>(), holder.uiState.points)
+        assertTrue(holder.uiState.chart.points.isEmpty())
+        assertNull(holder.uiState.chart.latestPointMillis)
         assertTrue(holder.uiState.diagnosticEvents.isEmpty())
         assertNull(holder.uiState.errorMessage)
     }

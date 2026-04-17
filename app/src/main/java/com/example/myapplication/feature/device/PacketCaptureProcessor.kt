@@ -18,7 +18,7 @@ data class PacketProcessingUpdate(
     val timerRegressionRejects: Long,
     val fragmentsReceived: Long = 0L,
     val rawBytesReceived: Long = 0L,
-    val chartSamples: List<Float>,
+    val chartSamplesByStream: Map<ChartStreamKey, List<ChartPoint>>,
     val lastPacketIssue: String? = null,
     val rejectionBreakdown: String? = null,
     val diagnosticEvents: List<PacketDiagnosticEvent> = emptyList(),
@@ -67,12 +67,6 @@ class PacketCaptureProcessor(
     private val processingLock = Any()
     private val rawCaptureLock = Any()
     private val queue = ArrayBlockingQueue<QueuedFragment>(MAX_PENDING_FRAGMENTS)
-
-    @Volatile
-    private var selectedSensorType = DEFAULT_SENSOR_TYPE
-
-    @Volatile
-    private var selectedChannel = DEFAULT_CHANNEL
 
     @Volatile
     private var isAcceptingFragments = true
@@ -138,8 +132,7 @@ class PacketCaptureProcessor(
     }
 
     override fun updateSelection(sensorType: Int, channel: Int) {
-        selectedSensorType = sensorType
-        selectedChannel = channel
+        // Chart history now keeps all streams, so selection is handled entirely in UI state.
     }
 
     override fun stopCapture() {
@@ -239,8 +232,6 @@ class PacketCaptureProcessor(
                 return@synchronized emptyList()
             }
 
-            val sensorType = selectedSensorType
-            val channel = selectedChannel
             val updates = mutableListOf<PacketProcessingUpdate>()
 
             val packets = packetAssembler.append(fragment.bytes)
@@ -260,7 +251,7 @@ class PacketCaptureProcessor(
                                 timerRegressionRejects = timerRegressionRejects,
                                 fragmentsReceived = receivedFragmentCount,
                                 rawBytesReceived = receivedRawBytes,
-                                chartSamples = emptyList(),
+                                chartSamplesByStream = emptyMap(),
                                 lastPacketIssue = TIMER_REGRESSION_MESSAGE,
                                 rejectionBreakdown = buildRejectionBreakdown(),
                                 diagnosticEvents = listOf(
@@ -278,10 +269,6 @@ class PacketCaptureProcessor(
                             continue
                         }
 
-                        val rawSamples = validation.packet.channelSamples(
-                            sensorType = sensorType,
-                            channel = channel,
-                        )
                         val diagnosticEvents = mutableListOf<PacketDiagnosticEvent>()
                         try {
                             packetFileStore.append(validation.packet.bytes)
@@ -295,7 +282,7 @@ class PacketCaptureProcessor(
                                 timerRegressionRejects = timerRegressionRejects,
                                 fragmentsReceived = receivedFragmentCount,
                                 rawBytesReceived = receivedRawBytes,
-                                chartSamples = emptyList(),
+                                chartSamplesByStream = emptyMap(),
                                 lastPacketIssue = PACKET_WRITE_FAILURE_MESSAGE,
                                 rejectionBreakdown = buildRejectionBreakdown(),
                                 diagnosticEvents = listOf(
@@ -308,6 +295,11 @@ class PacketCaptureProcessor(
                             continue
                         }
 
+                        val previousTimerMillis = if (lastAcceptedTimerMillis == UNINITIALIZED_TIMER_MILLIS) {
+                            null
+                        } else {
+                            lastAcceptedTimerMillis
+                        }
                         lastAcceptedTimerMillis = validation.packet.timerMillis
                         val recordResult = packetStats.record(validation.packet.counter)
                         if (recordResult.gapCount > 0) {
@@ -332,7 +324,11 @@ class PacketCaptureProcessor(
                             timerRegressionRejects = timerRegressionRejects,
                             fragmentsReceived = receivedFragmentCount,
                             rawBytesReceived = receivedRawBytes,
-                            chartSamples = downsample(rawSamples),
+                            chartSamplesByStream = buildChartSamplesByStream(
+                                packet = validation.packet,
+                                previousTimerMillis = if (recordResult.gapCount > 0) null else previousTimerMillis,
+                                startsNewSegment = recordResult.gapCount > 0,
+                            ),
                             rejectionBreakdown = buildRejectionBreakdown(),
                             diagnosticEvents = diagnosticEvents,
                         )
@@ -348,7 +344,7 @@ class PacketCaptureProcessor(
                             timerRegressionRejects = timerRegressionRejects,
                             fragmentsReceived = receivedFragmentCount,
                             rawBytesReceived = receivedRawBytes,
-                            chartSamples = emptyList(),
+                            chartSamplesByStream = emptyMap(),
                             lastPacketIssue = validation.reason.description,
                             rejectionBreakdown = buildRejectionBreakdown(),
                             diagnosticEvents = listOf(
@@ -369,6 +365,66 @@ class PacketCaptureProcessor(
         }
 
         updates.forEach(onPacketProcessed)
+    }
+
+    private fun buildChartSamplesByStream(
+        packet: com.example.myapplication.protocol.ValidatedPacket,
+        previousTimerMillis: Long?,
+        startsNewSegment: Boolean,
+    ): Map<ChartStreamKey, List<ChartPoint>> {
+        val samplesByStream = linkedMapOf<ChartStreamKey, MutableList<Float>>()
+
+        packet.sensorBlocks.forEach { sensorBlock ->
+            sensorBlock.channelSamples.forEachIndexed { channelIndex, channelSamples ->
+                val sampledChannel = downsample(channelSamples)
+                if (sampledChannel.isEmpty()) return@forEachIndexed
+
+                val streamKey = ChartStreamKey(
+                    sensorType = sensorBlock.sensorType,
+                    channel = channelIndex + 1,
+                )
+                samplesByStream.getOrPut(streamKey) { mutableListOf() }.addAll(sampledChannel)
+            }
+        }
+
+        return samplesByStream.mapValues { (_, values) ->
+            buildTimedChartPoints(
+                samples = values,
+                currentTimerMillis = packet.timerMillis,
+                previousTimerMillis = previousTimerMillis,
+                startsNewSegment = startsNewSegment,
+            )
+        }
+    }
+
+    private fun buildTimedChartPoints(
+        samples: List<Float>,
+        currentTimerMillis: Long,
+        previousTimerMillis: Long?,
+        startsNewSegment: Boolean,
+    ): List<ChartPoint> {
+        if (samples.isEmpty()) return emptyList()
+
+        val intervalMillis = when {
+            previousTimerMillis == null -> null
+            currentTimerMillis <= previousTimerMillis -> null
+            else -> currentTimerMillis - previousTimerMillis
+        }
+
+        return samples.mapIndexed { index, value ->
+            val pointTimeMillis = if (samples.size == 1) {
+                currentTimerMillis
+            } else if (intervalMillis == null) {
+                currentTimerMillis
+            } else {
+                requireNotNull(previousTimerMillis) + (intervalMillis * (index + 1) / samples.size)
+            }
+            ChartPoint(
+                timeMillis = pointTimeMillis,
+                value = value,
+                startsNewSegment = startsNewSegment && index == 0,
+            )
+        }
     }
 
     private fun downsample(samples: List<Float>): List<Float> {
@@ -445,8 +501,6 @@ class PacketCaptureProcessor(
     }
 
     private companion object {
-        const val DEFAULT_SENSOR_TYPE = 2
-        const val DEFAULT_CHANNEL = 1
         const val MAX_PENDING_FRAGMENTS = 512
         const val CHART_DOWNSAMPLE_THRESHOLD = 500
         const val CHART_DOWNSAMPLE_STEP = 4
