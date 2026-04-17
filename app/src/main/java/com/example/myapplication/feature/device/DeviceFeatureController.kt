@@ -24,9 +24,16 @@ class DeviceFeatureController(
     val uiState: DeviceUiState
         get() = uiStateHolder.uiState
 
-    fun onStartScanRequested(requestPermissions: () -> Unit) {
+    fun onStartScanRequested(
+        hasPermissions: () -> Boolean,
+        requestPermissions: () -> Unit,
+    ) {
         uiStateHolder.prepareForScan()
-        requestPermissions()
+        if (hasPermissions()) {
+            bleSessionController.startScanning()
+        } else {
+            requestPermissions()
+        }
     }
 
     fun onPermissionsResult(allGranted: Boolean) {

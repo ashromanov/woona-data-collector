@@ -85,6 +85,12 @@ class BleSessionManager(
                 ),
             )
         }
+
+        override fun onScanFailed(errorCode: Int) {
+            scanHandler.removeCallbacks(stopScanRunnable)
+            transition(BleSessionEvent.Failure)
+            listener.onError("BLE scan failed: ${describeScanFailure(errorCode)}")
+        }
     }
 
     private val gattCallback = object : BluetoothGattCallback() {
@@ -331,7 +337,26 @@ class BleSessionManager(
             return
         }
 
-        val scanner = bluetoothAdapter?.bluetoothLeScanner
+        if (!hasConnectPermission()) {
+            transition(BleSessionEvent.Failure)
+            listener.onError("Missing BLUETOOTH_CONNECT permission")
+            return
+        }
+
+        val adapter = bluetoothAdapter
+        if (adapter == null) {
+            transition(BleSessionEvent.Failure)
+            listener.onError("Bluetooth adapter unavailable")
+            return
+        }
+
+        if (!adapter.isEnabled) {
+            transition(BleSessionEvent.Failure)
+            listener.onError("Bluetooth is turned off")
+            return
+        }
+
+        val scanner = adapter.bluetoothLeScanner
         if (scanner == null) {
             transition(BleSessionEvent.Failure)
             listener.onError("BLE scanner unavailable")
@@ -499,6 +524,18 @@ class BleSessionManager(
             context,
             Manifest.permission.BLUETOOTH_CONNECT,
         ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun describeScanFailure(errorCode: Int): String {
+        return when (errorCode) {
+            ScanCallback.SCAN_FAILED_ALREADY_STARTED -> "already started"
+            ScanCallback.SCAN_FAILED_APPLICATION_REGISTRATION_FAILED -> "application registration failed"
+            ScanCallback.SCAN_FAILED_FEATURE_UNSUPPORTED -> "feature unsupported"
+            ScanCallback.SCAN_FAILED_INTERNAL_ERROR -> "internal error"
+            ScanCallback.SCAN_FAILED_OUT_OF_HARDWARE_RESOURCES -> "out of hardware resources"
+            ScanCallback.SCAN_FAILED_SCANNING_TOO_FREQUENTLY -> "scanning too frequently"
+            else -> "code=$errorCode"
+        }
     }
 
     private companion object {

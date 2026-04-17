@@ -24,6 +24,36 @@ class DeviceFeatureControllerTest {
     }
 
     @Test
+    fun onStartScanRequested_withGrantedPermissionsStartsScanningImmediately() {
+        val ble = FakeBleSessionController()
+        val controller = createController(bleSessionController = ble)
+        var permissionsRequested = false
+
+        controller.onStartScanRequested(
+            hasPermissions = { true },
+            requestPermissions = { permissionsRequested = true },
+        )
+
+        assertEquals(1, ble.startScanningCalls)
+        assertTrue(!permissionsRequested)
+    }
+
+    @Test
+    fun onStartScanRequested_withoutPermissionsRequestsThemInsteadOfStartingScan() {
+        val ble = FakeBleSessionController()
+        val controller = createController(bleSessionController = ble)
+        var permissionsRequested = false
+
+        controller.onStartScanRequested(
+            hasPermissions = { false },
+            requestPermissions = { permissionsRequested = true },
+        )
+
+        assertEquals(0, ble.startScanningCalls)
+        assertTrue(permissionsRequested)
+    }
+
+    @Test
     fun onConnectRequested_stopsCurrentCaptureAndStartsConnection() {
         val ble = FakeBleSessionController()
         val packetCapture = FakePacketCaptureController()
@@ -301,6 +331,7 @@ class DeviceFeatureControllerTest {
 }
 
 private class FakeBleSessionController : BleSessionController {
+    var startScanningCalls = 0
     var stopScanningCalls = 0
     var connectedAddress: String? = null
     var closeCalls = 0
@@ -314,7 +345,9 @@ private class FakeBleSessionController : BleSessionController {
         transportProfile = profile
     }
 
-    override fun startScanning() = Unit
+    override fun startScanning() {
+        startScanningCalls++
+    }
 
     override fun stopScanning() {
         stopScanningCalls++

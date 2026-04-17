@@ -7,6 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -75,13 +76,16 @@ class MainActivity : ComponentActivity() {
             val uiState = deviceFeatureController.uiState
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    DeviceScreen(
-                        uiState = uiState,
-                        onStartScan = {
-                            deviceFeatureController.onStartScanRequested {
-                                requestPermissionLauncher.launch(blePermissions)
-                            }
-                        },
+                        DeviceScreen(
+                            uiState = uiState,
+                            onStartScan = {
+                                deviceFeatureController.onStartScanRequested(
+                                    hasPermissions = ::hasBlePermissions,
+                                    requestPermissions = {
+                                        requestPermissionLauncher.launch(blePermissions)
+                                    },
+                                )
+                            },
                         onConnect = { mac -> deviceFeatureController.onConnectRequested(mac) },
                         onTransportProfileSelect = { profile ->
                             deviceFeatureController.onTransportProfileSelected(profile)
@@ -135,5 +139,11 @@ class MainActivity : ComponentActivity() {
         }
 
         super.onDestroy()
+    }
+
+    private fun hasBlePermissions(): Boolean {
+        return blePermissions.all { permission ->
+            ContextCompat.checkSelfPermission(this, permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
     }
 }

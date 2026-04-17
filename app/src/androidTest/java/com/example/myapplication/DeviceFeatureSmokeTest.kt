@@ -53,9 +53,10 @@ class DeviceFeatureSmokeTest {
         )
 
         var permissionsRequested = false
-        controller.onStartScanRequested {
-            permissionsRequested = true
-        }
+        controller.onStartScanRequested(
+            hasPermissions = { false },
+            requestPermissions = { permissionsRequested = true },
+        )
 
         assertTrue(permissionsRequested)
 
@@ -78,7 +79,9 @@ class DeviceFeatureSmokeTest {
         controller.onConnectRequested("AA:BB:CC:DD:EE:FF")
         assertEquals(1, bleSessionController.stopScanningCalls)
         assertEquals("AA:BB:CC:DD:EE:FF", bleSessionController.connectedAddress)
+        assertTrue(packetCaptureController.stopCaptureCalled)
 
+        bleSessionController.listener.onDiagnosticMessage("BLE MTU changed: mtu=247 status=0")
         bleSessionController.listener.onStateChanged(BleSessionState.CONNECTED)
         bleSessionController.listener.onCaptureReady()
         bleSessionController.listener.onPacketReceived(byteArrayOf(0x10, 0x20, 0x30))
@@ -86,6 +89,7 @@ class DeviceFeatureSmokeTest {
 
         assertTrue(controller.uiState.isConnected)
         assertTrue(packetCaptureController.resetCalled)
+        assertEquals(1, packetCaptureController.recordedDiagnostics.size)
         assertEquals(1, packetCaptureController.submittedFragments.size)
         assertArrayEquals(
             byteArrayOf(0x10, 0x20, 0x30),
@@ -138,15 +142,26 @@ private class FakePacketCaptureController(
 ) : PacketCaptureController {
     val submittedFragments = mutableListOf<ByteArray>()
     var resetCalled = false
+    var stopCaptureCalled = false
     var flushCalled = false
     var closeCalled = false
+    val recordedDiagnostics = mutableListOf<String>()
 
     override fun submit(packetFragment: ByteArray): PacketSubmitResult {
         submittedFragments += packetFragment
         return PacketSubmitResult.ACCEPTED
     }
 
-    override fun stopCapture() = Unit
+    override fun recordDiagnosticEvent(
+        type: com.example.myapplication.feature.device.PacketDiagnosticType,
+        message: String,
+    ) {
+        recordedDiagnostics += message
+    }
+
+    override fun stopCapture() {
+        stopCaptureCalled = true
+    }
 
     override fun updateSelection(sensorType: Int, channel: Int) = Unit
 
