@@ -16,4 +16,5 @@
 .cxx
 local.properties
 **/build/
+app/release/
 project.zip
