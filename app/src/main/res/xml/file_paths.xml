@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Это единственный правильный тег для /data/user/0/package/files/ -->
+    <files-path name="internal_data" path="." />
+</paths>
