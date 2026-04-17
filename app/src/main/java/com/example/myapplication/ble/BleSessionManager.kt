@@ -23,6 +23,7 @@ import java.util.UUID
 interface BleSessionListener {
     fun onDeviceFound(device: BleDevice)
     fun onPacketReceived(packetFragment: ByteArray)
+    fun onDiagnosticMessage(message: String)
     fun onCaptureReady()
     fun onStateChanged(state: BleSessionState)
     fun onError(message: String, throwable: Throwable? = null)
@@ -30,6 +31,8 @@ interface BleSessionListener {
 
 interface BleSessionController {
     fun currentState(): BleSessionState
+    fun currentTransportProfile(): BleTransportProfile
+    fun updateTransportProfile(profile: BleTransportProfile)
     fun startScanning()
     fun stopScanning()
     fun connect(address: String)
@@ -55,6 +58,10 @@ class BleSessionManager(
     private var bluetoothGatt: BluetoothGatt? = null
     private var pendingNotificationDescriptorUuid: UUID? = null
     private var sessionState = BleSessionState.IDLE
+    @Volatile
+    private var transportProfile = BleTransportProfile.DEFAULT
+    @Volatile
+    private var activeTransportProfile: BleTransportProfile? = null
 
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
@@ -92,6 +99,7 @@ class BleSessionManager(
 
                 newState == BluetoothProfile.STATE_CONNECTED -> {
                     transition(BleSessionEvent.Connected)
+                    val activeProfile = activeTransportProfile ?: transportProfile
                     if (
                         ContextCompat.checkSelfPermission(
                             context,
@@ -104,13 +112,62 @@ class BleSessionManager(
                         transition(BleSessionEvent.Failure)
                         return
                     }
-                    gatt.requestMtu(512)
+
+                    emitDiagnostic(
+                        message = "BLE transport profile: ${activeProfile.title} (${activeProfile.shortDescription})",
+                        level = DiagnosticLevel.INFO,
+                    )
+
+                    if (activeProfile.requestsHighConnectionPriority) {
+                        val priorityRequested = gatt.requestConnectionPriority(
+                            BluetoothGatt.CONNECTION_PRIORITY_HIGH,
+                        )
+                        if (priorityRequested) {
+                            emitDiagnostic(
+                                message = "Requested HIGH BLE connection priority",
+                                level = DiagnosticLevel.INFO,
+                            )
+                        } else {
+                            emitDiagnostic(
+                                message = "Failed to request high BLE connection priority",
+                                level = DiagnosticLevel.WARNING,
+                            )
+                        }
+                    } else {
+                        emitDiagnostic(
+                            message = "Skipped BLE connection priority request due to selected profile",
+                            level = DiagnosticLevel.INFO,
+                        )
+                    }
+
+                    val requestedMtu = activeProfile.requestedMtu
+                    if (requestedMtu != null) {
+                        val mtuRequested = gatt.requestMtu(requestedMtu)
+                        if (mtuRequested) {
+                            emitDiagnostic(
+                                message = "Requested BLE MTU $requestedMtu",
+                                level = DiagnosticLevel.INFO,
+                            )
+                        } else {
+                            emitDiagnostic(
+                                message = "Failed to request MTU $requestedMtu; continuing with current MTU",
+                                level = DiagnosticLevel.WARNING,
+                            )
+                            requestPreferredPhy(gatt, activeProfile)
+                            gatt.discoverServices()
+                        }
+                    } else {
+                        emitDiagnostic(
+                            message = "Skipped explicit MTU request due to selected profile",
+                            level = DiagnosticLevel.INFO,
+                        )
+                        requestPreferredPhy(gatt, activeProfile)
+                        gatt.discoverServices()
+                    }
                 }
 
                 newState == BluetoothProfile.STATE_DISCONNECTED -> {
-                    if (bluetoothGatt === gatt) {
-                        bluetoothGatt = null
-                    }
+                    clearGattReference(gatt)
                     transition(BleSessionEvent.Disconnected)
                     safeCloseGatt(gatt)
                 }
@@ -118,6 +175,8 @@ class BleSessionManager(
         }
 
         override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
+            if (bluetoothGatt !== gatt) return
+
             if (
                 ContextCompat.checkSelfPermission(
                     context,
@@ -131,17 +190,33 @@ class BleSessionManager(
                 return
             }
 
+            emitDiagnostic(
+                message = "BLE MTU changed: mtu=$mtu status=$status",
+                level = DiagnosticLevel.INFO,
+            )
             if (status == BluetoothGatt.GATT_SUCCESS) {
-                gatt.setPreferredPhy(
-                    BluetoothDevice.PHY_LE_2M_MASK,
-                    BluetoothDevice.PHY_LE_2M_MASK,
-                    BluetoothDevice.PHY_OPTION_NO_PREFERRED,
-                )
+                requestPreferredPhy(gatt, activeTransportProfile ?: transportProfile)
             }
             gatt.discoverServices()
         }
 
+        override fun onPhyUpdate(
+            gatt: BluetoothGatt,
+            txPhy: Int,
+            rxPhy: Int,
+            status: Int,
+        ) {
+            if (bluetoothGatt !== gatt) return
+
+            emitDiagnostic(
+                message = "BLE PHY updated: txPhy=$txPhy rxPhy=$rxPhy status=$status",
+                level = DiagnosticLevel.INFO,
+            )
+        }
+
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+            if (bluetoothGatt !== gatt) return
+
             if (
                 ContextCompat.checkSelfPermission(
                     context,
@@ -243,6 +318,12 @@ class BleSessionManager(
 
     override fun currentState(): BleSessionState = sessionState
 
+    override fun currentTransportProfile(): BleTransportProfile = transportProfile
+
+    override fun updateTransportProfile(profile: BleTransportProfile) {
+        transportProfile = profile
+    }
+
     override fun startScanning() {
         if (!hasScanPermission()) {
             transition(BleSessionEvent.Failure)
@@ -293,9 +374,11 @@ class BleSessionManager(
         }
 
         forceCloseCurrentGatt()
+        activeTransportProfile = transportProfile
 
         val device = bluetoothAdapter?.getRemoteDevice(address)
         if (device == null) {
+            activeTransportProfile = null
             transition(BleSessionEvent.Failure)
             listener.onError("BLE device not found for address: $address")
             return
@@ -305,6 +388,7 @@ class BleSessionManager(
             bluetoothGatt = device.connectGatt(context, false, gattCallback)
             transition(BleSessionEvent.ConnectRequested)
         } catch (exception: SecurityException) {
+            activeTransportProfile = null
             transition(BleSessionEvent.Failure)
             listener.onError("Failed to connect to BLE device", exception)
         }
@@ -344,7 +428,45 @@ class BleSessionManager(
         if (bluetoothGatt === gatt) {
             bluetoothGatt = null
             pendingNotificationDescriptorUuid = null
+            activeTransportProfile = null
         }
+    }
+
+    private fun requestPreferredPhy(
+        gatt: BluetoothGatt,
+        profile: BleTransportProfile,
+    ) {
+        when (profile.preferredPhy) {
+            PreferredPhyMode.LE_2M -> {
+                emitDiagnostic(
+                    message = "Requested BLE preferred PHY: LE 2M",
+                    level = DiagnosticLevel.INFO,
+                )
+                gatt.setPreferredPhy(
+                    BluetoothDevice.PHY_LE_2M_MASK,
+                    BluetoothDevice.PHY_LE_2M_MASK,
+                    BluetoothDevice.PHY_OPTION_NO_PREFERRED,
+                )
+            }
+
+            PreferredPhyMode.SYSTEM_DEFAULT -> {
+                emitDiagnostic(
+                    message = "Skipped BLE preferred PHY request due to selected profile",
+                    level = DiagnosticLevel.INFO,
+                )
+            }
+        }
+    }
+
+    private fun emitDiagnostic(
+        message: String,
+        level: DiagnosticLevel,
+    ) {
+        when (level) {
+            DiagnosticLevel.INFO -> Log.i(TAG, message)
+            DiagnosticLevel.WARNING -> Log.w(TAG, message)
+        }
+        listener.onDiagnosticMessage(message)
     }
 
     private fun forceCloseCurrentGatt() {
@@ -359,9 +481,9 @@ class BleSessionManager(
         try {
             gatt.close()
         } catch (exception: SecurityException) {
-            Log.w("BLE_SESSION", "Failed to close GATT after permission loss", exception)
+            Log.w(TAG, "Failed to close GATT after permission loss", exception)
         } catch (exception: Exception) {
-            Log.w("BLE_SESSION", "Failed to close GATT", exception)
+            Log.w(TAG, "Failed to close GATT", exception)
         }
     }
 
@@ -380,6 +502,12 @@ class BleSessionManager(
     }
 
     private companion object {
+        const val TAG = "BLE_SESSION"
         const val SCAN_TIMEOUT_MS = 10_000L
     }
+}
+
+private enum class DiagnosticLevel {
+    INFO,
+    WARNING,
 }

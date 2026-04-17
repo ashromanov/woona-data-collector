@@ -83,6 +83,9 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                         onConnect = { mac -> deviceFeatureController.onConnectRequested(mac) },
+                        onTransportProfileSelect = { profile ->
+                            deviceFeatureController.onTransportProfileSelected(profile)
+                        },
                         onDisconnect = { deviceFeatureController.onDisconnectRequested() },
                         onSensorSelect = { type -> deviceFeatureController.onSensorSelected(type) },
                         onChannelSelect = { channel -> deviceFeatureController.onChannelSelected(channel) },

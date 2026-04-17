@@ -92,6 +92,12 @@ fun createDeviceFeatureController(
                 submitPacketFragment(packetFragment)
             }
 
+            override fun onDiagnosticMessage(message: String) {
+                mainHandler.post {
+                    deviceFeatureController?.onTransportDiagnostic(message)
+                }
+            }
+
             override fun onCaptureReady() {
                 mainHandler.post {
                     deviceFeatureController?.onCaptureReady()
@@ -118,6 +124,7 @@ fun createDeviceFeatureController(
         descriptorUuid = descriptorUuid,
         listener = listener,
     )
+    uiStateHolder.onTransportProfileSelected(requireNotNull(bleSessionController).currentTransportProfile())
     val packetReplayController: PacketReplayController = DebugPacketReplayController(
         submitFragment = submitPacketFragment,
         onReplayStarted = {

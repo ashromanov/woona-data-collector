@@ -3,6 +3,7 @@ package com.example.myapplication.feature.device
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.example.myapplication.ble.BleTransportProfile
 import com.example.myapplication.ble.BleDevice
 import com.example.myapplication.ble.BleSessionState
 import kotlin.math.ceil
@@ -60,6 +61,7 @@ data class DeviceUiState(
     val chart: ChartUiState = ChartUiState(),
     val selectedTab: DeviceCaptureTab = DeviceCaptureTab.OVERVIEW,
     val foundDevices: List<DeviceListItem> = emptyList(),
+    val transportProfile: BleTransportProfile = BleTransportProfile.DEFAULT,
     val selectedSensorType: Int = DEFAULT_SENSOR_TYPE_VALUE,
     val selectedChannel: Int = DEFAULT_CHANNEL_VALUE,
     val showCaptureUi: Boolean = false,
@@ -107,6 +109,10 @@ class DeviceUiStateHolder {
                 address = device.address,
             ),
         )
+    }
+
+    fun onTransportProfileSelected(profile: BleTransportProfile) {
+        uiState = uiState.copy(transportProfile = profile)
     }
 
     fun onSessionStateChanged(state: BleSessionState) {

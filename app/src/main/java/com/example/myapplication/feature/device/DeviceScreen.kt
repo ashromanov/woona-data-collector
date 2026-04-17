@@ -3,7 +3,6 @@ package com.example.myapplication.feature.device
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -44,7 +44,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.rememberScrollState
+import com.example.myapplication.ble.BleTransportProfile
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,6 +64,7 @@ fun DeviceScreen(
     onChartZoomGesture: (Float, Float) -> Unit,
     onStartScan: () -> Unit,
     onConnect: (String) -> Unit,
+    onTransportProfileSelect: (BleTransportProfile) -> Unit,
     onDisconnect: () -> Unit,
     onSharePacketFile: () -> Unit,
     onShareRawFile: () -> Unit,
@@ -76,7 +77,7 @@ fun DeviceScreen(
             .fillMaxSize()
             .systemBarsPadding()
             .displayCutoutPadding()
-            .padding(16.dp),
+            .padding(horizontal = 12.dp, vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         if (!uiState.errorMessage.isNullOrBlank()) {
@@ -91,6 +92,7 @@ fun DeviceScreen(
                 uiState = uiState,
                 onStartScan = onStartScan,
                 onConnect = onConnect,
+                onTransportProfileSelect = onTransportProfileSelect,
                 showReplayAction = showReplayAction,
                 onReplayRequest = onReplayRequest,
             )
@@ -100,11 +102,12 @@ fun DeviceScreen(
                 onTabSelect = onTabSelect,
             )
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
 
             when (uiState.selectedTab) {
                 DeviceCaptureTab.OVERVIEW -> OverviewTab(
                     uiState = uiState,
+                    onTransportProfileSelect = onTransportProfileSelect,
                     onDisconnect = onDisconnect,
                     onSharePacketFile = onSharePacketFile,
                     onShareRawFile = onShareRawFile,
@@ -135,13 +138,13 @@ private fun ErrorCard(message: String) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 12.dp),
+            .padding(bottom = 8.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
     ) {
         Text(
             text = message,
             color = Color(0xFFB00020),
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(10.dp),
         )
     }
 }
@@ -152,12 +155,19 @@ private fun ScanSection(
     uiState: DeviceUiState,
     onStartScan: () -> Unit,
     onConnect: (String) -> Unit,
+    onTransportProfileSelect: (BleTransportProfile) -> Unit,
     showReplayAction: Boolean,
     onReplayRequest: () -> Unit,
 ) {
     Column(modifier = modifier) {
         Text("📡 Поиск BLE-оборудования", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
+        BleTransportProfileCard(
+            selectedProfile = uiState.transportProfile,
+            onTransportProfileSelect = onTransportProfileSelect,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(6.dp))
         Button(
             onClick = onStartScan,
             enabled = !uiState.isScanning,
@@ -166,7 +176,7 @@ private fun ScanSection(
             Text(if (uiState.isScanning) "ИДЕТ СКАНИРОВАНИЕ..." else "НАЧАТЬ ПОИСК")
         }
         if (showReplayAction) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
             OutlinedButton(
                 onClick = onReplayRequest,
                 modifier = Modifier.fillMaxWidth(),
@@ -175,15 +185,15 @@ private fun ScanSection(
             }
         }
 
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(top = 8.dp)) {
+        LazyColumn(modifier = Modifier.fillMaxSize().padding(top = 6.dp)) {
             items(uiState.foundDevices) { device ->
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 4.dp)
+                        .padding(vertical = 3.dp)
                         .clickable { onConnect(device.address) },
                 ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
+                    Column(modifier = Modifier.padding(10.dp)) {
                         Text(text = device.name, style = MaterialTheme.typography.bodyLarge)
                         Text(
                             text = device.address,
@@ -219,6 +229,7 @@ private fun CaptureTabs(
 @Composable
 private fun OverviewTab(
     uiState: DeviceUiState,
+    onTransportProfileSelect: (BleTransportProfile) -> Unit,
     onDisconnect: () -> Unit,
     onSharePacketFile: () -> Unit,
     onShareRawFile: () -> Unit,
@@ -226,10 +237,18 @@ private fun OverviewTab(
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         item {
             SessionSummaryCard(uiState = uiState, compact = false)
+        }
+
+        item {
+            BleTransportProfileCard(
+                selectedProfile = uiState.transportProfile,
+                onTransportProfileSelect = onTransportProfileSelect,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
 
         if (uiState.diagnosticEvents.isNotEmpty()) {
@@ -245,6 +264,59 @@ private fun OverviewTab(
                 onShareRawFile = onShareRawFile,
                 onShareLogFile = onShareLogFile,
             )
+        }
+    }
+}
+
+@Composable
+private fun BleTransportProfileCard(
+    selectedProfile: BleTransportProfile,
+    onTransportProfileSelect: (BleTransportProfile) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFAFAFA)),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("BLE transport profile", style = MaterialTheme.typography.labelMedium)
+            Text(
+                text = "Applies on the next BLE connection. Use it to compare phone compatibility.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.Gray,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                BleTransportProfile.entries.forEach { profile ->
+                    FilterChip(
+                        selected = selectedProfile == profile,
+                        onClick = { onTransportProfileSelect(profile) },
+                        label = { Text(profile.title) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+            Text(
+                text = selectedProfile.shortDescription,
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF37474F),
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                selectedProfile.detailedDescription.forEach { line ->
+                    Text(
+                        text = "• $line",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF455A64),
+                    )
+                }
+            }
         }
     }
 }
@@ -266,7 +338,7 @@ private fun ChartTab(
 ) {
     Column(
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         ChartStatusLine(uiState = uiState)
         SensorSelector(
@@ -451,11 +523,11 @@ private fun SensorSelector(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+                .padding(horizontal = 8.dp, vertical = 6.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text("Выбор датчика", style = MaterialTheme.typography.labelMedium)
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(4.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly,
@@ -471,7 +543,7 @@ private fun SensorSelector(
             }
 
             val maxChannels = if (uiState.selectedSensorType == 2 || uiState.selectedSensorType == 3) 3 else 1
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(4.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center,
@@ -481,7 +553,7 @@ private fun SensorSelector(
                         selected = uiState.selectedChannel == channel,
                         onClick = { onChannelSelect(channel) },
                         label = { Text("Ch $channel") },
-                        modifier = Modifier.padding(horizontal = 4.dp),
+                        modifier = Modifier.padding(horizontal = 2.dp),
                     )
                 }
             }
@@ -507,24 +579,32 @@ private fun ChartControls(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
+                .padding(horizontal = 6.dp, vertical = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 ChartWindowPreset.entries.forEach { preset ->
                     FilterChip(
+                        modifier = Modifier.weight(1f),
                         selected = chart.windowPreset == preset,
                         onClick = { onChartWindowSelect(preset) },
                         label = { Text(preset.label) },
                     )
                 }
+            }
+            Spacer(Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 FilterChip(
+                    modifier = Modifier.weight(1f),
                     selected = chart.isFollowingLive,
                     onClick = { onFollowLiveChange(!chart.isFollowingLive) },
                     label = { Text(if (chart.isFollowingLive) "Live" else "History") },
@@ -532,24 +612,28 @@ private fun ChartControls(
                 IconButton(
                     onClick = onChartPanLeft,
                     enabled = chart.canPanLeft,
+                    modifier = Modifier.size(36.dp),
                 ) {
                     Text("←", textAlign = TextAlign.Center)
                 }
                 IconButton(
                     onClick = onChartPanRight,
                     enabled = chart.canPanRight,
+                    modifier = Modifier.size(36.dp),
                 ) {
                     Text("→", textAlign = TextAlign.Center)
                 }
                 IconButton(
                     onClick = onChartZoomOut,
                     enabled = chart.canZoomOut,
+                    modifier = Modifier.size(36.dp),
                 ) {
                     Text("−", textAlign = TextAlign.Center)
                 }
                 IconButton(
                     onClick = onChartZoomIn,
                     enabled = chart.canZoomIn,
+                    modifier = Modifier.size(36.dp),
                 ) {
                     Text("+", textAlign = TextAlign.Center)
                 }
@@ -605,11 +689,11 @@ private fun ActionButtons(
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             OutlinedButton(
                 onClick = onDisconnect,
@@ -627,7 +711,7 @@ private fun ActionButtons(
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             OutlinedButton(
                 onClick = onShareRawFile,
@@ -647,6 +731,7 @@ private fun ActionButtons(
 
 private fun diagnosticColor(type: PacketDiagnosticType): Color {
     return when (type) {
+        PacketDiagnosticType.INFO -> Color(0xFF1565C0)
         PacketDiagnosticType.ACCEPTED -> Color(0xFF2E7D32)
         PacketDiagnosticType.GAP -> Color(0xFFEF6C00)
         PacketDiagnosticType.REJECTED -> Color(0xFFB00020)
