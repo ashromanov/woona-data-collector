@@ -92,7 +92,7 @@ class DeviceFeatureSmokeTest {
             packetCaptureController.submittedFragments.single(),
         )
 
-        val shareIntent = controller.createShareIntent(context)
+        val shareIntent = controller.createPacketShareIntent(context)
 
         assertNotNull(shareIntent)
         assertTrue(packetCaptureController.flushCalled)
