@@ -13,6 +13,8 @@
 
     <string name="export_session_files">Экспорт файлов сессии</string>
     <string name="export_choose_artifact">Выберите артефакт сессии для отправки.</string>
+    <string name="export_all_files">Все файлы</string>
+    <string name="export_all_files_desc">Отправить вместе все доступные артефакты сессии через один chooser.</string>
     <string name="export_compiled_binary">Собранный бинарный файл</string>
     <string name="export_compiled_binary_desc">Проверенные пакеты сессии, сохраненные в итоговом выходном файле.</string>
     <string name="export_channel_csv">CSV по каналам</string>

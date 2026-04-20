@@ -165,14 +165,21 @@ class DeviceFeatureController(
     fun createCsvShareIntent(context: Context): Intent? {
         return try {
             val snapshot = ensureExportSnapshot()
-            val packetSnapshot = snapshot.packetSnapshot ?: return null
-            val csvSnapshot = snapshot.csvSnapshot ?: createCsvSnapshot(
-                source = packetSnapshot,
-                sessionStartMillis = snapshot.sessionStartMillis ?: wallClockMillisProvider(),
-            ).also { generatedCsv ->
-                exportSnapshot = snapshot.copy(csvSnapshot = generatedCsv)
-            }
+            val csvSnapshot = ensureCsvSnapshot(snapshot) ?: return null
             fileShareIntentFactory.createChooserIntent(context, csvSnapshot)
+        } catch (exception: Exception) {
+            uiStateHolder.showError(appTextResolver.getString(R.string.share_file_failed))
+            Log.e("BLE_SHARE", "Failed to share file", exception)
+            null
+        }
+    }
+
+    fun createAllFilesShareIntent(context: Context): Intent? {
+        return try {
+            val snapshot = ensureExportSnapshot()
+            val files = buildAvailableExportFiles(snapshot)
+            if (files.isEmpty()) return null
+            fileShareIntentFactory.createChooserIntent(context, files)
         } catch (exception: Exception) {
             uiStateHolder.showError(appTextResolver.getString(R.string.share_file_failed))
             Log.e("BLE_SHARE", "Failed to share file", exception)
@@ -187,6 +194,9 @@ class DeviceFeatureController(
     fun canShareLogFile(): Boolean = packetCaptureController.currentLogFile()?.exists() == true
 
     fun canShareCsvFile(): Boolean = packetCaptureController.currentPacketFile()?.exists() == true
+
+    fun canShareAllFiles(): Boolean =
+        canSharePacketFile() || canShareCsvFile() || canShareRawFile() || canShareLogFile()
 
     override fun close() {
         packetReplayController?.close()
@@ -318,6 +328,27 @@ class DeviceFeatureController(
         return snapshot
     }
 
+    private fun buildAvailableExportFiles(snapshot: SessionExportSnapshot): List<File> {
+        val csvSnapshot = ensureCsvSnapshot(snapshot)
+        return listOfNotNull(
+            snapshot.packetSnapshot,
+            csvSnapshot,
+            snapshot.rawSnapshot,
+            snapshot.logSnapshot,
+        )
+    }
+
+    private fun ensureCsvSnapshot(snapshot: SessionExportSnapshot): File? {
+        snapshot.csvSnapshot?.let { return it }
+        val packetSnapshot = snapshot.packetSnapshot ?: return null
+        val generatedCsv = createCsvSnapshot(
+            source = packetSnapshot,
+            sessionStartMillis = snapshot.sessionStartMillis ?: wallClockMillisProvider(),
+        )
+        exportSnapshot = snapshot.copy(csvSnapshot = generatedCsv)
+        return generatedCsv
+    }
+
     private fun invalidateExportSnapshot() {
         val snapshot = exportSnapshot ?: return
         listOf(snapshot.packetSnapshot, snapshot.rawSnapshot, snapshot.logSnapshot, snapshot.csvSnapshot)
@@ -355,9 +386,10 @@ class DeviceFeatureController(
         source: File,
         sessionStartMillis: Long,
     ): File {
+        val sessionBaseName = source.nameWithoutExtension.removeSuffix("_snapshot_packet")
         val target = File(
             source.parentFile,
-            "${source.nameWithoutExtension}_snapshot_csv.csv",
+            "${sessionBaseName}_snapshot_csv.csv",
         )
         return sessionCsvExporter.export(
             packetFile = source,

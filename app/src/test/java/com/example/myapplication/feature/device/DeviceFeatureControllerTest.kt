@@ -403,6 +403,61 @@ class DeviceFeatureControllerTest {
     }
 
     @Test
+    fun createAllFilesShareIntent_sharesAllAvailableSessionArtifacts() {
+        val packetFile = File("/tmp/share-all-packet.bin").apply {
+            writeBytes(
+                packet(
+                    counter = 10,
+                    timerMillis = 50,
+                    blocks = listOf(
+                        sensorBlock(sensorType = 2, channelSamples = listOf(listOf(10, 20))),
+                    ),
+                ),
+            )
+        }
+        val rawFile = File("/tmp/share-all-raw.binlog").apply { writeText("raw") }
+        val logFile = File("/tmp/share-all-log.log").apply { writeText("log") }
+        val shareFactory = FakeFileShareIntentFactory()
+        val controller = DeviceFeatureController(
+            bleSessionController = FakeBleSessionController(),
+            packetCaptureController = FakePacketCaptureController(
+                currentFile = packetFile,
+                currentPacketFile = packetFile,
+                currentRawFile = rawFile,
+                currentLogFile = logFile,
+            ),
+            fileShareIntentFactory = shareFactory,
+            wallClockMillisProvider = { 1_000L },
+        )
+
+        val intent = controller.createAllFilesShareIntent(ContextWrapper(null))
+
+        assertNotNull(intent)
+        assertEquals(
+            listOf(
+                "share-all-packet_snapshot_packet.bin",
+                "share-all-packet_snapshot_csv.csv",
+                "share-all-raw_snapshot_raw.binlog",
+                "share-all-log_snapshot_log.log",
+            ),
+            requireNotNull(shareFactory.sharedFiles).map { it.name },
+        )
+        assertEquals(
+            listOf(
+                "time_millis,packet_device_time_millis,sample_device_time_millis,sample_device_time_normalized_millis,axl_sensor_2_ch_1",
+                "1000,50,50,0,10",
+                "1001,50,50,0,20",
+            ),
+            requireNotNull(shareFactory.sharedFiles)[1].readLines(),
+        )
+
+        packetFile.delete()
+        rawFile.delete()
+        logFile.delete()
+        requireNotNull(shareFactory.sharedFiles).forEach(File::delete)
+    }
+
+    @Test
     fun canShareFiles_remainAvailableAfterDisconnectForCompletedSession() {
         val packetFile = File("/tmp/share-disconnect-packet.bin").apply { writeText("packet") }
         val rawFile = File("/tmp/share-disconnect-raw.binlog").apply { writeText("raw") }
@@ -424,6 +479,7 @@ class DeviceFeatureControllerTest {
         assertTrue(controller.canShareCsvFile())
         assertTrue(controller.canShareRawFile())
         assertTrue(controller.canShareLogFile())
+        assertTrue(controller.canShareAllFiles())
 
         packetFile.delete()
         rawFile.delete()
@@ -670,9 +726,17 @@ private class FakePacketReplayController : PacketReplayController {
 
 private class FakeFileShareIntentFactory : FileShareIntentFactory {
     var sharedFile: File? = null
+    var sharedFiles: List<File>? = null
 
     override fun createChooserIntent(context: Context, file: File): Intent {
         sharedFile = file
+        sharedFiles = listOf(file)
+        return Intent("test")
+    }
+
+    override fun createChooserIntent(context: Context, files: List<File>): Intent {
+        sharedFiles = files
+        sharedFile = files.singleOrNull()
         return Intent("test")
     }
 }

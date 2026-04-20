@@ -13,6 +13,8 @@
 
     <string name="export_session_files">Export session files</string>
     <string name="export_choose_artifact">Choose which session artifact to share.</string>
+    <string name="export_all_files">All files</string>
+    <string name="export_all_files_desc">Share every available session artifact together in one chooser.</string>
     <string name="export_compiled_binary">Compiled binary</string>
     <string name="export_compiled_binary_desc">Validated session packets saved as the compiled output file.</string>
     <string name="export_channel_csv">Channel CSV</string>

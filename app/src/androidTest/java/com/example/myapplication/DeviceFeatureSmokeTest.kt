@@ -194,6 +194,7 @@ class DeviceFeatureSmokeTest {
         assertTrue(controller.canShareCsvFile())
         assertTrue(controller.canShareRawFile())
         assertTrue(controller.canShareLogFile())
+        assertTrue(controller.canShareAllFiles())
 
         assertNotNull(controller.createPacketShareIntent(context))
         assertTrue(requireNotNull(fileShareIntentFactory.sharedFile).name.contains("_snapshot_packet"))
@@ -210,6 +211,17 @@ class DeviceFeatureSmokeTest {
         assertTrue(
             csvSnapshot.readLines().first() ==
                 "time_millis,packet_device_time_millis,sample_device_time_millis,sample_device_time_normalized_millis,axl_sensor_2_ch_1",
+        )
+
+        assertNotNull(controller.createAllFilesShareIntent(context))
+        assertEquals(
+            listOf(
+                "smoke-disconnect-packet_snapshot_packet.bin",
+                "smoke-disconnect-packet_snapshot_csv.csv",
+                "smoke-disconnect-raw_snapshot_raw.binlog",
+                "smoke-disconnect-log_snapshot_log.log",
+            ),
+            requireNotNull(fileShareIntentFactory.sharedFiles).map { it.name },
         )
 
         controller.close()
@@ -309,9 +321,17 @@ private class FakePacketCaptureController(
 
 private class FakeFileShareIntentFactory : FileShareIntentFactory {
     var sharedFile: File? = null
+    var sharedFiles: List<File>? = null
 
     override fun createChooserIntent(context: Context, file: File): Intent {
         sharedFile = file
+        sharedFiles = listOf(file)
+        return Intent("test-share")
+    }
+
+    override fun createChooserIntent(context: Context, files: List<File>): Intent {
+        sharedFiles = files
+        sharedFile = files.singleOrNull()
         return Intent("test-share")
     }
 }

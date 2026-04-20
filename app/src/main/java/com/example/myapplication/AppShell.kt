@@ -97,10 +97,12 @@ fun DeviceAppShell(
     onChartZoomReset: () -> Unit,
     onChartPanGesture: (Float) -> Unit,
     onChartZoomGesture: (Float, Float) -> Unit,
+    canShareAllFiles: Boolean,
     canSharePacketFile: Boolean,
     canShareCsvFile: Boolean,
     canShareRawFile: Boolean,
     canShareLogFile: Boolean,
+    onShareAllFiles: () -> Unit,
     onSharePacketFile: () -> Unit,
     onShareCsvFile: () -> Unit,
     onShareRawFile: () -> Unit,
@@ -113,7 +115,7 @@ fun DeviceAppShell(
     }
     var isExportSheetVisible by rememberSaveable { mutableStateOf(false) }
     val selectedDestination = AppDestination.valueOf(selectedDestinationName)
-    val canExportAnyFile = canSharePacketFile || canShareCsvFile || canShareRawFile || canShareLogFile
+    val canExportAnyFile = canShareAllFiles
 
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
@@ -193,10 +195,15 @@ fun DeviceAppShell(
             onDismissRequest = { isExportSheetVisible = false },
         ) {
             ExportSheet(
+                canShareAllFiles = canShareAllFiles,
                 canSharePacketFile = canSharePacketFile,
                 canShareCsvFile = canShareCsvFile,
                 canShareRawFile = canShareRawFile,
                 canShareLogFile = canShareLogFile,
+                onShareAllFiles = {
+                    isExportSheetVisible = false
+                    onShareAllFiles()
+                },
                 onSharePacketFile = {
                     isExportSheetVisible = false
                     onSharePacketFile()
@@ -343,10 +350,12 @@ private fun ShellNavItem(
 
 @Composable
 private fun ExportSheet(
+    canShareAllFiles: Boolean,
     canSharePacketFile: Boolean,
     canShareCsvFile: Boolean,
     canShareRawFile: Boolean,
     canShareLogFile: Boolean,
+    onShareAllFiles: () -> Unit,
     onSharePacketFile: () -> Unit,
     onShareCsvFile: () -> Unit,
     onShareRawFile: () -> Unit,
@@ -365,6 +374,12 @@ private fun ExportSheet(
             text = appStringResource(R.string.export_choose_artifact),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        ExportActionButton(
+            title = appStringResource(R.string.export_all_files),
+            description = appStringResource(R.string.export_all_files_desc),
+            enabled = canShareAllFiles,
+            onClick = onShareAllFiles,
         )
         ExportActionButton(
             title = appStringResource(R.string.export_compiled_binary),
@@ -454,10 +469,12 @@ object AppShellEntryPoint {
         onChartZoomReset: () -> Unit,
         onChartPanGesture: (Float) -> Unit,
         onChartZoomGesture: (Float, Float) -> Unit,
+        canShareAllFiles: Boolean,
         canSharePacketFile: Boolean,
         canShareCsvFile: Boolean,
         canShareRawFile: Boolean,
         canShareLogFile: Boolean,
+        onShareAllFiles: () -> Unit,
         onSharePacketFile: () -> Unit,
         onShareCsvFile: () -> Unit,
         onShareRawFile: () -> Unit,
@@ -486,10 +503,12 @@ object AppShellEntryPoint {
             onChartZoomReset = onChartZoomReset,
             onChartPanGesture = onChartPanGesture,
             onChartZoomGesture = onChartZoomGesture,
+            canShareAllFiles = canShareAllFiles,
             canSharePacketFile = canSharePacketFile,
             canShareCsvFile = canShareCsvFile,
             canShareRawFile = canShareRawFile,
             canShareLogFile = canShareLogFile,
+            onShareAllFiles = onShareAllFiles,
             onSharePacketFile = onSharePacketFile,
             onShareCsvFile = onShareCsvFile,
             onShareRawFile = onShareRawFile,

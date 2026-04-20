@@ -77,6 +77,7 @@ class AppShellNavigationTest {
     @Test
     fun exportSheet_showsAvailableActions_andDisablesUnavailableOnes() {
         setShellContent(
+            canShareAllFiles = true,
             canSharePacketFile = true,
             canShareCsvFile = true,
             canShareRawFile = false,
@@ -85,6 +86,7 @@ class AppShellNavigationTest {
 
         composeRule.onNodeWithText("Export").assertIsEnabled().performClick()
 
+        composeRule.onNodeWithText("All files").assertIsEnabled()
         composeRule.onNodeWithText("Compiled binary").assertIsEnabled()
         composeRule.onNodeWithText("Channel CSV").assertIsEnabled()
         composeRule.onNodeWithText("Raw data stream").assertIsNotEnabled()
@@ -93,21 +95,21 @@ class AppShellNavigationTest {
 
     @Test
     fun exportWorksFromCharts_andDismissesSheetAfterSelection() {
-        var packetExportClicks = 0
+        var exportAllClicks = 0
         setShellContent(
             uiState = DeviceUiState(showCaptureUi = true),
-            canSharePacketFile = true,
-            onSharePacketFile = { packetExportClicks++ },
+            canShareAllFiles = true,
+            onShareAllFiles = { exportAllClicks++ },
         )
 
         navTab("Charts").performClick()
         composeRule.onNodeWithText("Export").assertIsEnabled().performClick()
-        composeRule.onNodeWithText("Compiled binary").assertIsEnabled().performClick()
+        composeRule.onNodeWithText("All files").assertIsEnabled().performClick()
 
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Compiled binary").assertDoesNotExist()
+        composeRule.onNodeWithText("All files").assertDoesNotExist()
         composeRule.runOnIdle {
-            assertEquals(1, packetExportClicks)
+            assertEquals(1, exportAllClicks)
         }
     }
 
@@ -140,11 +142,13 @@ class AppShellNavigationTest {
 
     private fun setShellContent(
         uiState: DeviceUiState = DeviceUiState(),
+        canShareAllFiles: Boolean = false,
         canSharePacketFile: Boolean = false,
         canShareCsvFile: Boolean = false,
         canShareRawFile: Boolean = false,
         canShareLogFile: Boolean = false,
         selectedThemeMode: AppThemeMode = AppThemeMode.SYSTEM,
+        onShareAllFiles: () -> Unit = {},
         onSharePacketFile: () -> Unit = {},
         onShareCsvFile: () -> Unit = {},
         onShareRawFile: () -> Unit = {},
@@ -179,10 +183,12 @@ class AppShellNavigationTest {
                             onChartZoomReset = {},
                             onChartPanGesture = { _ -> },
                             onChartZoomGesture = { _, _ -> },
+                            canShareAllFiles = canShareAllFiles,
                             canSharePacketFile = canSharePacketFile,
                             canShareCsvFile = canShareCsvFile,
                             canShareRawFile = canShareRawFile,
                             canShareLogFile = canShareLogFile,
+                            onShareAllFiles = onShareAllFiles,
                             onSharePacketFile = onSharePacketFile,
                             onShareCsvFile = onShareCsvFile,
                             onShareRawFile = onShareRawFile,

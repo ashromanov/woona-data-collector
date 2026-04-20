@@ -167,10 +167,14 @@ class MainActivity : ComponentActivity() {
                         onChartZoomGesture = { scaleFactor, anchorFractionY ->
                             deviceFeatureController.onChartZoomChanged(scaleFactor, anchorFractionY)
                         },
+                        canShareAllFiles = deviceFeatureController.canShareAllFiles(),
                         canSharePacketFile = deviceFeatureController.canSharePacketFile(),
                         canShareCsvFile = deviceFeatureController.canShareCsvFile(),
                         canShareRawFile = deviceFeatureController.canShareRawFile(),
                         canShareLogFile = deviceFeatureController.canShareLogFile(),
+                        onShareAllFiles = {
+                            deviceFeatureController.createAllFilesShareIntent(this)?.let(::startActivity)
+                        },
                         onSharePacketFile = {
                             deviceFeatureController.createPacketShareIntent(this)?.let(::startActivity)
                         },
