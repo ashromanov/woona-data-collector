@@ -1,0 +1,165 @@
+package com.example.myapplication
+
+import android.view.View
+import android.view.WindowInsets
+import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.core.view.WindowCompat
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.example.myapplication.feature.device.ChartUiState
+import com.example.myapplication.feature.device.DeviceUiState
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import kotlin.math.max
+
+@RunWith(AndroidJUnit4::class)
+class AppShellInsetsTest {
+    @get:Rule
+    val composeRule = createAndroidComposeRule<ComponentActivity>()
+
+    @Before
+    fun setUp() {
+        composeRule.activityRule.scenario.onActivity { activity ->
+            WindowCompat.setDecorFitsSystemWindows(activity.window, false)
+        }
+    }
+
+    @Test
+    fun topBarTitle_staysBelowTopSystemInsets() {
+        setShellContent()
+
+        composeRule.waitForIdle()
+
+        val titleBounds = composeRule
+            .onAllNodesWithText("Overview")
+            .fetchSemanticsNodes()
+            .minByOrNull { it.boundsInRoot.top }
+            ?.boundsInRoot
+            ?: error("Overview title node was not found")
+        val topInset = topSafeInsetPx()
+
+        assertTrue(
+            "Expected title top ${titleBounds.top} to be below top inset $topInset",
+            titleBounds.top >= topInset,
+        )
+    }
+
+    @Test
+    fun bottomNav_staysAboveBottomSystemInsets() {
+        setShellContent()
+
+        composeRule.waitForIdle()
+
+        val settingsBounds = composeRule
+            .onNodeWithText("Settings")
+            .assertExists()
+            .fetchSemanticsNode()
+            .boundsInRoot
+        val rootHeight = composeRule.activity.findViewById<View>(android.R.id.content).height.toFloat()
+        val bottomInset = bottomSystemInsetPx()
+
+        assertTrue(
+            "Expected nav item bottom ${settingsBounds.bottom} to be above bottom-safe bound ${rootHeight - bottomInset}",
+            settingsBounds.bottom <= rootHeight - bottomInset,
+        )
+    }
+
+    @Test
+    fun chartControls_stayWithinViewportWidth() {
+        setShellContent(
+            uiState = DeviceUiState(
+                showCaptureUi = true,
+                chart = ChartUiState(
+                    canPanLeft = true,
+                    canPanRight = true,
+                    canZoomIn = true,
+                    canZoomOut = true,
+                ),
+            ),
+        )
+
+        composeRule.onNodeWithText("Charts").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("15m").fetchSemanticsNodes().isNotEmpty() &&
+                composeRule.onAllNodesWithText("Y Reset").fetchSemanticsNodes().isNotEmpty()
+        }
+
+        val rootWidth = composeRule.activity.findViewById<View>(android.R.id.content).width.toFloat()
+        val presetBounds = composeRule.onNodeWithText("15m").assertExists().fetchSemanticsNode().boundsInRoot
+        val resetBounds = composeRule.onNodeWithText("Y Reset").assertExists().fetchSemanticsNode().boundsInRoot
+
+        assertTrue(
+            "Expected preset chip right edge ${presetBounds.right} to stay within root width $rootWidth",
+            presetBounds.right <= rootWidth,
+        )
+        assertTrue(
+            "Expected reset button right edge ${resetBounds.right} to stay within root width $rootWidth",
+            resetBounds.right <= rootWidth,
+        )
+    }
+
+    private fun setShellContent(
+        uiState: DeviceUiState = DeviceUiState(),
+    ) {
+        composeRule.setContent {
+            MaterialTheme {
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    DeviceAppShell(
+                        uiState = uiState,
+                        onStartScan = {},
+                        onConnect = {},
+                        onTransportProfileSelect = {},
+                        onDisconnect = {},
+                        onSensorSelect = {},
+                        onChannelSelect = {},
+                        onChartWindowSelect = {},
+                        onFollowLiveChange = {},
+                        onChartPanLeft = {},
+                        onChartPanRight = {},
+                        onChartZoomIn = {},
+                        onChartZoomOut = {},
+                        onChartZoomReset = {},
+                        onChartPanGesture = { _ -> },
+                        onChartZoomGesture = { _, _ -> },
+                        canSharePacketFile = false,
+                        canShareRawFile = false,
+                        canShareLogFile = false,
+                        onSharePacketFile = {},
+                        onShareRawFile = {},
+                        onShareLogFile = {},
+                        showReplayAction = true,
+                        onReplayRequest = {},
+                    )
+                }
+            }
+        }
+    }
+
+    private fun topSafeInsetPx(): Int {
+        val insets = requireWindowInsets()
+        val systemBarTop = insets.getInsets(WindowInsets.Type.systemBars()).top
+        val cutoutTop = insets.displayCutout?.safeInsetTop ?: 0
+        return max(systemBarTop, cutoutTop)
+    }
+
+    private fun bottomSystemInsetPx(): Int {
+        return requireWindowInsets().getInsets(WindowInsets.Type.systemBars()).bottom
+    }
+
+    private fun requireWindowInsets(): WindowInsets {
+        return composeRule.runOnIdle {
+            composeRule.activity.window.decorView.rootWindowInsets
+                ?: error("Root window insets were not available")
+        }
+    }
+}

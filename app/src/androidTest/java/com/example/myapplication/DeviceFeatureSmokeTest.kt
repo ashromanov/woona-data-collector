@@ -8,6 +8,7 @@ import com.example.myapplication.ble.BleDevice
 import com.example.myapplication.ble.BleSessionController
 import com.example.myapplication.ble.BleSessionListener
 import com.example.myapplication.ble.BleSessionState
+import com.example.myapplication.ble.BleTransportProfile
 import com.example.myapplication.feature.device.DeviceUiStateHolder
 import com.example.myapplication.feature.device.PacketCaptureController
 import com.example.myapplication.feature.device.PacketSubmitResult
@@ -115,8 +116,15 @@ private class FakeBleSessionController(
     var stopScanningCalls = 0
     var connectedAddress: String? = null
     var closeCalled = false
+    private var transportProfile = BleTransportProfile.DEFAULT
 
     override fun currentState(): BleSessionState = BleSessionState.IDLE
+
+    override fun currentTransportProfile(): BleTransportProfile = transportProfile
+
+    override fun updateTransportProfile(profile: BleTransportProfile) {
+        transportProfile = profile
+    }
 
     override fun startScanning() {
         startScanningCalls++
