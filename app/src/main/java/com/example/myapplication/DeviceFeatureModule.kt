@@ -14,8 +14,10 @@ import com.example.myapplication.ble.BleTransportProfile
 import com.example.myapplication.feature.device.DeviceFeatureController
 import com.example.myapplication.feature.device.DebugPacketReplayController
 import com.example.myapplication.feature.device.DeviceUiStateHolder
+import com.example.myapplication.feature.device.BatchingPacketCaptureController
 import com.example.myapplication.feature.device.PacketCaptureController
 import com.example.myapplication.feature.device.PacketCaptureProcessor
+import com.example.myapplication.feature.device.PacketProcessingUpdateBatcher
 import com.example.myapplication.feature.device.PacketReplayController
 import com.example.myapplication.feature.device.PacketSubmitResult
 import com.example.myapplication.storage.BleFileShareIntentFactory
@@ -45,23 +47,36 @@ fun createDeviceFeatureController(
 ): DeviceFeatureController {
     val uiStateHolder = DeviceUiStateHolder()
     val mainHandler = Handler(Looper.getMainLooper())
-    val packetCaptureController: PacketCaptureController =
-        packetCaptureControllerFactory?.invoke(uiStateHolder, mainHandler) ?: PacketCaptureProcessor(
-            packetFileStore = BlePacketFileStore(directory = filesDir),
-            rawFragmentFileStore = BleRawFragmentFileStore(directory = filesDir),
-            diagnosticLogFileStore = BleDiagnosticLogFileStore(directory = filesDir),
-            appTextResolver = appTextResolver,
-            onPacketProcessed = { update ->
-                mainHandler.post {
+    var updateBatcher: PacketProcessingUpdateBatcher? = null
+    updateBatcher = PacketProcessingUpdateBatcher(
+        dispatchIntervalMillis = UI_PACKET_UPDATE_INTERVAL_MS,
+        schedule = { runnable, delayMillis -> mainHandler.postDelayed(runnable, delayMillis) },
+        cancel = { runnable -> mainHandler.removeCallbacks(runnable) },
+        dispatch = { generation, update ->
+            mainHandler.post {
+                if (updateBatcher?.isGenerationCurrent(generation) == true) {
                     uiStateHolder.applyPacketUpdate(update)
                 }
-            },
-            onError = { message, throwable ->
-                mainHandler.post {
-                    uiStateHolder.showError(message)
-                }
-                Log.e("BLE_PROCESSOR", message, throwable)
-            },
+            }
+        },
+    )
+    val packetCaptureController: PacketCaptureController =
+        packetCaptureControllerFactory?.invoke(uiStateHolder, mainHandler) ?: BatchingPacketCaptureController(
+            delegate = PacketCaptureProcessor(
+                packetFileStore = BlePacketFileStore(directory = filesDir),
+                rawFragmentFileStore = BleRawFragmentFileStore(directory = filesDir),
+                diagnosticLogFileStore = BleDiagnosticLogFileStore(directory = filesDir),
+                appTextResolver = appTextResolver,
+                onPacketProcessed = updateBatcher::submit,
+                onError = { message, throwable ->
+                    updateBatcher.clearPending()
+                    mainHandler.post {
+                        uiStateHolder.showError(message)
+                    }
+                    Log.e("BLE_PROCESSOR", message, throwable)
+                },
+            ),
+            batcher = updateBatcher,
         )
     packetCaptureController.updateSelection(
         sensorType = uiStateHolder.uiState.selectedSensorType,
@@ -172,6 +187,11 @@ fun createDeviceFeatureController(
         appTextResolver = appTextResolver,
         packetReplayController = packetReplayController,
         uiStateHolder = uiStateHolder,
+        runOnUiThread = { action ->
+            mainHandler.post {
+                action()
+            }
+        },
     )
 
     initialTransportProfile?.let { profile ->
@@ -211,3 +231,5 @@ object DeviceFeatureModuleEntryPoint {
         )
     }
 }
+
+private const val UI_PACKET_UPDATE_INTERVAL_MS = 100L

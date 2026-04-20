@@ -3,6 +3,7 @@ package com.example.myapplication.protocol
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import java.nio.file.Files
 
 class RecordedPacketFileParserTest {
     private val parser = RecordedPacketFileParser()
@@ -22,6 +23,24 @@ class RecordedPacketFileParserTest {
     @Test(expected = IllegalArgumentException::class)
     fun splitIntoPackets_rejectsTruncatedPacket() {
         parser.splitIntoPackets(testPacket(length = 18, counter = 1).copyOf(17))
+    }
+
+    @Test
+    fun forEachPacket_streamsSequentialPacketsFromFile() {
+        val first = testPacket(length = 16, counter = 1)
+        val second = testPacket(length = 18, counter = 2)
+        val packetFile = Files.createTempFile("packet-dump", ".bin").toFile().apply {
+            writeBytes(first + second)
+        }
+        val packets = mutableListOf<ByteArray>()
+
+        parser.forEachPacket(packetFile) { packetBytes ->
+            packets += packetBytes
+        }
+
+        assertEquals(2, packets.size)
+        assertArrayEquals(first, packets[0])
+        assertArrayEquals(second, packets[1])
     }
 
     private fun testPacket(

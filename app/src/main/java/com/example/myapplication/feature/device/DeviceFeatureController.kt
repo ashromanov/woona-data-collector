@@ -23,11 +23,14 @@ class DeviceFeatureController(
     private val uiStateHolder: DeviceUiStateHolder = DeviceUiStateHolder(),
     private val sessionCsvExporter: BleSessionCsvExporter = BleSessionCsvExporter(),
     private val wallClockMillisProvider: () -> Long = System::currentTimeMillis,
+    private val runOnUiThread: (() -> Unit) -> Unit = { action -> action() },
 ) : AutoCloseable {
+    private val exportLock = Any()
     private var pendingTransportDiagnostics = mutableListOf<String>()
     private var awaitingCaptureReady = false
     private var exportSnapshot: SessionExportSnapshot? = null
     private var exportSessionStartMillis: Long? = null
+    private var exportEpoch = 0L
 
     val uiState: DeviceUiState
         get() = uiStateHolder.uiState
@@ -56,7 +59,10 @@ class DeviceFeatureController(
         packetReplayController?.stop()
         pendingTransportDiagnostics.clear()
         awaitingCaptureReady = true
-        invalidateExportSnapshot()
+        val staleSnapshot = synchronized(exportLock) {
+            invalidateExportSnapshotLocked()
+        }
+        deleteSnapshotFiles(staleSnapshot)
         packetCaptureController.stopCapture()
         bleSessionController.stopScanning()
         bleSessionController.connect(address)
@@ -66,7 +72,10 @@ class DeviceFeatureController(
         packetReplayController?.stop()
         pendingTransportDiagnostics.clear()
         awaitingCaptureReady = false
-        invalidateExportSnapshot()
+        val staleSnapshot = synchronized(exportLock) {
+            invalidateExportSnapshotLocked()
+        }
+        deleteSnapshotFiles(staleSnapshot)
         uiStateHolder.stopCaptureSession()
         bleSessionController.disconnect()
     }
@@ -164,11 +173,11 @@ class DeviceFeatureController(
 
     fun createCsvShareIntent(context: Context): Intent? {
         return try {
-            val snapshot = ensureExportSnapshot()
+            val snapshot = ensureExportSnapshot() ?: return null
             val csvSnapshot = ensureCsvSnapshot(snapshot) ?: return null
             fileShareIntentFactory.createChooserIntent(context, csvSnapshot)
         } catch (exception: Exception) {
-            uiStateHolder.showError(appTextResolver.getString(R.string.share_file_failed))
+            showErrorOnMainThread(appTextResolver.getString(R.string.share_file_failed))
             Log.e("BLE_SHARE", "Failed to share file", exception)
             null
         }
@@ -176,12 +185,12 @@ class DeviceFeatureController(
 
     fun createAllFilesShareIntent(context: Context): Intent? {
         return try {
-            val snapshot = ensureExportSnapshot()
+            val snapshot = ensureExportSnapshot() ?: return null
             val files = buildAvailableExportFiles(snapshot)
             if (files.isEmpty()) return null
             fileShareIntentFactory.createChooserIntent(context, files)
         } catch (exception: Exception) {
-            uiStateHolder.showError(appTextResolver.getString(R.string.share_file_failed))
+            showErrorOnMainThread(appTextResolver.getString(R.string.share_file_failed))
             Log.e("BLE_SHARE", "Failed to share file", exception)
             null
         }
@@ -200,8 +209,12 @@ class DeviceFeatureController(
 
     override fun close() {
         packetReplayController?.close()
-        invalidateExportSnapshot()
-        exportSessionStartMillis = null
+        val staleSnapshot = synchronized(exportLock) {
+            val snapshot = invalidateExportSnapshotLocked()
+            exportSessionStartMillis = null
+            snapshot
+        }
+        deleteSnapshotFiles(staleSnapshot)
         bleSessionController.close()
         packetCaptureController.close()
     }
@@ -240,9 +253,13 @@ class DeviceFeatureController(
         bleSessionController.close()
         pendingTransportDiagnostics.clear()
         awaitingCaptureReady = false
-        invalidateExportSnapshot()
         packetCaptureController.resetSession()
-        exportSessionStartMillis = wallClockMillisProvider()
+        val staleSnapshot = synchronized(exportLock) {
+            val snapshot = invalidateExportSnapshotLocked()
+            exportSessionStartMillis = wallClockMillisProvider()
+            snapshot
+        }
+        deleteSnapshotFiles(staleSnapshot)
         uiStateHolder.startReplaySession()
         packetReplayController.startReplay(fileBytes)
     }
@@ -256,9 +273,13 @@ class DeviceFeatureController(
     }
 
     private fun resetCaptureSession() {
-        invalidateExportSnapshot()
         packetCaptureController.resetSession()
-        exportSessionStartMillis = wallClockMillisProvider()
+        val staleSnapshot = synchronized(exportLock) {
+            val snapshot = invalidateExportSnapshotLocked()
+            exportSessionStartMillis = wallClockMillisProvider()
+            snapshot
+        }
+        deleteSnapshotFiles(staleSnapshot)
         uiStateHolder.resetCaptureSession()
     }
 
@@ -279,7 +300,7 @@ class DeviceFeatureController(
         if (file == null || !file.exists()) return null
 
         return try {
-            val snapshot = ensureExportSnapshot()
+            val snapshot = ensureExportSnapshot() ?: return null
             val snapshotFile = when (file.absolutePath) {
                 snapshot.packetSourcePath -> snapshot.packetSnapshot
                 snapshot.rawSourcePath -> snapshot.rawSnapshot
@@ -289,43 +310,68 @@ class DeviceFeatureController(
 
             fileShareIntentFactory.createChooserIntent(context, snapshotFile)
         } catch (exception: Exception) {
-            uiStateHolder.showError(appTextResolver.getString(R.string.share_file_failed))
+            showErrorOnMainThread(appTextResolver.getString(R.string.share_file_failed))
             Log.e("BLE_SHARE", "Failed to share file", exception)
             null
         }
     }
 
-    private fun ensureExportSnapshot(): SessionExportSnapshot {
-        val currentPacketFile = packetCaptureController.currentPacketFile()?.takeIf(File::exists)
-        val currentRawFile = packetCaptureController.currentRawFile()?.takeIf(File::exists)
-        val currentLogFile = packetCaptureController.currentLogFile()?.takeIf(File::exists)
+    private fun showErrorOnMainThread(message: String) {
+        runOnUiThread {
+            uiStateHolder.showError(message)
+        }
+    }
 
-        val existingSnapshot = exportSnapshot
-        if (
-            existingSnapshot != null &&
-            existingSnapshot.packetSourcePath == currentPacketFile?.absolutePath &&
-            existingSnapshot.rawSourcePath == currentRawFile?.absolutePath &&
-            existingSnapshot.logSourcePath == currentLogFile?.absolutePath &&
-            existingSnapshot.sessionStartMillis == exportSessionStartMillis
-        ) {
-            return existingSnapshot
+    private fun ensureExportSnapshot(): SessionExportSnapshot? {
+        val buildPlan = synchronized(exportLock) {
+            val currentPacketFile = packetCaptureController.currentPacketFile()?.takeIf(File::exists)
+            val currentRawFile = packetCaptureController.currentRawFile()?.takeIf(File::exists)
+            val currentLogFile = packetCaptureController.currentLogFile()?.takeIf(File::exists)
+            val sessionStartMillis = exportSessionStartMillis
+            val existingSnapshot = exportSnapshot
+
+            existingSnapshot?.takeIf {
+                it.matches(currentPacketFile, currentRawFile, currentLogFile, sessionStartMillis)
+            }?.let { return it }
+
+            if (currentPacketFile == null && currentRawFile == null && currentLogFile == null) {
+                return null
+            }
+
+            val snapshotToDelete = exportSnapshot
+            exportSnapshot = null
+            ExportSnapshotBuildPlan(
+                epoch = exportEpoch,
+                sessionStartMillis = sessionStartMillis,
+                packetFile = currentPacketFile,
+                rawFile = currentRawFile,
+                logFile = currentLogFile,
+                staleSnapshot = snapshotToDelete,
+            )
         }
 
-        invalidateExportSnapshot()
+        deleteSnapshotFiles(buildPlan.staleSnapshot)
         packetCaptureController.flush()
-        val packetSnapshot = currentPacketFile?.let { createSnapshotCopy(it, "packet") }
         val snapshot = SessionExportSnapshot(
-            packetSourcePath = currentPacketFile?.absolutePath,
-            rawSourcePath = currentRawFile?.absolutePath,
-            logSourcePath = currentLogFile?.absolutePath,
-            sessionStartMillis = exportSessionStartMillis,
-            packetSnapshot = packetSnapshot,
-            rawSnapshot = currentRawFile?.let { createSnapshotCopy(it, "raw") },
-            logSnapshot = currentLogFile?.let { createSnapshotCopy(it, "log") },
+            packetSourcePath = buildPlan.packetFile?.absolutePath,
+            rawSourcePath = buildPlan.rawFile?.absolutePath,
+            logSourcePath = buildPlan.logFile?.absolutePath,
+            sessionStartMillis = buildPlan.sessionStartMillis,
+            packetSnapshot = buildPlan.packetFile?.let { createSnapshotCopy(it, "packet") },
+            rawSnapshot = buildPlan.rawFile?.let { createSnapshotCopy(it, "raw") },
+            logSnapshot = buildPlan.logFile?.let { createSnapshotCopy(it, "log") },
             csvSnapshot = null,
         )
-        exportSnapshot = snapshot
-        return snapshot
+
+        return synchronized(exportLock) {
+            if (exportEpoch != buildPlan.epoch) {
+                deleteSnapshotFiles(snapshot)
+                null
+            } else {
+                exportSnapshot = snapshot
+                snapshot
+            }
+        }
     }
 
     private fun buildAvailableExportFiles(snapshot: SessionExportSnapshot): List<File> {
@@ -339,30 +385,40 @@ class DeviceFeatureController(
     }
 
     private fun ensureCsvSnapshot(snapshot: SessionExportSnapshot): File? {
-        snapshot.csvSnapshot?.let { return it }
+        val buildEpoch = synchronized(exportLock) {
+            val currentSnapshot = exportSnapshot
+            if (currentSnapshot == null || !currentSnapshot.hasSameBase(snapshot)) {
+                return null
+            }
+
+            currentSnapshot.csvSnapshot?.let { return it }
+            exportEpoch
+        }
+
         val packetSnapshot = snapshot.packetSnapshot ?: return null
         val generatedCsv = createCsvSnapshot(
             source = packetSnapshot,
             sessionStartMillis = snapshot.sessionStartMillis ?: wallClockMillisProvider(),
         )
-        exportSnapshot = snapshot.copy(csvSnapshot = generatedCsv)
-        return generatedCsv
+
+        return synchronized(exportLock) {
+            val currentSnapshot = exportSnapshot
+            if (exportEpoch != buildEpoch || currentSnapshot == null || !currentSnapshot.hasSameBase(snapshot)) {
+                deleteSnapshotFiles(snapshot.copy(csvSnapshot = generatedCsv))
+                currentSnapshot?.takeIf { it.hasSameBase(snapshot) }?.csvSnapshot
+            } else {
+                val updatedSnapshot = currentSnapshot.copy(csvSnapshot = generatedCsv)
+                exportSnapshot = updatedSnapshot
+                generatedCsv
+            }
+        }
     }
 
-    private fun invalidateExportSnapshot() {
-        val snapshot = exportSnapshot ?: return
-        listOf(snapshot.packetSnapshot, snapshot.rawSnapshot, snapshot.logSnapshot, snapshot.csvSnapshot)
-            .filterNotNull()
-            .forEach { file ->
-                try {
-                    if (file.exists()) {
-                        file.delete()
-                    }
-                } catch (exception: Exception) {
-                    Log.w("BLE_SHARE", "Failed to delete snapshot file ${file.absolutePath}", exception)
-                }
-            }
+    private fun invalidateExportSnapshotLocked(): SessionExportSnapshot? {
+        val snapshot = exportSnapshot
         exportSnapshot = null
+        exportEpoch++
+        return snapshot
     }
 
     private fun createSnapshotCopy(
@@ -419,4 +475,48 @@ private data class SessionExportSnapshot(
     val rawSnapshot: File?,
     val logSnapshot: File?,
     val csvSnapshot: File?,
+) {
+    fun matches(
+        packetFile: File?,
+        rawFile: File?,
+        logFile: File?,
+        sessionStartMillis: Long?,
+    ): Boolean {
+        return packetSourcePath == packetFile?.absolutePath &&
+            rawSourcePath == rawFile?.absolutePath &&
+            logSourcePath == logFile?.absolutePath &&
+            this.sessionStartMillis == sessionStartMillis
+    }
+
+    fun hasSameBase(other: SessionExportSnapshot): Boolean {
+        return packetSourcePath == other.packetSourcePath &&
+            rawSourcePath == other.rawSourcePath &&
+            logSourcePath == other.logSourcePath &&
+            sessionStartMillis == other.sessionStartMillis &&
+            packetSnapshot?.absolutePath == other.packetSnapshot?.absolutePath &&
+            rawSnapshot?.absolutePath == other.rawSnapshot?.absolutePath &&
+            logSnapshot?.absolutePath == other.logSnapshot?.absolutePath
+    }
+}
+
+private data class ExportSnapshotBuildPlan(
+    val epoch: Long,
+    val sessionStartMillis: Long?,
+    val packetFile: File?,
+    val rawFile: File?,
+    val logFile: File?,
+    val staleSnapshot: SessionExportSnapshot?,
 )
+
+private fun deleteSnapshotFiles(snapshot: SessionExportSnapshot?) {
+    listOfNotNull(snapshot?.packetSnapshot, snapshot?.rawSnapshot, snapshot?.logSnapshot, snapshot?.csvSnapshot)
+        .forEach { file ->
+            try {
+                if (file.exists()) {
+                    file.delete()
+                }
+            } catch (exception: Exception) {
+                Log.w("BLE_SHARE", "Failed to delete snapshot file ${file.absolutePath}", exception)
+            }
+        }
+}

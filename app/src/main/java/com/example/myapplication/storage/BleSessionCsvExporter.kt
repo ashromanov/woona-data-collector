@@ -24,15 +24,12 @@ class BleSessionCsvExporter(
         sessionStartMillis: Long,
         targetFile: File,
     ): File {
-        val rows = mutableListOf<CsvRow>()
         val columns = linkedSetOf<CsvColumnKey>()
-        val packetBytes = packetFile.readBytes()
-        val packets = packetFileParser.splitIntoPackets(packetBytes)
         var firstSampleTimerMillis: Long? = null
         var previousSampleTimerMillis: Long? = null
 
-        packets.forEachIndexed { packetIndex, bytes ->
-            when (val validation = packetValidator.validate(bytes)) {
+        packetFileParser.forEachPacket(packetFile) { packetBytes ->
+            when (val validation = packetValidator.validate(packetBytes)) {
                 is PacketValidationResult.Accepted -> {
                     val packetRows = buildRows(
                         sensorBlocks = validation.packet.sensorBlocks,
@@ -41,7 +38,6 @@ class BleSessionCsvExporter(
                     )
                     packetRows.forEach { row ->
                         columns += row.values.keys
-                        rows += row
                         if (firstSampleTimerMillis == null) {
                             firstSampleTimerMillis = row.sampleTimerMillis
                         }
@@ -51,7 +47,7 @@ class BleSessionCsvExporter(
 
                 is PacketValidationResult.Rejected -> {
                     throw IllegalArgumentException(
-                        "Packet dump contains an invalid packet at index $packetIndex: ${validation.reason}",
+                        "Packet dump contains an invalid packet: ${validation.reason}",
                     )
                 }
             }
@@ -64,21 +60,40 @@ class BleSessionCsvExporter(
         targetFile.parentFile?.mkdirs()
         BufferedWriter(FileWriter(targetFile, false), BUFFER_SIZE_BYTES).use { writer ->
             writeHeader(writer, orderedColumns)
-            rows.forEach { row ->
-                val baselineSampleTimerMillis = firstSampleTimerMillis ?: row.sampleTimerMillis
-                val derivedTimeMillis = sessionStartMillis + (row.sampleTimerMillis - baselineSampleTimerMillis)
-                writer.append(timestampFormatter(derivedTimeMillis))
-                writer.append(CSV_SEPARATOR)
-                writer.append(row.packetDeviceTimeMillis.toString())
-                writer.append(CSV_SEPARATOR)
-                writer.append(row.sampleTimerMillis.toString())
-                orderedColumns.forEach { column ->
-                    writer.append(CSV_SEPARATOR)
-                    row.values[column]?.let { value ->
-                        writer.append(formatNumericValue(value))
+            previousSampleTimerMillis = null
+            packetFileParser.forEachPacket(packetFile) { packetBytes ->
+                when (val validation = packetValidator.validate(packetBytes)) {
+                    is PacketValidationResult.Accepted -> {
+                        val packetRows = buildRows(
+                            sensorBlocks = validation.packet.sensorBlocks,
+                            packetDeviceTimeMillis = validation.packet.timerMillis,
+                            previousSampleTimerMillis = previousSampleTimerMillis,
+                        )
+                        packetRows.forEach { row ->
+                            val baselineSampleTimerMillis = firstSampleTimerMillis ?: row.sampleTimerMillis
+                            val derivedTimeMillis = sessionStartMillis + (row.sampleTimerMillis - baselineSampleTimerMillis)
+                            writer.append(timestampFormatter(derivedTimeMillis))
+                            writer.append(CSV_SEPARATOR)
+                            writer.append(row.packetDeviceTimeMillis.toString())
+                            writer.append(CSV_SEPARATOR)
+                            writer.append(row.sampleTimerMillis.toString())
+                            orderedColumns.forEach { column ->
+                                writer.append(CSV_SEPARATOR)
+                                row.values[column]?.let { value ->
+                                    writer.append(formatNumericValue(value))
+                                }
+                            }
+                            writer.append('\n')
+                        }
+                        previousSampleTimerMillis = packetRows.lastOrNull()?.sampleTimerMillis ?: previousSampleTimerMillis
+                    }
+
+                    is PacketValidationResult.Rejected -> {
+                        throw IllegalArgumentException(
+                            "Packet dump contains an invalid packet: ${validation.reason}",
+                        )
                     }
                 }
-                writer.append('\n')
             }
         }
         return targetFile

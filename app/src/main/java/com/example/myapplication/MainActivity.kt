@@ -23,6 +23,8 @@ import com.example.myapplication.ui.theme.AppThemeEntryPoint
 import com.example.myapplication.ui.theme.AppThemePreferences
 import com.example.myapplication.ui.theme.applyAppThemeMode
 import androidx.core.content.ContextCompat
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 import java.util.UUID
 
 class MainActivity : ComponentActivity() {
@@ -49,6 +51,13 @@ class MainActivity : ComponentActivity() {
     private val appTextResolver by lazy {
         AppTextResolver(applicationContext) { selectedLanguage }
     }
+    private val backgroundExecutor: ExecutorService by lazy {
+        Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "main-activity-io").apply {
+                priority = Thread.NORM_PRIORITY
+            }
+        }
+    }
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -69,26 +78,32 @@ class MainActivity : ComponentActivity() {
     ) { uri ->
         if (uri == null) return@registerForActivityResult
 
-        try {
-            val fileBytes = contentResolver.openInputStream(uri)?.use { inputStream ->
-                inputStream.readBytes()
-            }
-            if (fileBytes == null || fileBytes.isEmpty()) {
-                Toast.makeText(
-                    this,
-                    appTextResolver.getString(R.string.unable_read_bin_file),
-                    Toast.LENGTH_SHORT,
-                ).show()
-                return@registerForActivityResult
-            }
+        backgroundExecutor.execute {
+            try {
+                val fileBytes = contentResolver.openInputStream(uri)?.use { inputStream ->
+                    inputStream.readBytes()
+                }
+                runOnUiThread {
+                    if (fileBytes == null || fileBytes.isEmpty()) {
+                        Toast.makeText(
+                            this,
+                            appTextResolver.getString(R.string.unable_read_bin_file),
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                        return@runOnUiThread
+                    }
 
-            deviceFeatureController.startReplay(fileBytes)
-        } catch (exception: Exception) {
-            Toast.makeText(
-                this,
-                appTextResolver.getString(R.string.unable_load_bin_file),
-                Toast.LENGTH_SHORT,
-            ).show()
+                    deviceFeatureController.startReplay(fileBytes)
+                }
+            } catch (exception: Exception) {
+                runOnUiThread {
+                    Toast.makeText(
+                        this,
+                        appTextResolver.getString(R.string.unable_load_bin_file),
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            }
         }
     }
 
@@ -173,19 +188,29 @@ class MainActivity : ComponentActivity() {
                         canShareRawFile = deviceFeatureController.canShareRawFile(),
                         canShareLogFile = deviceFeatureController.canShareLogFile(),
                         onShareAllFiles = {
-                            deviceFeatureController.createAllFilesShareIntent(this)?.let(::startActivity)
+                            prepareShareIntentAsync {
+                                deviceFeatureController.createAllFilesShareIntent(this)
+                            }
                         },
                         onSharePacketFile = {
-                            deviceFeatureController.createPacketShareIntent(this)?.let(::startActivity)
+                            prepareShareIntentAsync {
+                                deviceFeatureController.createPacketShareIntent(this)
+                            }
                         },
                         onShareCsvFile = {
-                            deviceFeatureController.createCsvShareIntent(this)?.let(::startActivity)
+                            prepareShareIntentAsync {
+                                deviceFeatureController.createCsvShareIntent(this)
+                            }
                         },
                         onShareRawFile = {
-                            deviceFeatureController.createRawShareIntent(this)?.let(::startActivity)
+                            prepareShareIntentAsync {
+                                deviceFeatureController.createRawShareIntent(this)
+                            }
                         },
                         onShareLogFile = {
-                            deviceFeatureController.createLogShareIntent(this)?.let(::startActivity)
+                            prepareShareIntentAsync {
+                                deviceFeatureController.createLogShareIntent(this)
+                            }
                         },
                         showReplayAction = true,
                         onReplayRequest = { replayFilePickerLauncher.launch("*/*") },
@@ -204,6 +229,7 @@ class MainActivity : ComponentActivity() {
         if (!isChangingConfigurations) {
             deviceFeatureController.close()
         }
+        backgroundExecutor.shutdownNow()
 
         super.onDestroy()
     }
@@ -216,5 +242,16 @@ class MainActivity : ComponentActivity() {
 
     private fun applyThemeMode(themeMode: AppThemeMode) {
         applyAppThemeMode(this, themeMode)
+    }
+
+    private fun prepareShareIntentAsync(
+        createIntent: () -> android.content.Intent?,
+    ) {
+        backgroundExecutor.execute {
+            val intent = createIntent() ?: return@execute
+            runOnUiThread {
+                startActivity(intent)
+            }
+        }
     }
 }

@@ -444,12 +444,19 @@ class DeviceUiStateHolder {
 
         val iterator = chartHistory.entries.iterator()
         while (iterator.hasNext()) {
-            val entry = iterator.next()
-            val trimmed = entry.value.dropWhile { it.timeMillis < cutoff }
-            if (trimmed.isEmpty()) {
+            val history = iterator.next().value
+            var trimmedPointCount = 0
+            while (trimmedPointCount < history.size && history[trimmedPointCount].timeMillis < cutoff) {
+                trimmedPointCount++
+            }
+
+            if (trimmedPointCount >= history.size) {
                 iterator.remove()
-            } else {
-                entry.setValue(trimmed.toMutableList())
+                continue
+            }
+
+            if (trimmedPointCount > 0) {
+                history.subList(0, trimmedPointCount).clear()
             }
         }
 
