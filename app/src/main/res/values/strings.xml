@@ -78,7 +78,7 @@
     <string name="chart_status_line">%1$s | packets %2$d | gap %3$d | rejected %4$d</string>
     <string name="chart_empty_state">No data for the selected sensor/channel</string>
     <string name="chart_empty_state_window">Session history is retained, window: %1$s</string>
-    <string name="chart_summary">%1$s | %2$s | Y x%3$d | %4$s - %5$s</string>
+    <string name="chart_summary">%1$s | %2$s | Y x%3$d | T %4$s - %5$s</string>
     <string name="relative_time_minutes_seconds">%1$dm %2$ds</string>
     <string name="relative_time_seconds">%1$ds</string>
 

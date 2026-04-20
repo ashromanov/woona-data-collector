@@ -75,7 +75,7 @@
     <string name="chart_status_line">%1$s | пакеты %2$d | потери %3$d | отклонено %4$d</string>
     <string name="chart_empty_state">Нет данных для выбранного датчика/канала</string>
     <string name="chart_empty_state_window">История сессии сохраняется, окно: %1$s</string>
-    <string name="chart_summary">%1$s | %2$s | Y x%3$d | %4$s - %5$s</string>
+    <string name="chart_summary">%1$s | %2$s | Y x%3$d | T %4$s - %5$s</string>
     <string name="relative_time_minutes_seconds">%1$dм %2$dс</string>
     <string name="relative_time_seconds">%1$dс</string>
 

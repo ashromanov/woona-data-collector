@@ -28,10 +28,11 @@ enum class ChartWindowPreset(
     val label: String,
     val durationMillis: Long,
 ) {
-    THIRTY_SECONDS(label = "30s", durationMillis = 30_000L),
-    SIXTY_SECONDS(label = "60s", durationMillis = 60_000L),
-    FIVE_MINUTES(label = "5m", durationMillis = 5 * 60_000L),
-    FIFTEEN_MINUTES(label = "15m", durationMillis = 15 * 60_000L),
+    // These labels intentionally avoid wall-clock units because the chart now presents raw device timer spans.
+    THIRTY_SECONDS(label = "30k", durationMillis = 30_000L),
+    SIXTY_SECONDS(label = "60k", durationMillis = 60_000L),
+    FIVE_MINUTES(label = "300k", durationMillis = 5 * 60_000L),
+    FIFTEEN_MINUTES(label = "900k", durationMillis = 15 * 60_000L),
 }
 
 data class ChartUiState(

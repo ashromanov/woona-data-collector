@@ -1406,25 +1406,16 @@ private fun buildChartSummary(
         modeLabel,
         chart.windowPreset.label,
         yZoom,
-        formatRelativeMillis(viewportStart - sessionStart),
-        formatRelativeMillis(viewportEnd - sessionStart),
+        formatRelativeRawTimer(viewportStart - sessionStart),
+        formatRelativeRawTimer(viewportEnd - sessionStart),
     )
 }
 
-@Composable
-private fun formatRelativeMillis(durationMillis: Long): String {
-    val totalSeconds = (durationMillis / 1000L).coerceAtLeast(0L)
-    val minutes = totalSeconds / 60L
-    val seconds = totalSeconds % 60L
-    return if (minutes > 0L) {
-        appStringResource(R.string.relative_time_minutes_seconds, minutes, seconds)
-    } else {
-        appStringResource(R.string.relative_time_seconds, seconds)
-    }
+internal fun formatRelativeRawTimer(rawTimerDelta: Long): String {
+    return rawTimerDelta.coerceAtLeast(0L).toString()
 }
 
-@Composable
-private fun buildXAxisTicks(
+internal fun buildXAxisTicks(
     viewportStart: Long,
     viewportEnd: Long,
     sessionStart: Long,
@@ -1435,7 +1426,7 @@ private fun buildXAxisTicks(
         val timeMillis = viewportStart + (duration * index / stepCount)
         TimeAxisTick(
             timeMillis = timeMillis,
-            label = formatRelativeMillis(timeMillis - sessionStart),
+            label = formatRelativeRawTimer(timeMillis - sessionStart),
         )
     }
 }
@@ -1527,7 +1518,7 @@ private data class AxisTick(
     val value: Float,
 )
 
-private data class TimeAxisTick(
+internal data class TimeAxisTick(
     val timeMillis: Long,
     val label: String,
 )
