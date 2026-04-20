@@ -5,7 +5,9 @@ import org.junit.Test
 import java.nio.file.Files
 
 class BleSessionCsvExporterTest {
-    private val exporter = BleSessionCsvExporter()
+    private val exporter = BleSessionCsvExporter(
+        timestampFormatter = { millis -> "time-$millis" },
+    )
 
     @Test
     fun export_writesTimeColumnAndOneColumnPerChannel() {
@@ -48,11 +50,63 @@ class BleSessionCsvExporterTest {
 
         assertEquals(
             listOf(
-                "time_millis,packet_device_time_millis,sample_device_time_millis,sample_device_time_normalized_millis,axl_sensor_2_ch_1,axl_sensor_2_ch_2,mic_sensor_4_ch_1",
-                "1000,50,50,0,,,50",
-                "1001,50,50,0,,,60",
-                "1002,60,55,5,10,30,",
-                "1003,60,60,10,20,40,",
+                "derived_time,device_timer_millis,sample_timer_millis,axl_sensor_2_ch_1,axl_sensor_2_ch_2,mic_sensor_4_ch_1",
+                "time-1000,50,50,,,50",
+                "time-1001,50,51,,,60",
+                "time-1010,60,60,10,30,",
+                "time-1011,60,61,20,40,",
+            ),
+            targetFile.readLines(),
+        )
+    }
+
+    @Test
+    fun export_keepsSampleTimerMonotonicAcrossPackets() {
+        val directory = Files.createTempDirectory("ble-session-csv-overlap").toFile()
+        val packetFile = directory.resolve("capture-overlap.bin").apply {
+            writeBytes(
+                packet(
+                    counter = 9,
+                    timerMillis = 50,
+                    blocks = listOf(
+                        sensorBlock(
+                            sensorType = 2,
+                            channelSamples = listOf(
+                                listOf(10, 20, 30, 40),
+                            ),
+                        ),
+                    ),
+                ) + packet(
+                    counter = 10,
+                    timerMillis = 52,
+                    blocks = listOf(
+                        sensorBlock(
+                            sensorType = 2,
+                            channelSamples = listOf(
+                                listOf(50, 60),
+                            ),
+                        ),
+                    ),
+                ),
+            )
+        }
+        val targetFile = directory.resolve("capture-overlap.csv")
+
+        exporter.export(
+            packetFile = packetFile,
+            sessionStartMillis = 1_000L,
+            targetFile = targetFile,
+        )
+
+        assertEquals(
+            listOf(
+                "derived_time,device_timer_millis,sample_timer_millis,axl_sensor_2_ch_1",
+                "time-1000,50,50,10",
+                "time-1001,50,51,20",
+                "time-1002,50,52,30",
+                "time-1003,50,53,40",
+                "time-1004,52,54,50",
+                "time-1005,52,55,60",
             ),
             targetFile.readLines(),
         )

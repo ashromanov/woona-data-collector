@@ -6,6 +6,7 @@ import android.content.ContextWrapper
 import com.example.myapplication.ble.BleTransportProfile
 import com.example.myapplication.ble.BleSessionController
 import com.example.myapplication.ble.BleSessionState
+import com.example.myapplication.storage.BleSessionCsvExporter
 import com.example.myapplication.storage.FileShareIntentFactory
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -292,6 +293,7 @@ class DeviceFeatureControllerTest {
                 currentPacketFile = packetFile,
             ),
             fileShareIntentFactory = shareFactory,
+            sessionCsvExporter = testSessionCsvExporter(),
             wallClockMillisProvider = { 1_000L },
         )
 
@@ -301,9 +303,9 @@ class DeviceFeatureControllerTest {
         assertNotNull(shareFactory.sharedFile)
         assertEquals(
             listOf(
-                "time_millis,packet_device_time_millis,sample_device_time_millis,sample_device_time_normalized_millis,axl_sensor_2_ch_1,axl_sensor_2_ch_2",
-                "1000,50,50,0,10,30",
-                "1001,50,50,0,20,40",
+                "derived_time,device_timer_millis,sample_timer_millis,axl_sensor_2_ch_1,axl_sensor_2_ch_2",
+                "time-1000,50,50,10,30",
+                "time-1001,50,51,20,40",
             ),
             requireNotNull(shareFactory.sharedFile).readLines(),
         )
@@ -334,6 +336,7 @@ class DeviceFeatureControllerTest {
                 currentPacketFile = packetFile,
             ),
             fileShareIntentFactory = shareFactory,
+            sessionCsvExporter = testSessionCsvExporter(),
             wallClockMillisProvider = { now },
         )
 
@@ -345,9 +348,9 @@ class DeviceFeatureControllerTest {
         assertNotNull(intent)
         assertEquals(
             listOf(
-                "time_millis,packet_device_time_millis,sample_device_time_millis,sample_device_time_normalized_millis,axl_sensor_2_ch_1",
-                "2000,50,50,0,10",
-                "2001,50,50,0,20",
+                "derived_time,device_timer_millis,sample_timer_millis,axl_sensor_2_ch_1",
+                "time-2000,50,50,10",
+                "time-2001,50,51,20",
             ),
             requireNotNull(shareFactory.sharedFile).readLines(),
         )
@@ -378,6 +381,7 @@ class DeviceFeatureControllerTest {
                 currentPacketFile = packetFile,
             ),
             fileShareIntentFactory = shareFactory,
+            sessionCsvExporter = testSessionCsvExporter(),
             wallClockMillisProvider = { now },
         )
 
@@ -391,9 +395,9 @@ class DeviceFeatureControllerTest {
         assertNotNull(intent)
         assertEquals(
             listOf(
-                "time_millis,packet_device_time_millis,sample_device_time_millis,sample_device_time_normalized_millis,axl_sensor_2_ch_1",
-                "2000,50,50,0,10",
-                "2001,50,50,0,20",
+                "derived_time,device_timer_millis,sample_timer_millis,axl_sensor_2_ch_1",
+                "time-2000,50,50,10",
+                "time-2001,50,51,20",
             ),
             requireNotNull(shareFactory.sharedFile).readLines(),
         )
@@ -427,6 +431,7 @@ class DeviceFeatureControllerTest {
                 currentLogFile = logFile,
             ),
             fileShareIntentFactory = shareFactory,
+            sessionCsvExporter = testSessionCsvExporter(),
             wallClockMillisProvider = { 1_000L },
         )
 
@@ -444,9 +449,9 @@ class DeviceFeatureControllerTest {
         )
         assertEquals(
             listOf(
-                "time_millis,packet_device_time_millis,sample_device_time_millis,sample_device_time_normalized_millis,axl_sensor_2_ch_1",
-                "1000,50,50,0,10",
-                "1001,50,50,0,20",
+                "derived_time,device_timer_millis,sample_timer_millis,axl_sensor_2_ch_1",
+                "time-1000,50,50,10",
+                "time-1001,50,51,20",
             ),
             requireNotNull(shareFactory.sharedFiles)[1].readLines(),
         )
@@ -561,6 +566,12 @@ class DeviceFeatureControllerTest {
             packetCaptureController = packetCaptureController,
             fileShareIntentFactory = FakeFileShareIntentFactory(),
             packetReplayController = packetReplayController,
+        )
+    }
+
+    private fun testSessionCsvExporter(): BleSessionCsvExporter {
+        return BleSessionCsvExporter(
+            timestampFormatter = { millis -> "time-$millis" },
         )
     }
 }

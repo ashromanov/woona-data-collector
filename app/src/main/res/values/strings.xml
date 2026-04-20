@@ -18,7 +18,7 @@
     <string name="export_compiled_binary">Compiled binary</string>
     <string name="export_compiled_binary_desc">Validated session packets saved as the compiled output file.</string>
     <string name="export_channel_csv">Channel CSV</string>
-    <string name="export_channel_csv_desc">Accepted channel samples expanded into CSV columns with a synthetic session timeline.</string>
+    <string name="export_channel_csv_desc">Accepted channel samples expanded into CSV columns with a derived readable time, the raw device timer, and a per-sample ordering timer.</string>
     <string name="export_raw_data_stream">Raw data stream</string>
     <string name="export_raw_data_stream_desc">Incoming BLE fragments before parsing and validation.</string>
     <string name="export_session_log">Session log</string>

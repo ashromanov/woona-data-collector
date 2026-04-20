@@ -8,10 +8,16 @@ import java.io.BufferedWriter
 import java.io.File
 import java.io.FileWriter
 import java.math.BigDecimal
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 class BleSessionCsvExporter(
     private val packetFileParser: RecordedPacketFileParser = RecordedPacketFileParser(),
     private val packetValidator: PacketValidator = PacketValidator(),
+    private val timestampFormatter: (Long) -> String = { millis ->
+        DEFAULT_TIME_FORMATTER.format(Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()))
+    },
 ) {
     fun export(
         packetFile: File,
@@ -22,24 +28,25 @@ class BleSessionCsvExporter(
         val columns = linkedSetOf<CsvColumnKey>()
         val packetBytes = packetFile.readBytes()
         val packets = packetFileParser.splitIntoPackets(packetBytes)
-        var previousDeviceTimeMillis: Long? = null
-        var firstSampleDeviceTimeMillis: Long? = null
+        var firstSampleTimerMillis: Long? = null
+        var previousSampleTimerMillis: Long? = null
 
         packets.forEachIndexed { packetIndex, bytes ->
             when (val validation = packetValidator.validate(bytes)) {
                 is PacketValidationResult.Accepted -> {
-                    buildRows(
+                    val packetRows = buildRows(
                         sensorBlocks = validation.packet.sensorBlocks,
                         packetDeviceTimeMillis = validation.packet.timerMillis,
-                        previousDeviceTimeMillis = previousDeviceTimeMillis,
-                    ).forEach { row ->
+                        previousSampleTimerMillis = previousSampleTimerMillis,
+                    )
+                    packetRows.forEach { row ->
                         columns += row.values.keys
                         rows += row
-                        if (firstSampleDeviceTimeMillis == null) {
-                            firstSampleDeviceTimeMillis = row.sampleDeviceTimeMillis
+                        if (firstSampleTimerMillis == null) {
+                            firstSampleTimerMillis = row.sampleTimerMillis
                         }
                     }
-                    previousDeviceTimeMillis = validation.packet.timerMillis
+                    previousSampleTimerMillis = packetRows.lastOrNull()?.sampleTimerMillis ?: previousSampleTimerMillis
                 }
 
                 is PacketValidationResult.Rejected -> {
@@ -57,16 +64,14 @@ class BleSessionCsvExporter(
         targetFile.parentFile?.mkdirs()
         BufferedWriter(FileWriter(targetFile, false), BUFFER_SIZE_BYTES).use { writer ->
             writeHeader(writer, orderedColumns)
-            rows.forEachIndexed { rowIndex, row ->
-                writer.append((sessionStartMillis + rowIndex).toString())
+            rows.forEach { row ->
+                val baselineSampleTimerMillis = firstSampleTimerMillis ?: row.sampleTimerMillis
+                val derivedTimeMillis = sessionStartMillis + (row.sampleTimerMillis - baselineSampleTimerMillis)
+                writer.append(timestampFormatter(derivedTimeMillis))
                 writer.append(CSV_SEPARATOR)
                 writer.append(row.packetDeviceTimeMillis.toString())
                 writer.append(CSV_SEPARATOR)
-                writer.append(row.sampleDeviceTimeMillis.toString())
-                writer.append(CSV_SEPARATOR)
-                writer.append(
-                    (row.sampleDeviceTimeMillis - (firstSampleDeviceTimeMillis ?: row.sampleDeviceTimeMillis)).toString(),
-                )
+                writer.append(row.sampleTimerMillis.toString())
                 orderedColumns.forEach { column ->
                     writer.append(CSV_SEPARATOR)
                     row.values[column]?.let { value ->
@@ -83,13 +88,11 @@ class BleSessionCsvExporter(
         writer: BufferedWriter,
         columns: List<CsvColumnKey>,
     ) {
-        writer.append(COLUMN_TIME_MILLIS)
+        writer.append(COLUMN_DERIVED_TIME)
         writer.append(CSV_SEPARATOR)
-        writer.append(COLUMN_PACKET_DEVICE_TIME_MILLIS)
+        writer.append(COLUMN_DEVICE_TIMER_MILLIS)
         writer.append(CSV_SEPARATOR)
-        writer.append(COLUMN_SAMPLE_DEVICE_TIME_MILLIS)
-        writer.append(CSV_SEPARATOR)
-        writer.append(COLUMN_SAMPLE_DEVICE_TIME_NORMALIZED_MILLIS)
+        writer.append(COLUMN_SAMPLE_TIMER_MILLIS)
         columns.forEach { column ->
             writer.append(CSV_SEPARATOR)
             writer.append(column.headerName())
@@ -100,7 +103,7 @@ class BleSessionCsvExporter(
     private fun buildRows(
         sensorBlocks: List<SensorBlock>,
         packetDeviceTimeMillis: Long,
-        previousDeviceTimeMillis: Long?,
+        previousSampleTimerMillis: Long?,
     ): List<CsvRow> {
         val samplesByStream = linkedMapOf<CsvColumnKey, MutableList<Float>>()
         sensorBlocks.forEach { sensorBlock ->
@@ -116,44 +119,20 @@ class BleSessionCsvExporter(
         }
 
         val rowCount = samplesByStream.values.maxOfOrNull(List<Float>::size) ?: 0
-        val sampleDeviceTimes = buildSampleDeviceTimes(
-            rowCount = rowCount,
-            currentDeviceTimeMillis = packetDeviceTimeMillis,
-            previousDeviceTimeMillis = previousDeviceTimeMillis,
+        val packetStartSampleTimerMillis = maxOf(
+            packetDeviceTimeMillis,
+            (previousSampleTimerMillis ?: Long.MIN_VALUE) + 1,
         )
         return List(rowCount) { sampleIndex ->
             CsvRow(
                 packetDeviceTimeMillis = packetDeviceTimeMillis,
-                sampleDeviceTimeMillis = sampleDeviceTimes[sampleIndex],
+                sampleTimerMillis = packetStartSampleTimerMillis + sampleIndex,
                 values = buildMap {
                     samplesByStream.forEach { (column, values) ->
                         values.getOrNull(sampleIndex)?.let { put(column, it) }
                     }
                 },
             )
-        }
-    }
-
-    private fun buildSampleDeviceTimes(
-        rowCount: Int,
-        currentDeviceTimeMillis: Long,
-        previousDeviceTimeMillis: Long?,
-    ): List<Long> {
-        if (rowCount == 0) return emptyList()
-        val intervalMillis = when {
-            previousDeviceTimeMillis == null -> null
-            currentDeviceTimeMillis <= previousDeviceTimeMillis -> null
-            else -> currentDeviceTimeMillis - previousDeviceTimeMillis
-        }
-
-        return List(rowCount) { index ->
-            if (rowCount == 1) {
-                currentDeviceTimeMillis
-            } else if (intervalMillis == null) {
-                currentDeviceTimeMillis
-            } else {
-                requireNotNull(previousDeviceTimeMillis) + (intervalMillis * (index + 1) / rowCount)
-            }
         }
     }
 
@@ -172,17 +151,17 @@ class BleSessionCsvExporter(
 
     private data class CsvRow(
         val packetDeviceTimeMillis: Long,
-        val sampleDeviceTimeMillis: Long,
+        val sampleTimerMillis: Long,
         val values: Map<CsvColumnKey, Float>,
     )
 
     private companion object {
         const val BUFFER_SIZE_BYTES = 65_536
-        const val COLUMN_TIME_MILLIS = "time_millis"
-        const val COLUMN_PACKET_DEVICE_TIME_MILLIS = "packet_device_time_millis"
-        const val COLUMN_SAMPLE_DEVICE_TIME_MILLIS = "sample_device_time_millis"
-        const val COLUMN_SAMPLE_DEVICE_TIME_NORMALIZED_MILLIS = "sample_device_time_normalized_millis"
+        const val COLUMN_DERIVED_TIME = "derived_time"
+        const val COLUMN_DEVICE_TIMER_MILLIS = "device_timer_millis"
+        const val COLUMN_SAMPLE_TIMER_MILLIS = "sample_timer_millis"
         const val CSV_SEPARATOR = ','
+        val DEFAULT_TIME_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS")
 
         fun sensorNamePrefix(sensorType: Int): String {
             return when (sensorType) {
