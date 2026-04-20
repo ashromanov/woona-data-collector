@@ -17,6 +17,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.myapplication.feature.device.DeviceUiState
+import com.example.myapplication.feature.device.ExportPhase
 import com.example.myapplication.localization.AppLanguage
 import com.example.myapplication.localization.AppLocalizationProvider
 import com.example.myapplication.localization.AppTextResolver
@@ -111,6 +112,21 @@ class AppShellNavigationTest {
         composeRule.runOnIdle {
             assertEquals(1, exportAllClicks)
         }
+    }
+
+    @Test
+    fun exportProgress_overlayIsVisibleAndDisablesExportButton() {
+        setShellContent(
+            uiState = DeviceUiState(
+                showCaptureUi = true,
+                exportPhase = ExportPhase.GENERATING_CSV,
+            ),
+            canShareAllFiles = true,
+        )
+
+        composeRule.onNodeWithText("Export").assertExists().assertIsNotEnabled()
+        composeRule.onNodeWithText("Preparing export").assertIsDisplayed()
+        composeRule.onNodeWithText("Generating CSV").assertIsDisplayed()
     }
 
     @Test

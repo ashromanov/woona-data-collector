@@ -50,7 +50,7 @@ class BleSessionCsvExporterTest {
 
         assertEquals(
             listOf(
-                "derived_time,device_timer_millis,sample_timer_millis,axl_sensor_2_ch_1,axl_sensor_2_ch_2,mic_sensor_4_ch_1",
+                "estimated_time,device_timer_millis,sample_timer_millis,axl_sensor_2_ch_1,axl_sensor_2_ch_2,mic_sensor_4_ch_1",
                 "time-1000,50,50,,,50",
                 "time-1001,50,51,,,60",
                 "time-1010,60,60,10,30,",
@@ -100,7 +100,7 @@ class BleSessionCsvExporterTest {
 
         assertEquals(
             listOf(
-                "derived_time,device_timer_millis,sample_timer_millis,axl_sensor_2_ch_1",
+                "estimated_time,device_timer_millis,sample_timer_millis,axl_sensor_2_ch_1",
                 "time-1000,50,50,10",
                 "time-1001,50,51,20",
                 "time-1002,50,52,30",

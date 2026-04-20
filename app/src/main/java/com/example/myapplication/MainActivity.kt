@@ -248,9 +248,17 @@ class MainActivity : ComponentActivity() {
         createIntent: () -> android.content.Intent?,
     ) {
         backgroundExecutor.execute {
-            val intent = createIntent() ?: return@execute
+            val intent = try {
+                createIntent()
+            } catch (_: Exception) {
+                null
+            }
             runOnUiThread {
-                startActivity(intent)
+                try {
+                    intent?.let(::startActivity)
+                } finally {
+                    deviceFeatureController.clearExportProgress()
+                }
             }
         }
     }

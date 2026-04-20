@@ -13,6 +13,10 @@
 
     <string name="export_session_files">Export session files</string>
     <string name="export_choose_artifact">Choose which session artifact to share.</string>
+    <string name="export_progress_title">Preparing export</string>
+    <string name="export_phase_preparing_snapshots">Preparing snapshots</string>
+    <string name="export_phase_generating_csv">Generating CSV</string>
+    <string name="export_phase_opening_share_sheet">Opening share sheet</string>
     <string name="export_all_files">All files</string>
     <string name="export_all_files_desc">Share every available session artifact together in one chooser.</string>
     <string name="export_compiled_binary">Compiled binary</string>

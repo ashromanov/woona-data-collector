@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import com.example.myapplication.ble.BleTransportProfile
 import com.example.myapplication.ble.BleDevice
 import com.example.myapplication.ble.BleSessionState
+import com.example.myapplication.R
 import kotlin.math.ceil
 
 data class DeviceListItem(
@@ -58,6 +59,14 @@ enum class DeviceCaptureTab(
     CHART("Chart"),
 }
 
+enum class ExportPhase(
+    val labelRes: Int,
+) {
+    PREPARING_SNAPSHOTS(R.string.export_phase_preparing_snapshots),
+    GENERATING_CSV(R.string.export_phase_generating_csv),
+    OPENING_SHARE_SHEET(R.string.export_phase_opening_share_sheet),
+}
+
 data class DeviceUiState(
     val chart: ChartUiState = ChartUiState(),
     val selectedTab: DeviceCaptureTab = DeviceCaptureTab.OVERVIEW,
@@ -79,6 +88,7 @@ data class DeviceUiState(
     val rejectionBreakdown: String? = null,
     val diagnosticEvents: List<PacketDiagnosticEvent> = emptyList(),
     val errorMessage: String? = null,
+    val exportPhase: ExportPhase? = null,
 )
 
 class DeviceUiStateHolder {
@@ -151,6 +161,7 @@ class DeviceUiStateHolder {
                 rejectionBreakdown = null,
                 diagnosticEvents = emptyList(),
                 errorMessage = null,
+                exportPhase = null,
             )
         } else {
             updatedState
@@ -198,6 +209,7 @@ class DeviceUiStateHolder {
             rejectionBreakdown = null,
             diagnosticEvents = emptyList(),
             errorMessage = null,
+            exportPhase = null,
         )
     }
 
@@ -226,6 +238,7 @@ class DeviceUiStateHolder {
             lastPacketIssue = null,
             rejectionBreakdown = null,
             diagnosticEvents = emptyList(),
+            exportPhase = null,
         )
     }
 
@@ -403,11 +416,20 @@ class DeviceUiStateHolder {
             lastPacketIssue = null,
             rejectionBreakdown = null,
             diagnosticEvents = emptyList(),
+            exportPhase = null,
         )
     }
 
     fun showError(message: String) {
         uiState = uiState.copy(errorMessage = message)
+    }
+
+    fun showExportProgress(phase: ExportPhase) {
+        uiState = uiState.copy(exportPhase = phase)
+    }
+
+    fun clearExportProgress() {
+        uiState = uiState.copy(exportPhase = null)
     }
 
     private fun appendChartSamples(samplesByStream: Map<ChartStreamKey, List<ChartPoint>>) {

@@ -13,6 +13,10 @@
 
     <string name="export_session_files">Экспорт файлов сессии</string>
     <string name="export_choose_artifact">Выберите артефакт сессии для отправки.</string>
+    <string name="export_progress_title">Подготовка экспорта</string>
+    <string name="export_phase_preparing_snapshots">Подготовка снимков</string>
+    <string name="export_phase_generating_csv">Генерация CSV</string>
+    <string name="export_phase_opening_share_sheet">Открытие окна отправки</string>
     <string name="export_all_files">Все файлы</string>
     <string name="export_all_files_desc">Отправить вместе все доступные артефакты сессии через один chooser.</string>
     <string name="export_compiled_binary">Собранный бинарный файл</string>

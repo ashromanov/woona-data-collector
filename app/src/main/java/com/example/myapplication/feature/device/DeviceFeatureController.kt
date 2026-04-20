@@ -173,8 +173,10 @@ class DeviceFeatureController(
 
     fun createCsvShareIntent(context: Context): Intent? {
         return try {
+            showExportPhaseOnMainThread(ExportPhase.PREPARING_SNAPSHOTS)
             val snapshot = ensureExportSnapshot() ?: return null
             val csvSnapshot = ensureCsvSnapshot(snapshot) ?: return null
+            showExportPhaseOnMainThread(ExportPhase.OPENING_SHARE_SHEET)
             fileShareIntentFactory.createChooserIntent(context, csvSnapshot)
         } catch (exception: Exception) {
             showErrorOnMainThread(appTextResolver.getString(R.string.share_file_failed))
@@ -185,9 +187,11 @@ class DeviceFeatureController(
 
     fun createAllFilesShareIntent(context: Context): Intent? {
         return try {
+            showExportPhaseOnMainThread(ExportPhase.PREPARING_SNAPSHOTS)
             val snapshot = ensureExportSnapshot() ?: return null
             val files = buildAvailableExportFiles(snapshot)
             if (files.isEmpty()) return null
+            showExportPhaseOnMainThread(ExportPhase.OPENING_SHARE_SHEET)
             fileShareIntentFactory.createChooserIntent(context, files)
         } catch (exception: Exception) {
             showErrorOnMainThread(appTextResolver.getString(R.string.share_file_failed))
@@ -206,6 +210,12 @@ class DeviceFeatureController(
 
     fun canShareAllFiles(): Boolean =
         canSharePacketFile() || canShareCsvFile() || canShareRawFile() || canShareLogFile()
+
+    fun clearExportProgress() {
+        runOnUiThread {
+            uiStateHolder.clearExportProgress()
+        }
+    }
 
     override fun close() {
         packetReplayController?.close()
@@ -300,6 +310,7 @@ class DeviceFeatureController(
         if (file == null || !file.exists()) return null
 
         return try {
+            showExportPhaseOnMainThread(ExportPhase.PREPARING_SNAPSHOTS)
             val snapshot = ensureExportSnapshot() ?: return null
             val snapshotFile = when (file.absolutePath) {
                 snapshot.packetSourcePath -> snapshot.packetSnapshot
@@ -308,6 +319,7 @@ class DeviceFeatureController(
                 else -> null
             } ?: return null
 
+            showExportPhaseOnMainThread(ExportPhase.OPENING_SHARE_SHEET)
             fileShareIntentFactory.createChooserIntent(context, snapshotFile)
         } catch (exception: Exception) {
             showErrorOnMainThread(appTextResolver.getString(R.string.share_file_failed))
@@ -319,6 +331,12 @@ class DeviceFeatureController(
     private fun showErrorOnMainThread(message: String) {
         runOnUiThread {
             uiStateHolder.showError(message)
+        }
+    }
+
+    private fun showExportPhaseOnMainThread(phase: ExportPhase) {
+        runOnUiThread {
+            uiStateHolder.showExportProgress(phase)
         }
     }
 
@@ -396,6 +414,7 @@ class DeviceFeatureController(
         }
 
         val packetSnapshot = snapshot.packetSnapshot ?: return null
+        showExportPhaseOnMainThread(ExportPhase.GENERATING_CSV)
         val generatedCsv = createCsvSnapshot(
             source = packetSnapshot,
             sessionStartMillis = snapshot.sessionStartMillis ?: wallClockMillisProvider(),

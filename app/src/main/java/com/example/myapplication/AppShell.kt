@@ -19,6 +19,7 @@ import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.ShowChart
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -40,10 +41,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.myapplication.ble.BleTransportProfile
 import com.example.myapplication.feature.device.ChartWindowPreset
 import com.example.myapplication.feature.device.DeviceScreenEntryPoint
 import com.example.myapplication.feature.device.DeviceUiState
+import com.example.myapplication.feature.device.ExportPhase
 import com.example.myapplication.localization.AppLanguage
 import com.example.myapplication.localization.appStringResource
 import com.example.myapplication.ui.theme.AppThemeMode
@@ -115,112 +119,169 @@ fun DeviceAppShell(
     }
     var isExportSheetVisible by rememberSaveable { mutableStateOf(false) }
     val selectedDestination = AppDestination.valueOf(selectedDestinationName)
-    val canExportAnyFile = canShareAllFiles
+    val canExportAnyFile = canShareAllFiles && uiState.exportPhase == null
 
-    Scaffold(
-        contentWindowInsets = WindowInsets.safeDrawing,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = appStringResource(selectedDestination.titleRes),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                },
-                actions = {
-                    if (selectedDestination.supportsExport) {
-                        TextButton(
-                            onClick = { isExportSheetVisible = true },
-                            enabled = canExportAnyFile,
-                        ) {
-                            Text(appStringResource(R.string.action_export))
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            contentWindowInsets = WindowInsets.safeDrawing,
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = appStringResource(selectedDestination.titleRes),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    },
+                    actions = {
+                        if (selectedDestination.supportsExport) {
+                            TextButton(
+                                onClick = { isExportSheetVisible = true },
+                                enabled = canExportAnyFile,
+                            ) {
+                                Text(appStringResource(R.string.action_export))
+                            }
                         }
-                    }
-                    ConnectionStatusBadge(uiState = uiState)
-                },
-            )
-        },
-        bottomBar = {
-            AppBottomNavigation(
-                selectedDestination = selectedDestination,
-                onDestinationSelected = { selectedDestinationName = it.name },
-            )
-        },
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-        ) {
-            when (selectedDestination) {
-                AppDestination.OVERVIEW -> DeviceScreenEntryPoint.Overview(
-                    uiState = uiState,
-                    onStartScan = onStartScan,
-                    onConnect = onConnect,
-                    onDisconnect = onDisconnect,
-                    showReplayAction = showReplayAction,
-                    onReplayRequest = onReplayRequest,
+                        ConnectionStatusBadge(uiState = uiState)
+                    },
                 )
+            },
+            bottomBar = {
+                AppBottomNavigation(
+                    selectedDestination = selectedDestination,
+                    onDestinationSelected = { selectedDestinationName = it.name },
+                )
+            },
+        ) { innerPadding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+            ) {
+                when (selectedDestination) {
+                    AppDestination.OVERVIEW -> DeviceScreenEntryPoint.Overview(
+                        uiState = uiState,
+                        onStartScan = onStartScan,
+                        onConnect = onConnect,
+                        onDisconnect = onDisconnect,
+                        showReplayAction = showReplayAction,
+                        onReplayRequest = onReplayRequest,
+                    )
 
-                AppDestination.CHARTS -> DeviceScreenEntryPoint.Charts(
-                    uiState = uiState,
-                    onSensorSelect = onSensorSelect,
-                    onChannelSelect = onChannelSelect,
-                    onChartWindowSelect = onChartWindowSelect,
-                    onFollowLiveChange = onFollowLiveChange,
-                    onChartPanLeft = onChartPanLeft,
-                    onChartPanRight = onChartPanRight,
-                    onChartZoomIn = onChartZoomIn,
-                    onChartZoomOut = onChartZoomOut,
-                    onChartZoomReset = onChartZoomReset,
-                    onChartPanGesture = onChartPanGesture,
-                    onChartZoomGesture = onChartZoomGesture,
-                )
+                    AppDestination.CHARTS -> DeviceScreenEntryPoint.Charts(
+                        uiState = uiState,
+                        onSensorSelect = onSensorSelect,
+                        onChannelSelect = onChannelSelect,
+                        onChartWindowSelect = onChartWindowSelect,
+                        onFollowLiveChange = onFollowLiveChange,
+                        onChartPanLeft = onChartPanLeft,
+                        onChartPanRight = onChartPanRight,
+                        onChartZoomIn = onChartZoomIn,
+                        onChartZoomOut = onChartZoomOut,
+                        onChartZoomReset = onChartZoomReset,
+                        onChartPanGesture = onChartPanGesture,
+                        onChartZoomGesture = onChartZoomGesture,
+                    )
 
-                AppDestination.SETTINGS -> DeviceScreenEntryPoint.Settings(
-                    uiState = uiState,
-                    selectedLanguage = selectedLanguage,
-                    selectedThemeMode = selectedThemeMode,
-                    onTransportProfileSelect = onTransportProfileSelect,
-                    onLanguageSelect = onLanguageSelect,
-                    onThemeModeSelect = onThemeModeSelect,
-                )
+                    AppDestination.SETTINGS -> DeviceScreenEntryPoint.Settings(
+                        uiState = uiState,
+                        selectedLanguage = selectedLanguage,
+                        selectedThemeMode = selectedThemeMode,
+                        onTransportProfileSelect = onTransportProfileSelect,
+                        onLanguageSelect = onLanguageSelect,
+                        onThemeModeSelect = onThemeModeSelect,
+                    )
+                }
             }
+        }
+
+        uiState.exportPhase?.let { exportPhase ->
+            ExportProgressOverlay(phase = exportPhase)
         }
     }
 
     if (isExportSheetVisible) {
-        ModalBottomSheet(
-            onDismissRequest = { isExportSheetVisible = false },
+        Box(
+            modifier = Modifier.fillMaxSize(),
         ) {
-            ExportSheet(
-                canShareAllFiles = canShareAllFiles,
-                canSharePacketFile = canSharePacketFile,
-                canShareCsvFile = canShareCsvFile,
-                canShareRawFile = canShareRawFile,
-                canShareLogFile = canShareLogFile,
-                onShareAllFiles = {
-                    isExportSheetVisible = false
-                    onShareAllFiles()
-                },
-                onSharePacketFile = {
-                    isExportSheetVisible = false
-                    onSharePacketFile()
-                },
-                onShareCsvFile = {
-                    isExportSheetVisible = false
-                    onShareCsvFile()
-                },
-                onShareRawFile = {
-                    isExportSheetVisible = false
-                    onShareRawFile()
-                },
-                onShareLogFile = {
-                    isExportSheetVisible = false
-                    onShareLogFile()
-                },
-            )
+            ModalBottomSheet(
+                onDismissRequest = { isExportSheetVisible = false },
+            ) {
+                ExportSheet(
+                    canShareAllFiles = canShareAllFiles,
+                    canSharePacketFile = canSharePacketFile,
+                    canShareCsvFile = canShareCsvFile,
+                    canShareRawFile = canShareRawFile,
+                    canShareLogFile = canShareLogFile,
+                    onShareAllFiles = {
+                        isExportSheetVisible = false
+                        onShareAllFiles()
+                    },
+                    onSharePacketFile = {
+                        isExportSheetVisible = false
+                        onSharePacketFile()
+                    },
+                    onShareCsvFile = {
+                        isExportSheetVisible = false
+                        onShareCsvFile()
+                    },
+                    onShareRawFile = {
+                        isExportSheetVisible = false
+                        onShareRawFile()
+                    },
+                    onShareLogFile = {
+                        isExportSheetVisible = false
+                        onShareLogFile()
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExportProgressOverlay(phase: ExportPhase) {
+    Dialog(
+        onDismissRequest = {},
+        properties = DialogProperties(
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false,
+            usePlatformDefaultWidth = false,
+        ),
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Surface(
+                color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f),
+                modifier = Modifier.fillMaxSize(),
+            ) {}
+
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                tonalElevation = 8.dp,
+                shadowElevation = 12.dp,
+                modifier = Modifier.padding(horizontal = 24.dp),
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    CircularProgressIndicator()
+                    Text(
+                        text = appStringResource(R.string.export_progress_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = appStringResource(phase.labelRes),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
     }
 }

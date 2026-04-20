@@ -303,7 +303,7 @@ class DeviceFeatureControllerTest {
         assertNotNull(shareFactory.sharedFile)
         assertEquals(
             listOf(
-                "derived_time,device_timer_millis,sample_timer_millis,axl_sensor_2_ch_1,axl_sensor_2_ch_2",
+                "estimated_time,device_timer_millis,sample_timer_millis,axl_sensor_2_ch_1,axl_sensor_2_ch_2",
                 "time-1000,50,50,10,30",
                 "time-1001,50,51,20,40",
             ),
@@ -348,7 +348,7 @@ class DeviceFeatureControllerTest {
         assertNotNull(intent)
         assertEquals(
             listOf(
-                "derived_time,device_timer_millis,sample_timer_millis,axl_sensor_2_ch_1",
+                "estimated_time,device_timer_millis,sample_timer_millis,axl_sensor_2_ch_1",
                 "time-2000,50,50,10",
                 "time-2001,50,51,20",
             ),
@@ -395,7 +395,7 @@ class DeviceFeatureControllerTest {
         assertNotNull(intent)
         assertEquals(
             listOf(
-                "derived_time,device_timer_millis,sample_timer_millis,axl_sensor_2_ch_1",
+                "estimated_time,device_timer_millis,sample_timer_millis,axl_sensor_2_ch_1",
                 "time-2000,50,50,10",
                 "time-2001,50,51,20",
             ),
@@ -449,7 +449,7 @@ class DeviceFeatureControllerTest {
         )
         assertEquals(
             listOf(
-                "derived_time,device_timer_millis,sample_timer_millis,axl_sensor_2_ch_1",
+                "estimated_time,device_timer_millis,sample_timer_millis,axl_sensor_2_ch_1",
                 "time-1000,50,50,10",
                 "time-1001,50,51,20",
             ),

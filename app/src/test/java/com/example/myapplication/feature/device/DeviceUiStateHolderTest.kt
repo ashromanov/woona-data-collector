@@ -379,4 +379,18 @@ class DeviceUiStateHolderTest {
         assertEquals(0L, holder.uiState.packetsReceived)
         assertTrue(holder.uiState.showCaptureUi)
     }
+
+    @Test
+    fun exportProgress_updatesAndClearsUiState() {
+        val holder = DeviceUiStateHolder()
+
+        holder.showExportProgress(ExportPhase.PREPARING_SNAPSHOTS)
+        assertEquals(ExportPhase.PREPARING_SNAPSHOTS, holder.uiState.exportPhase)
+
+        holder.showExportProgress(ExportPhase.GENERATING_CSV)
+        assertEquals(ExportPhase.GENERATING_CSV, holder.uiState.exportPhase)
+
+        holder.clearExportProgress()
+        assertNull(holder.uiState.exportPhase)
+    }
 }

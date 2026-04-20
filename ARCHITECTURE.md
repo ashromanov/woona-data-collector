@@ -167,6 +167,7 @@ The app should converge on these boundaries:
   - connected / disconnected
   - packet counters
   - export availability
+  - export progress phase
   - visible errors
 
 - BLE session state:

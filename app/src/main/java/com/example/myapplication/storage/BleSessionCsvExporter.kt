@@ -103,7 +103,7 @@ class BleSessionCsvExporter(
         writer: BufferedWriter,
         columns: List<CsvColumnKey>,
     ) {
-        writer.append(COLUMN_DERIVED_TIME)
+        writer.append(COLUMN_ESTIMATED_TIME)
         writer.append(CSV_SEPARATOR)
         writer.append(COLUMN_DEVICE_TIMER_MILLIS)
         writer.append(CSV_SEPARATOR)
@@ -172,7 +172,7 @@ class BleSessionCsvExporter(
 
     private companion object {
         const val BUFFER_SIZE_BYTES = 65_536
-        const val COLUMN_DERIVED_TIME = "derived_time"
+        const val COLUMN_ESTIMATED_TIME = "estimated_time"
         const val COLUMN_DEVICE_TIMER_MILLIS = "device_timer_millis"
         const val COLUMN_SAMPLE_TIMER_MILLIS = "sample_timer_millis"
         const val CSV_SEPARATOR = ','
