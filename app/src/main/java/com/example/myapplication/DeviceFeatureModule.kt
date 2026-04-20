@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import com.example.myapplication.R
 import com.example.myapplication.ble.BleDevice
 import com.example.myapplication.ble.BleSessionController
 import com.example.myapplication.ble.BleSessionListener
@@ -21,6 +22,8 @@ import com.example.myapplication.storage.BleDiagnosticLogFileStore
 import com.example.myapplication.storage.FileShareIntentFactory
 import com.example.myapplication.storage.BlePacketFileStore
 import com.example.myapplication.storage.BleRawFragmentFileStore
+import com.example.myapplication.localization.AppLanguage
+import com.example.myapplication.localization.AppTextResolver
 import java.io.File
 import java.util.UUID
 
@@ -34,6 +37,9 @@ fun createDeviceFeatureController(
     packetCaptureControllerFactory: ((DeviceUiStateHolder, Handler) -> PacketCaptureController)? = null,
     bleSessionControllerFactory: ((BleSessionListener) -> BleSessionController)? = null,
     fileShareIntentFactory: FileShareIntentFactory? = null,
+    appTextResolver: AppTextResolver = AppTextResolver(context.applicationContext) {
+        AppLanguage.defaultFrom()
+    },
 ): DeviceFeatureController {
     val uiStateHolder = DeviceUiStateHolder()
     val mainHandler = Handler(Looper.getMainLooper())
@@ -42,6 +48,7 @@ fun createDeviceFeatureController(
             packetFileStore = BlePacketFileStore(directory = filesDir),
             rawFragmentFileStore = BleRawFragmentFileStore(directory = filesDir),
             diagnosticLogFileStore = BleDiagnosticLogFileStore(directory = filesDir),
+            appTextResolver = appTextResolver,
             onPacketProcessed = { update ->
                 mainHandler.post {
                     uiStateHolder.applyPacketUpdate(update)
@@ -70,7 +77,7 @@ fun createDeviceFeatureController(
             }
 
             PacketSubmitResult.OVERFLOW -> {
-                val message = "Packet queue overflow. Capture stopped."
+                val message = appTextResolver.getString(R.string.packet_queue_overflow_stopped)
                 packetCaptureController.stopCapture()
                 mainHandler.post {
                     uiStateHolder.showError(message)
@@ -123,6 +130,7 @@ fun createDeviceFeatureController(
         characteristicUuid = characteristicUuid,
         descriptorUuid = descriptorUuid,
         listener = listener,
+        appTextResolver = appTextResolver,
     )
     uiStateHolder.onTransportProfileSelected(requireNotNull(bleSessionController).currentTransportProfile())
     val packetReplayController: PacketReplayController = DebugPacketReplayController(
@@ -148,13 +156,18 @@ fun createDeviceFeatureController(
             }
             Log.e("BLE_REPLAY", message, throwable)
         },
+        appTextResolver = appTextResolver,
     )
 
     deviceFeatureController = DeviceFeatureController(
         bleSessionController = requireNotNull(bleSessionController),
         packetCaptureController = packetCaptureController,
         fileShareIntentFactory = fileShareIntentFactory
-            ?: BleFileShareIntentFactory(authority = fileProviderAuthority),
+            ?: BleFileShareIntentFactory(
+                authority = fileProviderAuthority,
+                appTextResolver = appTextResolver,
+            ),
+        appTextResolver = appTextResolver,
         packetReplayController = packetReplayController,
         uiStateHolder = uiStateHolder,
     )

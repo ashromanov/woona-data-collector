@@ -1,44 +1,47 @@
 package com.example.myapplication.ble
 
+import androidx.annotation.StringRes
+import com.example.myapplication.R
+
 enum class BleTransportProfile(
-    val title: String,
-    val shortDescription: String,
-    val detailedDescription: List<String>,
+    @param:StringRes val titleRes: Int,
+    @param:StringRes val shortDescriptionRes: Int,
+    val detailedDescriptionResIds: List<Int>,
     val requestsHighConnectionPriority: Boolean,
     val requestedMtu: Int?,
     val preferredPhy: PreferredPhyMode,
 ) {
     DEFAULT(
-        title = "Default",
-        shortDescription = "High priority, MTU 512 request, 2M PHY request.",
-        detailedDescription = listOf(
-            "Requests HIGH connection priority.",
-            "Requests MTU 512 and continues even if the stack negotiates lower.",
-            "Requests LE 2M PHY for maximum throughput on capable phones.",
+        titleRes = R.string.transport_profile_default,
+        shortDescriptionRes = R.string.transport_profile_default_short,
+        detailedDescriptionResIds = listOf(
+            R.string.transport_profile_default_detail_1,
+            R.string.transport_profile_default_detail_2,
+            R.string.transport_profile_default_detail_3,
         ),
         requestsHighConnectionPriority = true,
         requestedMtu = 512,
         preferredPhy = PreferredPhyMode.LE_2M,
     ),
     COMPATIBILITY(
-        title = "Compatibility",
-        shortDescription = "High priority, MTU 247 request, no PHY override.",
-        detailedDescription = listOf(
-            "Requests HIGH connection priority.",
-            "Requests MTU 247 directly instead of 512.",
-            "Does not request a preferred PHY, so the phone keeps its stack default.",
+        titleRes = R.string.transport_profile_compatibility,
+        shortDescriptionRes = R.string.transport_profile_compatibility_short,
+        detailedDescriptionResIds = listOf(
+            R.string.transport_profile_compatibility_detail_1,
+            R.string.transport_profile_compatibility_detail_2,
+            R.string.transport_profile_compatibility_detail_3,
         ),
         requestsHighConnectionPriority = true,
         requestedMtu = 247,
         preferredPhy = PreferredPhyMode.SYSTEM_DEFAULT,
     ),
     CONSERVATIVE(
-        title = "Conservative",
-        shortDescription = "High priority only, no MTU request, no PHY override.",
-        detailedDescription = listOf(
-            "Requests HIGH connection priority only.",
-            "Skips explicit MTU negotiation and uses the stack/device default.",
-            "Skips preferred PHY request and keeps the system default link mode.",
+        titleRes = R.string.transport_profile_conservative,
+        shortDescriptionRes = R.string.transport_profile_conservative_short,
+        detailedDescriptionResIds = listOf(
+            R.string.transport_profile_conservative_detail_1,
+            R.string.transport_profile_conservative_detail_2,
+            R.string.transport_profile_conservative_detail_3,
         ),
         requestsHighConnectionPriority = true,
         requestedMtu = null,

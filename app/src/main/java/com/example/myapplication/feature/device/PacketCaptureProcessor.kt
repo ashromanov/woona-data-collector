@@ -1,8 +1,13 @@
 package com.example.myapplication.feature.device
 
+import com.example.myapplication.R
+import com.example.myapplication.localization.EnglishTextResolver
+import com.example.myapplication.localization.TextResolver
 import com.example.myapplication.protocol.PacketAssembler
+import com.example.myapplication.protocol.PacketAssemblyFailureReason
 import com.example.myapplication.protocol.PacketAssemblyResult
 import com.example.myapplication.protocol.PacketStatsTracker
+import com.example.myapplication.protocol.PacketValidationFailureReason
 import com.example.myapplication.protocol.PacketValidationResult
 import com.example.myapplication.protocol.PacketValidator
 import com.example.myapplication.storage.BleDiagnosticLogFileStore
@@ -61,6 +66,7 @@ class PacketCaptureProcessor(
     private val packetFileStore: BlePacketFileStore,
     private val rawFragmentFileStore: BleRawFragmentFileStore,
     private val diagnosticLogFileStore: BleDiagnosticLogFileStore,
+    private val appTextResolver: TextResolver = EnglishTextResolver,
     private val onPacketProcessed: (PacketProcessingUpdate) -> Unit,
     private val onError: (String, Throwable?) -> Unit,
     private val packetAssembler: PacketAssembler = PacketAssembler(),
@@ -124,7 +130,7 @@ class PacketCaptureProcessor(
                 receivedRawBytes += packetFragment.size.toLong()
             }
         } catch (exception: Exception) {
-            onError("Failed to persist raw BLE fragment", exception)
+            onError(appTextResolver.getString(R.string.failed_persist_raw_fragment), exception)
         }
 
         val submitResult = if (queue.offer(
@@ -146,7 +152,12 @@ class PacketCaptureProcessor(
                         diagnosticEvents = listOf(
                             createDiagnosticEvent(
                                 type = PacketDiagnosticType.INFO,
-                                message = "Capture queue overflow: depth=${queue.size}/$maxPendingFragments, fragmentBytes=${packetFragment.size}",
+                                message = appTextResolver.getString(
+                                    R.string.capture_queue_overflow,
+                                    queue.size,
+                                    maxPendingFragments,
+                                    packetFragment.size,
+                                ),
                             ),
                         ),
                     ),
@@ -206,7 +217,7 @@ class PacketCaptureProcessor(
                 diagnosticLogFileStore.resetSession()
             }
         } catch (exception: Exception) {
-            onError("Failed to reset capture session", exception)
+            onError(appTextResolver.getString(R.string.failed_reset_capture_session), exception)
         }
     }
 
@@ -216,7 +227,7 @@ class PacketCaptureProcessor(
             rawFragmentFileStore.flush()
             packetFileStore.flush()
         } catch (exception: Exception) {
-            onError("Failed to flush buffered output", exception)
+            onError(appTextResolver.getString(R.string.failed_flush_buffered_output), exception)
         }
     }
 
@@ -237,7 +248,10 @@ class PacketCaptureProcessor(
             workerThread.join()
         } catch (exception: InterruptedException) {
             Thread.currentThread().interrupt()
-            onError("Interrupted while waiting for packet processor shutdown", exception)
+            onError(
+                appTextResolver.getString(R.string.interrupted_waiting_packet_processor_shutdown),
+                exception,
+            )
         }
 
         try {
@@ -248,7 +262,7 @@ class PacketCaptureProcessor(
             packetFileStore.flush()
             packetFileStore.close()
         } catch (exception: Exception) {
-            onError("Failed to close buffered output", exception)
+            onError(appTextResolver.getString(R.string.failed_close_buffered_output), exception)
         }
     }
 
@@ -264,7 +278,7 @@ class PacketCaptureProcessor(
                 Thread.currentThread().interrupt()
                 return
             } catch (exception: Exception) {
-                onError("Background packet processing failed", exception)
+                onError(appTextResolver.getString(R.string.background_packet_processing_failed), exception)
             }
         }
     }
@@ -281,7 +295,8 @@ class PacketCaptureProcessor(
             for (packet in packets) {
                 when (packet) {
                     is PacketAssemblyResult.Rejected -> {
-                        registerRejection(packet.reason.description)
+                        val rejectionReason = localizedReason(packet.reason)
+                        registerRejection(rejectionReason)
                         val statsSnapshot = packetStats.snapshot()
                         updates += PacketProcessingUpdate(
                             packetsReceived = statsSnapshot.packetsReceived,
@@ -291,13 +306,13 @@ class PacketCaptureProcessor(
                             fragmentsReceived = receivedFragmentCount,
                             rawBytesReceived = receivedRawBytes,
                             chartSamplesByStream = emptyMap(),
-                            lastPacketIssue = packet.reason.description,
+                            lastPacketIssue = rejectionReason,
                             rejectionBreakdown = buildRejectionBreakdown(),
                             diagnosticEvents = listOf(
                                 createDiagnosticEvent(
                                     type = PacketDiagnosticType.REJECTED,
                                     message = buildRejectedPacketMessage(
-                                        reason = packet.reason.description,
+                                        reason = rejectionReason,
                                     ),
                                 ),
                             ),
@@ -310,7 +325,8 @@ class PacketCaptureProcessor(
                                 if (lastAcceptedTimerMillis != UNINITIALIZED_TIMER_MILLIS &&
                                     validation.packet.timerMillis < lastAcceptedTimerMillis
                                 ) {
-                                    registerRejection(TIMER_REGRESSION_MESSAGE)
+                                    val timerRegressionMessage = appTextResolver.getString(R.string.packet_timer_regressed)
+                                    registerRejection(timerRegressionMessage)
                                     timerRegressionRejects++
                                     val statsSnapshot = packetStats.snapshot()
                                     updates += PacketProcessingUpdate(
@@ -321,13 +337,13 @@ class PacketCaptureProcessor(
                                         fragmentsReceived = receivedFragmentCount,
                                         rawBytesReceived = receivedRawBytes,
                                         chartSamplesByStream = emptyMap(),
-                                        lastPacketIssue = TIMER_REGRESSION_MESSAGE,
+                                        lastPacketIssue = timerRegressionMessage,
                                         rejectionBreakdown = buildRejectionBreakdown(),
                                         diagnosticEvents = listOf(
                                             createDiagnosticEvent(
                                                 type = PacketDiagnosticType.REJECTED,
                                                 message = buildRejectedPacketMessage(
-                                                    reason = TIMER_REGRESSION_MESSAGE,
+                                                    reason = timerRegressionMessage,
                                                     packetLength = validation.packet.bytes.size,
                                                     counter = validation.packet.counter,
                                                     timerMillis = validation.packet.timerMillis,
@@ -342,8 +358,10 @@ class PacketCaptureProcessor(
                                 try {
                                     packetFileStore.append(validation.packet.bytes)
                                 } catch (exception: Exception) {
-                                    registerRejection(PACKET_WRITE_FAILURE_MESSAGE)
-                                    onError("Failed to append validated packet to output file", exception)
+                                    val packetWriteFailureMessage =
+                                        appTextResolver.getString(R.string.failed_write_accepted_packet)
+                                    registerRejection(packetWriteFailureMessage)
+                                    onError(appTextResolver.getString(R.string.failed_append_validated_packet), exception)
                                     updates += PacketProcessingUpdate(
                                         packetsReceived = packetStats.snapshot().packetsReceived,
                                         packetsLost = packetStats.snapshot().packetsLost,
@@ -352,12 +370,17 @@ class PacketCaptureProcessor(
                                         fragmentsReceived = receivedFragmentCount,
                                         rawBytesReceived = receivedRawBytes,
                                         chartSamplesByStream = emptyMap(),
-                                        lastPacketIssue = PACKET_WRITE_FAILURE_MESSAGE,
+                                        lastPacketIssue = packetWriteFailureMessage,
                                         rejectionBreakdown = buildRejectionBreakdown(),
                                         diagnosticEvents = listOf(
                                             createDiagnosticEvent(
                                                 type = PacketDiagnosticType.REJECTED,
-                                                message = "Rejected packet reason=$PACKET_WRITE_FAILURE_MESSAGE, len=${validation.packet.bytes.size}, counter=${validation.packet.counter}, timer=${validation.packet.timerMillis}",
+                                                message = buildRejectedPacketMessage(
+                                                    reason = packetWriteFailureMessage,
+                                                    packetLength = validation.packet.bytes.size,
+                                                    counter = validation.packet.counter,
+                                                    timerMillis = validation.packet.timerMillis,
+                                                ),
                                             ),
                                         ),
                                     )
@@ -404,7 +427,8 @@ class PacketCaptureProcessor(
                             }
 
                             is PacketValidationResult.Rejected -> {
-                                registerRejection(validation.reason.description)
+                                val rejectionReason = localizedReason(validation.reason)
+                                registerRejection(rejectionReason)
                                 val statsSnapshot = packetStats.snapshot()
                                 updates += PacketProcessingUpdate(
                                     packetsReceived = statsSnapshot.packetsReceived,
@@ -414,13 +438,13 @@ class PacketCaptureProcessor(
                                     fragmentsReceived = receivedFragmentCount,
                                     rawBytesReceived = receivedRawBytes,
                                     chartSamplesByStream = emptyMap(),
-                                    lastPacketIssue = validation.reason.description,
+                                    lastPacketIssue = rejectionReason,
                                     rejectionBreakdown = buildRejectionBreakdown(),
                                     diagnosticEvents = listOf(
                                         createDiagnosticEvent(
                                             type = PacketDiagnosticType.REJECTED,
                                             message = buildRejectedPacketMessage(
-                                                reason = validation.reason.description,
+                                                reason = rejectionReason,
                                                 packetLength = packet.packet.bytes.size,
                                             ),
                                         ),
@@ -528,7 +552,14 @@ class PacketCaptureProcessor(
                 diagnosticEvents = listOf(
                     createDiagnosticEvent(
                         type = PacketDiagnosticType.INFO,
-                        message = "Capture queue pressure: depth=$queueDepth/$maxPendingFragments (${queueDepth * 100 / maxPendingFragments}%), maxDepth=$maxObservedQueueDepth, fragmentBytes=$fragmentSize",
+                        message = appTextResolver.getString(
+                            R.string.capture_queue_pressure,
+                            queueDepth,
+                            maxPendingFragments,
+                            queueDepth * 100 / maxPendingFragments,
+                            maxObservedQueueDepth,
+                            fragmentSize,
+                        ),
                     ),
                 ),
             ),
@@ -539,7 +570,7 @@ class PacketCaptureProcessor(
         if (rejectionCounts.isEmpty()) return null
 
         return rejectionCounts.entries.joinToString(separator = " | ") { (reason, count) ->
-            "$reason: $count"
+            appTextResolver.getString(R.string.rejection_breakdown_item, reason, count)
         }
     }
 
@@ -565,7 +596,7 @@ class PacketCaptureProcessor(
                 message = event.message,
             )
         } catch (exception: Exception) {
-            onError("Failed to persist diagnostic log event", exception)
+            onError(appTextResolver.getString(R.string.failed_persist_diagnostic_log_event), exception)
         }
         return event
     }
@@ -598,13 +629,29 @@ class PacketCaptureProcessor(
         val statsSnapshot = packetStats.snapshot()
         val event = createDiagnosticEvent(
             type = PacketDiagnosticType.INFO,
-            message = "Capture summary: packets=${statsSnapshot.packetsReceived}, lost=${statsSnapshot.packetsLost}, rejected=$rejectedPackets, timerRegressionRejects=$timerRegressionRejects, fragments=$receivedFragmentCount, rawBytes=$receivedRawBytes, queueDepthCurrent=${queue.size}, queueDepthMax=$maxObservedQueueDepth",
+            message = appTextResolver.getString(
+                R.string.capture_summary,
+                statsSnapshot.packetsReceived,
+                statsSnapshot.packetsLost,
+                rejectedPackets,
+                timerRegressionRejects,
+                receivedFragmentCount,
+                receivedRawBytes,
+                queue.size,
+                maxObservedQueueDepth,
+            ),
         )
         return createStatsUpdateLocked(diagnosticEvents = listOf(event))
     }
 
     private fun buildAcceptedPacketMessage(packet: com.example.myapplication.protocol.ValidatedPacket): String {
-        return "Accepted packet counter=${packet.counter}, timer=${packet.timerMillis}, len=${packet.bytes.size}, meas=${packet.measurementCount}"
+        return appTextResolver.getString(
+            R.string.accepted_packet_message,
+            packet.counter,
+            packet.timerMillis,
+            packet.bytes.size,
+            packet.measurementCount,
+        )
     }
 
     private fun buildGapMessage(
@@ -612,7 +659,12 @@ class PacketCaptureProcessor(
         actualCounter: Long?,
         gapCount: Long,
     ): String {
-        return "Gap detected: expected=${expectedCounter ?: "?"}, actual=${actualCounter ?: "?"}, missing=$gapCount"
+        return appTextResolver.getString(
+            R.string.gap_detected_message,
+            expectedCounter?.toString() ?: "?",
+            actualCounter?.toString() ?: "?",
+            gapCount,
+        )
     }
 
     private fun buildRejectedPacketMessage(
@@ -622,12 +674,33 @@ class PacketCaptureProcessor(
         timerMillis: Long? = null,
     ): String {
         val details = buildList {
-            add("reason=$reason")
-            if (packetLength != null) add("len=$packetLength")
-            if (counter != null) add("counter=$counter")
-            if (timerMillis != null) add("timer=$timerMillis")
+            add(appTextResolver.getString(R.string.rejected_packet_detail_reason, reason))
+            if (packetLength != null) add(appTextResolver.getString(R.string.rejected_packet_detail_length, packetLength))
+            if (counter != null) add(appTextResolver.getString(R.string.rejected_packet_detail_counter, counter))
+            if (timerMillis != null) add(appTextResolver.getString(R.string.rejected_packet_detail_timer, timerMillis))
         }
-        return "Rejected packet ${details.joinToString(separator = ", ")}"
+        return appTextResolver.getString(
+            R.string.rejected_packet_message,
+            details.joinToString(separator = ", "),
+        )
+    }
+
+    private fun localizedReason(reason: PacketAssemblyFailureReason): String {
+        return when (reason) {
+            PacketAssemblyFailureReason.OVERLAPPING_PACKET_START ->
+                appTextResolver.getString(R.string.packet_assembly_overlapping_start)
+        }
+    }
+
+    private fun localizedReason(reason: PacketValidationFailureReason): String {
+        return when (reason) {
+            PacketValidationFailureReason.INVALID_START ->
+                appTextResolver.getString(R.string.packet_validation_invalid_start)
+            PacketValidationFailureReason.INVALID_LENGTH ->
+                appTextResolver.getString(R.string.packet_validation_invalid_length)
+            PacketValidationFailureReason.INVALID_MEASUREMENT_COUNT ->
+                appTextResolver.getString(R.string.packet_validation_invalid_measurement_count)
+        }
     }
 
     private companion object {
@@ -638,8 +711,6 @@ class PacketCaptureProcessor(
         const val DEFAULT_SUMMARY_INTERVAL_MS = 5_000L
         const val WORKER_THREAD_NAME = "packet-capture-processor"
         const val UNINITIALIZED_TIMER_MILLIS = -1L
-        const val TIMER_REGRESSION_MESSAGE = "Packet timer regressed"
-        const val PACKET_WRITE_FAILURE_MESSAGE = "Failed to write accepted packet"
     }
 
     private data class QueuedFragment(

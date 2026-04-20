@@ -1,0 +1,181 @@
+<resources>
+    <string name="app_name">Woona</string>
+
+    <string name="nav_overview">Обзор</string>
+    <string name="nav_charts">Графики</string>
+    <string name="nav_settings">Настройки</string>
+    <string name="action_export">Экспорт</string>
+
+    <string name="status_replay">Реплей</string>
+    <string name="status_connected">Подключено</string>
+    <string name="status_scanning">Сканирование</string>
+    <string name="status_idle">Ожидание</string>
+
+    <string name="export_session_files">Экспорт файлов сессии</string>
+    <string name="export_choose_artifact">Выберите артефакт сессии для отправки.</string>
+    <string name="export_compiled_binary">Собранный бинарный файл</string>
+    <string name="export_compiled_binary_desc">Проверенные пакеты сессии, сохраненные в итоговом выходном файле.</string>
+    <string name="export_raw_data_stream">Сырой поток данных</string>
+    <string name="export_raw_data_stream_desc">Входящие BLE-фрагменты до парсинга и валидации.</string>
+    <string name="export_session_log">Лог сессии</string>
+    <string name="export_session_log_desc">События подключения, предупреждения и диагностика пакетов для текущей сессии.</string>
+
+    <string name="settings_theme_title">Тема</string>
+    <string name="settings_theme_desc">Настройки темы появятся здесь после завершения базовой структуры оболочки приложения.</string>
+    <string name="settings_language_title">Язык</string>
+    <string name="settings_language_desc">Выберите язык для всей оболочки приложения и экрана устройства.</string>
+    <string name="settings_current_language">Текущий язык: %1$s</string>
+    <string name="settings_switch_to_russian">Переключить на русский</string>
+    <string name="settings_switch_to_english">Переключить на английский</string>
+    <string name="language_english">Английский</string>
+    <string name="language_russian">Русский</string>
+
+    <string name="ble_devices_title">BLE-устройства</string>
+    <string name="ble_devices_desc">Запустите сканирование, выберите найденное устройство или воспроизведите сохраненный дамп.</string>
+    <string name="action_start_scan">НАЧАТЬ ПОИСК</string>
+    <string name="action_scanning">ИДЕТ СКАНИРОВАНИЕ...</string>
+    <string name="action_replay_bin_debug">Загрузить файл (debug)</string>
+    <string name="ble_devices_scanning_empty">Идет поиск ближайших BLE-устройств...</string>
+    <string name="ble_devices_empty">Устройства еще не найдены.</string>
+
+    <string name="connection_title">Подключение</string>
+    <string name="action_disconnect">ОТКЛЮЧИТЬ</string>
+
+    <string name="latest_events_title">Последние события</string>
+    <string name="latest_events_desc">Здесь будут показаны диагностические сообщения и события захвата.</string>
+    <string name="latest_events_order">Новые сверху, старые доступны прокруткой вниз.</string>
+
+    <string name="ble_transport_profile_title">Профиль BLE-транспорта</string>
+    <string name="ble_transport_profile_desc">Применяется при следующем BLE-подключении. Используйте для сравнения совместимости телефонов.</string>
+    <string name="transport_profile_default">Стандартный</string>
+    <string name="transport_profile_default_short">Высокий приоритет, запрос MTU 512, запрос PHY 2M.</string>
+    <string name="transport_profile_default_detail_1">Запрашивает высокий приоритет соединения.</string>
+    <string name="transport_profile_default_detail_2">Запрашивает MTU 512 и продолжает работу, даже если стек согласовал меньшее значение.</string>
+    <string name="transport_profile_default_detail_3">Запрашивает LE 2M PHY для максимальной пропускной способности на совместимых телефонах.</string>
+    <string name="transport_profile_compatibility">Совместимость</string>
+    <string name="transport_profile_compatibility_short">Высокий приоритет, запрос MTU 247, без переопределения PHY.</string>
+    <string name="transport_profile_compatibility_detail_1">Запрашивает высокий приоритет соединения.</string>
+    <string name="transport_profile_compatibility_detail_2">Запрашивает MTU 247 напрямую вместо 512.</string>
+    <string name="transport_profile_compatibility_detail_3">Не запрашивает предпочтительный PHY, поэтому телефон использует режим стека по умолчанию.</string>
+    <string name="transport_profile_conservative">Консервативный</string>
+    <string name="transport_profile_conservative_short">Только высокий приоритет, без запроса MTU и без переопределения PHY.</string>
+    <string name="transport_profile_conservative_detail_1">Запрашивает только высокий приоритет соединения.</string>
+    <string name="transport_profile_conservative_detail_2">Пропускает явное согласование MTU и использует значение стека/устройства по умолчанию.</string>
+    <string name="transport_profile_conservative_detail_3">Пропускает запрос предпочтительного PHY и сохраняет системный режим канала по умолчанию.</string>
+
+    <string name="chart_sensor_selection">Выбор датчика</string>
+    <string name="chart_channel">Канал %1$d</string>
+    <string name="chart_follow_live">Live</string>
+    <string name="chart_follow_history">История</string>
+    <string name="chart_y_reset">Сброс Y</string>
+    <string name="chart_status_line">%1$s | пакеты %2$d | потери %3$d | отклонено %4$d</string>
+    <string name="chart_empty_state">Нет данных для выбранного датчика/канала</string>
+    <string name="chart_empty_state_window">История сессии сохраняется, окно: %1$s</string>
+    <string name="chart_summary">%1$s | %2$s | Y x%3$d | %4$s - %5$s</string>
+    <string name="relative_time_minutes_seconds">%1$dм %2$dс</string>
+    <string name="relative_time_seconds">%1$dс</string>
+
+    <string name="debug_replay">ОТЛАДОЧНЫЙ РЕПЛЕЙ</string>
+    <string name="summary_packets_received">ПРИНЯТО ПАКЕТОВ</string>
+    <string name="summary_gap">ПОТЕРИ (GAP)</string>
+    <string name="summary_rejected">ОТКЛОНЕНО</string>
+    <string name="summary_fragments_compact">Фрагменты %1$d | Сырые байты %2$d</string>
+    <string name="summary_fragments_full">Фрагменты: %1$d | Сырые байты: %2$d</string>
+    <string name="summary_last_issue">Последняя проблема</string>
+    <string name="summary_none">нет</string>
+    <string name="summary_timer_regressions">Регрессии таймера</string>
+    <string name="summary_rejection_breakdown">Структура отклонений</string>
+
+    <string name="action_send_file">ОТПРАВИТЬ ФАЙЛ</string>
+    <string name="action_send_raw">ОТПРАВИТЬ RAW</string>
+    <string name="action_send_log">ОТПРАВИТЬ ЛОГ</string>
+
+    <string name="permissions_required">Нужны разрешения!</string>
+    <string name="unable_read_bin_file">Не удалось прочитать BIN-файл</string>
+    <string name="unable_load_bin_file">Не удалось загрузить BIN-файл</string>
+    <string name="replay_file_empty">Файл реплея пуст</string>
+    <string name="replay_file_invalid">Файл реплея не является корректным дампом пакетов</string>
+    <string name="replay_interrupted">Реплей прерван</string>
+    <string name="replay_failed">Ошибка реплея</string>
+    <string name="replay_unavailable">Реплей недоступен</string>
+    <string name="share_file_failed">Не удалось отправить файл</string>
+    <string name="share_chooser_title">Отправить файл</string>
+    <string name="transport_profile_selected_next_connection">Выбран профиль BLE-транспорта: %1$s. Изменения применятся при следующем подключении.</string>
+
+    <string name="packet_queue_overflow_stopped">Очередь пакетов переполнена. Захват остановлен.</string>
+    <string name="failed_persist_raw_fragment">Не удалось сохранить сырой BLE-фрагмент</string>
+    <string name="failed_reset_capture_session">Не удалось сбросить сессию захвата</string>
+    <string name="failed_flush_buffered_output">Не удалось сбросить буферизированный вывод</string>
+    <string name="interrupted_waiting_packet_processor_shutdown">Ожидание завершения процессора пакетов было прервано</string>
+    <string name="failed_close_buffered_output">Не удалось закрыть буферизированный вывод</string>
+    <string name="background_packet_processing_failed">Сбой фоновой обработки пакетов</string>
+    <string name="failed_append_validated_packet">Не удалось записать подтвержденный пакет в выходной файл</string>
+    <string name="failed_persist_diagnostic_log_event">Не удалось сохранить событие диагностического лога</string>
+    <string name="capture_queue_overflow">Переполнение очереди захвата: depth=%1$d/%2$d, fragmentBytes=%3$d</string>
+    <string name="capture_queue_pressure">Давление на очередь захвата: depth=%1$d/%2$d (%3$d%%), maxDepth=%4$d, fragmentBytes=%5$d</string>
+    <string name="capture_summary">Сводка захвата: packets=%1$d, lost=%2$d, rejected=%3$d, timerRegressionRejects=%4$d, fragments=%5$d, rawBytes=%6$d, queueDepthCurrent=%7$d, queueDepthMax=%8$d</string>
+    <string name="accepted_packet_message">Пакет принят counter=%1$d, timer=%2$d, len=%3$d, meas=%4$d</string>
+    <string name="gap_detected_message">Обнаружен разрыв: expected=%1$s, actual=%2$s, missing=%3$d</string>
+    <string name="rejected_packet_message">Пакет отклонен: %1$s</string>
+    <string name="rejected_packet_detail_reason">reason=%1$s</string>
+    <string name="rejected_packet_detail_length">len=%1$d</string>
+    <string name="rejected_packet_detail_counter">counter=%1$d</string>
+    <string name="rejected_packet_detail_timer">timer=%1$d</string>
+    <string name="packet_timer_regressed">Таймер пакета уменьшился</string>
+    <string name="failed_write_accepted_packet">Не удалось записать принятый пакет</string>
+    <string name="rejection_breakdown_item">%1$s: %2$d</string>
+    <string name="packet_assembly_overlapping_start">Новый стартовый маркер пакета найден до завершения предыдущего пакета</string>
+    <string name="packet_validation_invalid_start">Некорректный стартовый маркер пакета</string>
+    <string name="packet_validation_invalid_length">Некорректная длина пакета</string>
+    <string name="packet_validation_invalid_measurement_count">Некорректное количество измерений</string>
+
+    <string name="ble_missing_connect_permission_scan_result">Для обработки результата сканирования требуется разрешение BLUETOOTH_CONNECT</string>
+    <string name="ble_unknown_device">Неизвестно</string>
+    <string name="ble_scan_failed">Ошибка BLE-сканирования: %1$s</string>
+    <string name="ble_scan_failure_already_started">уже запущено</string>
+    <string name="ble_scan_failure_app_registration">сбой регистрации приложения</string>
+    <string name="ble_scan_failure_feature_unsupported">функция не поддерживается</string>
+    <string name="ble_scan_failure_internal_error">внутренняя ошибка</string>
+    <string name="ble_scan_failure_out_of_hw">не хватает аппаратных ресурсов</string>
+    <string name="ble_scan_failure_too_frequent">слишком частое сканирование</string>
+    <string name="ble_scan_failure_code">code=%1$d</string>
+    <string name="ble_gatt_connection_error">Ошибка GATT-подключения: %1$d</string>
+    <string name="ble_missing_connect_permission_before_mtu">Разрешение BLUETOOTH_CONNECT отсутствует перед запросом MTU</string>
+    <string name="ble_transport_profile_message">Профиль BLE-транспорта: %1$s (%2$s)</string>
+    <string name="ble_best_effort_connection_logging">Включено best-effort логирование BLE-интервала соединения; на некоторых устройствах значения могут оставаться недоступными</string>
+    <string name="ble_requested_high_priority">Запрошен высокий приоритет BLE-соединения</string>
+    <string name="ble_failed_high_priority">Не удалось запросить высокий приоритет BLE-соединения</string>
+    <string name="ble_skipped_priority_profile">Запрос приоритета BLE-соединения пропущен из-за выбранного профиля</string>
+    <string name="ble_requested_mtu">Запрошен BLE MTU %1$d</string>
+    <string name="ble_failed_mtu_continue">Не удалось запросить MTU %1$d; работа продолжена с текущим MTU</string>
+    <string name="ble_skipped_explicit_mtu">Явный запрос MTU пропущен из-за выбранного профиля</string>
+    <string name="ble_missing_connect_permission_after_mtu">Разрешение BLUETOOTH_CONNECT отсутствует после изменения MTU</string>
+    <string name="ble_mtu_changed">BLE MTU изменен: mtu=%1$d status=%2$d</string>
+    <string name="ble_phy_updated">BLE PHY обновлен: txPhy=%1$d rxPhy=%2$d status=%3$d</string>
+    <string name="ble_connection_updated">BLE-соединение обновлено: interval=%1$sms latency=%2$d timeout=%3$dms status=%4$d</string>
+    <string name="ble_missing_connect_permission_service_discovery">Разрешение BLUETOOTH_CONNECT отсутствует во время обнаружения сервисов</string>
+    <string name="ble_service_discovery_failed">Сбой обнаружения сервисов: %1$d</string>
+    <string name="ble_required_service_missing">Не найден обязательный BLE-сервис, характеристика или дескриптор</string>
+    <string name="ble_failed_register_notification_callback">Не удалось зарегистрировать локальный callback BLE-уведомлений</string>
+    <string name="ble_failed_enable_notifications">Не удалось включить BLE-уведомления: %1$d</string>
+    <string name="ble_missing_connect_permission_notification_setup">Разрешение BLUETOOTH_CONNECT отсутствует во время настройки уведомлений</string>
+    <string name="ble_descriptor_write_failed">Ошибка записи BLE-дескриптора: %1$d</string>
+    <string name="ble_notification_gap">Разрыв BLE-уведомлений: gap=%1$dms threshold=%2$dms notifications=%3$d</string>
+    <string name="ble_missing_scan_permission">Разрешение BLUETOOTH_SCAN отсутствует</string>
+    <string name="ble_missing_connect_permission">Разрешение BLUETOOTH_CONNECT отсутствует</string>
+    <string name="bluetooth_adapter_unavailable">Bluetooth-адаптер недоступен</string>
+    <string name="bluetooth_off">Bluetooth выключен</string>
+    <string name="ble_scanner_unavailable">BLE-сканер недоступен</string>
+    <string name="ble_failed_start_scan">Не удалось запустить BLE-сканирование</string>
+    <string name="ble_missing_scan_permission_stop">Разрешение BLUETOOTH_SCAN отсутствует при остановке сканирования</string>
+    <string name="ble_failed_stop_scan">Не удалось остановить BLE-сканирование</string>
+    <string name="ble_device_not_found">BLE-устройство не найдено по адресу: %1$s</string>
+    <string name="ble_failed_connect_device">Не удалось подключиться к BLE-устройству</string>
+    <string name="ble_missing_connect_permission_disconnect">Разрешение BLUETOOTH_CONNECT отсутствует при отключении</string>
+    <string name="ble_failed_disconnect_device">Не удалось отключить BLE-устройство</string>
+    <string name="ble_requested_preferred_phy">Запрошен предпочтительный BLE PHY: LE 2M</string>
+    <string name="ble_skipped_preferred_phy">Запрос предпочтительного BLE PHY пропущен из-за выбранного профиля</string>
+    <string name="value_not_available">н/д</string>
+    <string name="ble_transport_snapshot">Снимок BLE-транспорта: profile=%1$s, mtu=%2$s, phy=%3$s, interval=%4$sms, latency=%5$s, timeout=%6$sms</string>
+    <string name="ble_transport_summary">%1$s, notifications=%2$d, notifGapAvg=%3$sms, notifGapMax=%4$sms, notifGapLong=%5$d</string>
+</resources>

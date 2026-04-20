@@ -46,28 +46,30 @@ import com.example.myapplication.feature.device.DeviceChartsScreen
 import com.example.myapplication.feature.device.DeviceOverviewScreen
 import com.example.myapplication.feature.device.DeviceSettingsScreen
 import com.example.myapplication.feature.device.DeviceUiState
+import com.example.myapplication.localization.AppLanguage
+import com.example.myapplication.localization.appStringResource
 
 private enum class AppDestination(
-    val title: String,
-    val navLabel: String,
+    val titleRes: Int,
+    val navLabelRes: Int,
     val icon: ImageVector,
     val supportsExport: Boolean,
 ) {
     OVERVIEW(
-        title = "Overview",
-        navLabel = "Overview",
+        titleRes = R.string.nav_overview,
+        navLabelRes = R.string.nav_overview,
         icon = Icons.Rounded.Home,
         supportsExport = true,
     ),
     CHARTS(
-        title = "Charts",
-        navLabel = "Charts",
+        titleRes = R.string.nav_charts,
+        navLabelRes = R.string.nav_charts,
         icon = Icons.Rounded.ShowChart,
         supportsExport = true,
     ),
     SETTINGS(
-        title = "Settings",
-        navLabel = "Settings",
+        titleRes = R.string.nav_settings,
+        navLabelRes = R.string.nav_settings,
         icon = Icons.Rounded.Settings,
         supportsExport = false,
     ),
@@ -77,9 +79,11 @@ private enum class AppDestination(
 @Composable
 fun DeviceAppShell(
     uiState: DeviceUiState,
+    selectedLanguage: AppLanguage,
     onStartScan: () -> Unit,
     onConnect: (String) -> Unit,
     onTransportProfileSelect: (BleTransportProfile) -> Unit,
+    onLanguageSelect: (AppLanguage) -> Unit,
     onDisconnect: () -> Unit,
     onSensorSelect: (Int) -> Unit,
     onChannelSelect: (Int) -> Unit,
@@ -114,7 +118,7 @@ fun DeviceAppShell(
             TopAppBar(
                 title = {
                     Text(
-                        text = selectedDestination.title,
+                        text = appStringResource(selectedDestination.titleRes),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -125,7 +129,7 @@ fun DeviceAppShell(
                             onClick = { isExportSheetVisible = true },
                             enabled = canExportAnyFile,
                         ) {
-                            Text("Export")
+                            Text(appStringResource(R.string.action_export))
                         }
                     }
                     ConnectionStatusBadge(uiState = uiState)
@@ -171,7 +175,9 @@ fun DeviceAppShell(
 
                 AppDestination.SETTINGS -> DeviceSettingsScreen(
                     uiState = uiState,
+                    selectedLanguage = selectedLanguage,
                     onTransportProfileSelect = onTransportProfileSelect,
+                    onLanguageSelect = onLanguageSelect,
                 )
             }
         }
@@ -205,10 +211,10 @@ fun DeviceAppShell(
 @Composable
 private fun ConnectionStatusBadge(uiState: DeviceUiState) {
     val (label, containerColor, contentColor) = when {
-        uiState.isReplayRunning -> Triple("Replay", Color(0xFFE3F2FD), Color(0xFF1565C0))
-        uiState.isConnected -> Triple("Connected", Color(0xFFE8F5E9), Color(0xFF2E7D32))
-        uiState.isScanning -> Triple("Scanning", Color(0xFFFFF3E0), Color(0xFFEF6C00))
-        else -> Triple("Idle", Color(0xFFF1F3F5), Color(0xFF455A64))
+        uiState.isReplayRunning -> Triple(appStringResource(R.string.status_replay), Color(0xFFE3F2FD), Color(0xFF1565C0))
+        uiState.isConnected -> Triple(appStringResource(R.string.status_connected), Color(0xFFE8F5E9), Color(0xFF2E7D32))
+        uiState.isScanning -> Triple(appStringResource(R.string.status_scanning), Color(0xFFFFF3E0), Color(0xFFEF6C00))
+        else -> Triple(appStringResource(R.string.status_idle), Color(0xFFF1F3F5), Color(0xFF455A64))
     }
 
     Surface(
@@ -294,7 +300,7 @@ private fun ShellNavItem(
                     modifier = Modifier.size(20.dp),
                 )
                 Text(
-                    text = destination.navLabel,
+                    text = appStringResource(destination.navLabelRes),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                     color = titleColor,
@@ -318,30 +324,30 @@ private fun ExportSheet(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Text(
-            text = "Export session files",
+            text = appStringResource(R.string.export_session_files),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
         )
         Text(
-            text = "Choose which session artifact to share.",
+            text = appStringResource(R.string.export_choose_artifact),
             style = MaterialTheme.typography.bodySmall,
             color = Color.Gray,
         )
         ExportActionButton(
-            title = "Compiled binary",
-            description = "Validated session packets saved as the compiled output file.",
+            title = appStringResource(R.string.export_compiled_binary),
+            description = appStringResource(R.string.export_compiled_binary_desc),
             enabled = canSharePacketFile,
             onClick = onSharePacketFile,
         )
         ExportActionButton(
-            title = "Raw data stream",
-            description = "Incoming BLE fragments before parsing and validation.",
+            title = appStringResource(R.string.export_raw_data_stream),
+            description = appStringResource(R.string.export_raw_data_stream_desc),
             enabled = canShareRawFile,
             onClick = onShareRawFile,
         )
         ExportActionButton(
-            title = "Session log",
-            description = "Connection events, warnings, and packet diagnostics for the session.",
+            title = appStringResource(R.string.export_session_log),
+            description = appStringResource(R.string.export_session_log_desc),
             enabled = canShareLogFile,
             onClick = onShareLogFile,
         )

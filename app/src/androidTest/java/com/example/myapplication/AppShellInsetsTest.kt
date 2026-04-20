@@ -15,6 +15,9 @@ import androidx.core.view.WindowCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.myapplication.feature.device.ChartUiState
 import com.example.myapplication.feature.device.DeviceUiState
+import com.example.myapplication.localization.AppLanguage
+import com.example.myapplication.localization.AppLocalizationProvider
+import com.example.myapplication.localization.AppTextResolver
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -112,34 +115,41 @@ class AppShellInsetsTest {
         uiState: DeviceUiState = DeviceUiState(),
     ) {
         composeRule.setContent {
-            MaterialTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
-                    DeviceAppShell(
-                        uiState = uiState,
-                        onStartScan = {},
-                        onConnect = {},
-                        onTransportProfileSelect = {},
-                        onDisconnect = {},
-                        onSensorSelect = {},
-                        onChannelSelect = {},
-                        onChartWindowSelect = {},
-                        onFollowLiveChange = {},
-                        onChartPanLeft = {},
-                        onChartPanRight = {},
-                        onChartZoomIn = {},
-                        onChartZoomOut = {},
-                        onChartZoomReset = {},
-                        onChartPanGesture = { _ -> },
-                        onChartZoomGesture = { _, _ -> },
-                        canSharePacketFile = false,
-                        canShareRawFile = false,
-                        canShareLogFile = false,
-                        onSharePacketFile = {},
-                        onShareRawFile = {},
-                        onShareLogFile = {},
-                        showReplayAction = true,
-                        onReplayRequest = {},
-                    )
+            AppLocalizationProvider(
+                language = AppLanguage.ENGLISH,
+                textResolver = AppTextResolver(composeRule.activity) { AppLanguage.ENGLISH },
+            ) {
+                MaterialTheme {
+                    Surface(modifier = Modifier.fillMaxSize()) {
+                        DeviceAppShell(
+                            uiState = uiState,
+                            selectedLanguage = AppLanguage.ENGLISH,
+                            onStartScan = {},
+                            onConnect = {},
+                            onTransportProfileSelect = {},
+                            onLanguageSelect = {},
+                            onDisconnect = {},
+                            onSensorSelect = {},
+                            onChannelSelect = {},
+                            onChartWindowSelect = {},
+                            onFollowLiveChange = {},
+                            onChartPanLeft = {},
+                            onChartPanRight = {},
+                            onChartZoomIn = {},
+                            onChartZoomOut = {},
+                            onChartZoomReset = {},
+                            onChartPanGesture = { _ -> },
+                            onChartZoomGesture = { _, _ -> },
+                            canSharePacketFile = false,
+                            canShareRawFile = false,
+                            canShareLogFile = false,
+                            onSharePacketFile = {},
+                            onShareRawFile = {},
+                            onShareLogFile = {},
+                            showReplayAction = true,
+                            onReplayRequest = {},
+                        )
+                    }
                 }
             }
         }

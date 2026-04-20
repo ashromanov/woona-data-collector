@@ -1,8 +1,10 @@
 package com.example.myapplication.feature.device
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -30,6 +33,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -43,9 +47,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.example.myapplication.R
 import com.example.myapplication.ble.BleTransportProfile
+import com.example.myapplication.localization.AppLanguage
+import com.example.myapplication.localization.appStringResource
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -149,7 +157,9 @@ fun DeviceChartsScreen(
 @Composable
 fun DeviceSettingsScreen(
     uiState: DeviceUiState,
+    selectedLanguage: AppLanguage,
     onTransportProfileSelect: (BleTransportProfile) -> Unit,
+    onLanguageSelect: (AppLanguage) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
@@ -167,15 +177,15 @@ fun DeviceSettingsScreen(
 
         item {
             SettingsPlaceholderCard(
-                title = "Theme",
-                description = "Theme controls will live here once the app shell baseline is in place.",
+                title = appStringResource(R.string.settings_theme_title),
+                description = appStringResource(R.string.settings_theme_desc),
             )
         }
 
         item {
-            SettingsPlaceholderCard(
-                title = "Language",
-                description = "Language settings will live here when localization support is introduced.",
+            LanguageSettingsCard(
+                selectedLanguage = selectedLanguage,
+                onLanguageSelect = onLanguageSelect,
             )
         }
     }
@@ -292,6 +302,11 @@ private fun DeviceDiscoverySection(
     showReplayAction: Boolean,
     onReplayRequest: () -> Unit,
 ) {
+    val scanButtonLabel = if (uiState.isScanning) {
+        appStringResource(R.string.action_scanning)
+    } else {
+        appStringResource(R.string.action_start_scan)
+    }
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color(0xFFFAFAFA)),
@@ -301,10 +316,10 @@ private fun DeviceDiscoverySection(
                 .fillMaxWidth()
                 .padding(12.dp),
         ) {
-            Text("BLE devices", style = MaterialTheme.typography.titleMedium)
+            Text(appStringResource(R.string.ble_devices_title), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "Start a scan, pick a discovered device, or replay a captured dump.",
+                text = appStringResource(R.string.ble_devices_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.Gray,
             )
@@ -314,7 +329,7 @@ private fun DeviceDiscoverySection(
                 enabled = !uiState.isScanning,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(if (uiState.isScanning) "ИДЕТ СКАНИРОВАНИЕ..." else "НАЧАТЬ ПОИСК")
+                Text(scanButtonLabel)
             }
             if (showReplayAction) {
                 Spacer(Modifier.height(6.dp))
@@ -322,16 +337,16 @@ private fun DeviceDiscoverySection(
                     onClick = onReplayRequest,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("REPLAY BIN (DEBUG)")
+                    Text(appStringResource(R.string.action_replay_bin_debug))
                 }
             }
             Spacer(Modifier.height(8.dp))
             if (uiState.foundDevices.isEmpty()) {
                 Text(
                     text = if (uiState.isScanning) {
-                        "Scanning for nearby BLE devices..."
+                        appStringResource(R.string.ble_devices_scanning_empty)
                     } else {
-                        "No discovered devices yet."
+                        appStringResource(R.string.ble_devices_empty)
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray,
@@ -371,13 +386,13 @@ private fun DisconnectCard(onDisconnect: () -> Unit) {
                 .fillMaxWidth()
                 .padding(12.dp),
         ) {
-            Text("Connection", style = MaterialTheme.typography.labelMedium)
+            Text(appStringResource(R.string.connection_title), style = MaterialTheme.typography.labelMedium)
             Spacer(Modifier.height(6.dp))
             OutlinedButton(
                 onClick = onDisconnect,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("ОТКЛЮЧИТЬ")
+                Text(appStringResource(R.string.action_disconnect))
             }
         }
     }
@@ -399,10 +414,10 @@ private fun EventLogSection(uiState: DeviceUiState) {
                 .fillMaxWidth()
                 .padding(12.dp),
         ) {
-            Text("Последние события", style = MaterialTheme.typography.labelMedium)
+            Text(appStringResource(R.string.latest_events_title), style = MaterialTheme.typography.labelMedium)
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "Session diagnostics and capture events will appear here.",
+                text = appStringResource(R.string.latest_events_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.Gray,
             )
@@ -435,6 +450,72 @@ private fun SettingsPlaceholderCard(
     }
 }
 
+@Composable
+private fun LanguageSettingsCard(
+    selectedLanguage: AppLanguage,
+    onLanguageSelect: (AppLanguage) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFAFAFA)),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(appStringResource(R.string.settings_language_title), style = MaterialTheme.typography.labelMedium)
+            Text(
+                text = appStringResource(R.string.settings_language_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.Gray,
+            )
+            Column(
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                AppLanguage.entries.forEach { language ->
+                    LanguageOptionRow(
+                        language = language,
+                        selected = language == selectedLanguage,
+                        onSelect = { onLanguageSelect(language) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LanguageOptionRow(
+    language: AppLanguage,
+    selected: Boolean,
+    onSelect: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectable(
+                selected = selected,
+                onClick = onSelect,
+                role = Role.RadioButton,
+            )
+            .padding(horizontal = 4.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        RadioButton(
+            selected = selected,
+            onClick = null,
+        )
+        Text(
+            text = languageDisplayName(language),
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color(0xFF37474F),
+        )
+    }
+}
+
 private fun shouldShowSessionSummary(uiState: DeviceUiState): Boolean {
     return uiState.showCaptureUi ||
         uiState.isReplayRunning ||
@@ -454,8 +535,13 @@ private fun ScanSection(
     showReplayAction: Boolean,
     onReplayRequest: () -> Unit,
 ) {
+    val scanButtonLabel = if (uiState.isScanning) {
+        appStringResource(R.string.action_scanning)
+    } else {
+        appStringResource(R.string.action_start_scan)
+    }
     Column(modifier = modifier) {
-        Text("📡 Поиск BLE-оборудования", style = MaterialTheme.typography.titleMedium)
+        Text(appStringResource(R.string.ble_devices_title), style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(6.dp))
         BleTransportProfileCard(
             selectedProfile = uiState.transportProfile,
@@ -468,7 +554,7 @@ private fun ScanSection(
             enabled = !uiState.isScanning,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text(if (uiState.isScanning) "ИДЕТ СКАНИРОВАНИЕ..." else "НАЧАТЬ ПОИСК")
+            Text(scanButtonLabel)
         }
         if (showReplayAction) {
             Spacer(Modifier.height(6.dp))
@@ -476,7 +562,7 @@ private fun ScanSection(
                 onClick = onReplayRequest,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("REPLAY BIN (DEBUG)")
+                Text(appStringResource(R.string.action_replay_bin_debug))
             }
         }
 
@@ -563,6 +649,7 @@ private fun OverviewTab(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun BleTransportProfileCard(
     selectedProfile: BleTransportProfile,
@@ -579,9 +666,9 @@ private fun BleTransportProfileCard(
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("BLE transport profile", style = MaterialTheme.typography.labelMedium)
+            Text(appStringResource(R.string.ble_transport_profile_title), style = MaterialTheme.typography.labelMedium)
             Text(
-                text = "Applies on the next BLE connection. Use it to compare phone compatibility.",
+                text = appStringResource(R.string.ble_transport_profile_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.Gray,
             )
@@ -593,20 +680,26 @@ private fun BleTransportProfileCard(
                     FilterChip(
                         selected = selectedProfile == profile,
                         onClick = { onTransportProfileSelect(profile) },
-                        label = { Text(profile.title) },
+                        label = {
+                            Text(
+                                text = appStringResource(profile.titleRes),
+                                maxLines = 1,
+                                modifier = Modifier.basicMarquee(),
+                            )
+                        },
                         modifier = Modifier.weight(1f),
                     )
                 }
             }
             Text(
-                text = selectedProfile.shortDescription,
+                text = appStringResource(selectedProfile.shortDescriptionRes),
                 style = MaterialTheme.typography.bodySmall,
                 color = Color(0xFF37474F),
             )
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                selectedProfile.detailedDescription.forEach { line ->
+                selectedProfile.detailedDescriptionResIds.forEach { lineResId ->
                     Text(
-                        text = "• $line",
+                        text = "• ${appStringResource(lineResId)}",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFF455A64),
                     )
@@ -681,7 +774,7 @@ private fun SessionSummaryCard(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             if (uiState.isReplayRunning) {
-                Text("DEBUG REPLAY", color = Color(0xFF1565C0))
+                Text(appStringResource(R.string.debug_replay), color = Color(0xFF1565C0))
                 Spacer(Modifier.height(8.dp))
             }
 
@@ -690,17 +783,17 @@ private fun SessionSummaryCard(
                 horizontalArrangement = Arrangement.SpaceAround,
             ) {
                 SummaryMetric(
-                    label = "ПРИНЯТО ПАКЕТОВ",
+                    label = appStringResource(R.string.summary_packets_received),
                     value = "${uiState.packetsReceived}",
                     color = Color(0xFF2E7D32),
                 )
                 SummaryMetric(
-                    label = "ПОТЕРИ (GAP)",
+                    label = appStringResource(R.string.summary_gap),
                     value = "${uiState.packetsLost}",
                     color = if (uiState.packetsLost > 0) Color.Red else Color.Gray,
                 )
                 SummaryMetric(
-                    label = "ОТКЛОНЕНО",
+                    label = appStringResource(R.string.summary_rejected),
                     value = "${uiState.packetsRejected}",
                     color = if (uiState.packetsRejected > 0) Color(0xFFB00020) else Color.Gray,
                 )
@@ -709,33 +802,41 @@ private fun SessionSummaryCard(
             if (compact) {
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = "Fragments ${uiState.fragmentsReceived} | Raw ${uiState.rawBytesReceived}",
+                    text = appStringResource(
+                        R.string.summary_fragments_compact,
+                        uiState.fragmentsReceived,
+                        uiState.rawBytesReceived,
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = Color(0xFF455A64),
                 )
             } else {
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = "Fragments: ${uiState.fragmentsReceived} | Raw bytes: ${uiState.rawBytesReceived}",
+                    text = appStringResource(
+                        R.string.summary_fragments_full,
+                        uiState.fragmentsReceived,
+                        uiState.rawBytesReceived,
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFF455A64),
                 )
                 Spacer(Modifier.height(8.dp))
                 StatusLine(
-                    label = "Last issue",
-                    value = uiState.lastPacketIssue ?: "none",
+                    label = appStringResource(R.string.summary_last_issue),
+                    value = uiState.lastPacketIssue ?: appStringResource(R.string.summary_none),
                     valueColor = if (uiState.lastPacketIssue.isNullOrBlank()) Color.Gray else Color(0xFFB00020),
                 )
                 Spacer(Modifier.height(4.dp))
                 StatusLine(
-                    label = "Timer regressions",
+                    label = appStringResource(R.string.summary_timer_regressions),
                     value = "${uiState.timerRegressionRejects}",
                     valueColor = if (uiState.timerRegressionRejects > 0) Color(0xFFB00020) else Color.Gray,
                 )
                 Spacer(Modifier.height(4.dp))
                 StatusLine(
-                    label = "Rejection breakdown",
-                    value = uiState.rejectionBreakdown ?: "none",
+                    label = appStringResource(R.string.summary_rejection_breakdown),
+                    value = uiState.rejectionBreakdown ?: appStringResource(R.string.summary_none),
                     valueColor = if (uiState.rejectionBreakdown.isNullOrBlank()) Color.Gray else Color(0xFF6D4C41),
                 )
             }
@@ -770,9 +871,9 @@ private fun DiagnosticEventsCard(uiState: DeviceUiState) {
                 .fillMaxWidth()
                 .padding(12.dp),
         ) {
-            Text("Последние события", style = MaterialTheme.typography.labelMedium)
+            Text(appStringResource(R.string.latest_events_title), style = MaterialTheme.typography.labelMedium)
             Text(
-                "Новые сверху, старые доступны прокруткой вниз",
+                appStringResource(R.string.latest_events_order),
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.Gray,
             )
@@ -821,7 +922,7 @@ private fun SensorSelector(
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("Выбор датчика", style = MaterialTheme.typography.labelMedium)
+            Text(appStringResource(R.string.chart_sensor_selection), style = MaterialTheme.typography.labelMedium)
             Spacer(Modifier.height(4.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -847,7 +948,7 @@ private fun SensorSelector(
                     FilterChip(
                         selected = uiState.selectedChannel == channel,
                         onClick = { onChannelSelect(channel) },
-                        label = { Text("Ch $channel") },
+                        label = { Text(appStringResource(R.string.chart_channel, channel)) },
                         modifier = Modifier.padding(horizontal = 2.dp),
                     )
                 }
@@ -902,7 +1003,15 @@ private fun ChartControls(
                     modifier = Modifier.weight(1f),
                     selected = chart.isFollowingLive,
                     onClick = { onFollowLiveChange(!chart.isFollowingLive) },
-                    label = { Text(if (chart.isFollowingLive) "Live" else "History") },
+                    label = {
+                        Text(
+                            if (chart.isFollowingLive) {
+                                appStringResource(R.string.chart_follow_live)
+                            } else {
+                                appStringResource(R.string.chart_follow_history)
+                            },
+                        )
+                    },
                 )
                 IconButton(
                     onClick = onChartPanLeft,
@@ -935,7 +1044,7 @@ private fun ChartControls(
                 OutlinedButton(
                     onClick = onChartZoomReset,
                 ) {
-                    Text("Y Reset")
+                    Text(appStringResource(R.string.chart_y_reset))
                 }
             }
         }
@@ -945,13 +1054,19 @@ private fun ChartControls(
 @Composable
 private fun ChartStatusLine(uiState: DeviceUiState) {
     val connectionLabel = when {
-        uiState.isReplayRunning -> "Replay"
-        uiState.isConnected -> "Connected"
-        uiState.isScanning -> "Scanning"
-        else -> "Idle"
+        uiState.isReplayRunning -> appStringResource(R.string.status_replay)
+        uiState.isConnected -> appStringResource(R.string.status_connected)
+        uiState.isScanning -> appStringResource(R.string.status_scanning)
+        else -> appStringResource(R.string.status_idle)
     }
     Text(
-        text = "$connectionLabel | packets ${uiState.packetsReceived} | gap ${uiState.packetsLost} | rejected ${uiState.packetsRejected}",
+        text = appStringResource(
+            R.string.chart_status_line,
+            connectionLabel,
+            uiState.packetsReceived,
+            uiState.packetsLost,
+            uiState.packetsRejected,
+        ),
         style = MaterialTheme.typography.labelMedium,
         color = Color(0xFF455A64),
         modifier = Modifier.fillMaxWidth(),
@@ -966,9 +1081,9 @@ private fun EmptyChartState(chart: ChartUiState) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text("Нет данных для выбранного датчика/канала", color = Color.Gray)
+        Text(appStringResource(R.string.chart_empty_state), color = Color.Gray)
         Text(
-            "История сессии сохраняется, окно: ${chart.windowPreset.label}",
+            appStringResource(R.string.chart_empty_state_window, chart.windowPreset.label),
             style = MaterialTheme.typography.bodySmall,
             color = Color.Gray,
         )
@@ -994,14 +1109,14 @@ private fun ActionButtons(
                 onClick = onDisconnect,
                 modifier = Modifier.weight(1f),
             ) {
-                Text("ОТКЛЮЧИТЬ")
+                Text(appStringResource(R.string.action_disconnect))
             }
             Button(
                 onClick = onSharePacketFile,
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6200EE)),
             ) {
-                Text("ОТПРАВИТЬ ФАЙЛ")
+                Text(appStringResource(R.string.action_send_file))
             }
         }
         Row(
@@ -1012,13 +1127,13 @@ private fun ActionButtons(
                 onClick = onShareRawFile,
                 modifier = Modifier.weight(1f),
             ) {
-                Text("SEND RAW")
+                Text(appStringResource(R.string.action_send_raw))
             }
             OutlinedButton(
                 onClick = onShareLogFile,
                 modifier = Modifier.weight(1f),
             ) {
-                Text("SEND LOG")
+                Text(appStringResource(R.string.action_send_log))
             }
         }
     }
@@ -1231,28 +1346,42 @@ private fun formatAxisValue(value: Float): String {
     return value.toInt().toString()
 }
 
+@Composable
 private fun buildChartSummary(
     chart: ChartUiState,
     sessionStart: Long,
     viewportStart: Long,
     viewportEnd: Long,
 ): String {
-    val modeLabel = if (chart.isFollowingLive) "Live" else "History"
+    val modeLabel = if (chart.isFollowingLive) {
+        appStringResource(R.string.chart_follow_live)
+    } else {
+        appStringResource(R.string.chart_follow_history)
+    }
     val yZoom = (32_768f / chart.yAxisAbsRange).toInt().coerceAtLeast(1)
-    return "$modeLabel | ${chart.windowPreset.label} | Y x$yZoom | ${formatRelativeMillis(viewportStart - sessionStart)} - ${formatRelativeMillis(viewportEnd - sessionStart)}"
+    return appStringResource(
+        R.string.chart_summary,
+        modeLabel,
+        chart.windowPreset.label,
+        yZoom,
+        formatRelativeMillis(viewportStart - sessionStart),
+        formatRelativeMillis(viewportEnd - sessionStart),
+    )
 }
 
+@Composable
 private fun formatRelativeMillis(durationMillis: Long): String {
     val totalSeconds = (durationMillis / 1000L).coerceAtLeast(0L)
     val minutes = totalSeconds / 60L
     val seconds = totalSeconds % 60L
     return if (minutes > 0L) {
-        "${minutes}m ${seconds}s"
+        appStringResource(R.string.relative_time_minutes_seconds, minutes, seconds)
     } else {
-        "${seconds}s"
+        appStringResource(R.string.relative_time_seconds, seconds)
     }
 }
 
+@Composable
 private fun buildXAxisTicks(
     viewportStart: Long,
     viewportEnd: Long,
@@ -1267,6 +1396,11 @@ private fun buildXAxisTicks(
             label = formatRelativeMillis(timeMillis - sessionStart),
         )
     }
+}
+
+@Composable
+private fun languageDisplayName(language: AppLanguage): String {
+    return appStringResource(language.displayNameRes)
 }
 
 private data class AxisTick(

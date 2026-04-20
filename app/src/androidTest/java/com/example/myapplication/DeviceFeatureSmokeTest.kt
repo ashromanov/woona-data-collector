@@ -98,10 +98,15 @@ class DeviceFeatureSmokeTest {
         )
 
         val shareIntent = controller.createPacketShareIntent(context)
+        val sharedFile = fileShareIntentFactory.sharedFile
 
         assertNotNull(shareIntent)
         assertTrue(packetCaptureController.flushCalled)
-        assertEquals(packetFile.absolutePath, fileShareIntentFactory.sharedFile?.absolutePath)
+        assertNotNull(sharedFile)
+        assertTrue(sharedFile!!.exists())
+        assertTrue(sharedFile.absolutePath != packetFile.absolutePath)
+        assertTrue(sharedFile.name.contains("_snapshot_packet"))
+        assertArrayEquals(packetFile.readBytes(), sharedFile.readBytes())
 
         controller.close()
         assertTrue(bleSessionController.closeCalled)

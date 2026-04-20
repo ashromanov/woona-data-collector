@@ -17,6 +17,9 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.myapplication.feature.device.DeviceUiState
+import com.example.myapplication.localization.AppLanguage
+import com.example.myapplication.localization.AppLocalizationProvider
+import com.example.myapplication.localization.AppTextResolver
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -113,7 +116,7 @@ class AppShellNavigationTest {
 
         navTab("Charts").performClick()
 
-        composeRule.onNodeWithText("Нет данных для выбранного датчика/канала").assertIsDisplayed()
+        composeRule.onNodeWithText("No data for the selected sensor/channel").assertIsDisplayed()
         composeRule.onNodeWithText("Y Reset").assertIsDisplayed()
     }
 
@@ -127,34 +130,41 @@ class AppShellNavigationTest {
         onShareLogFile: () -> Unit = {},
     ) {
         composeRule.setContent {
-            MaterialTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
-                    DeviceAppShell(
-                        uiState = uiState,
-                        onStartScan = {},
-                        onConnect = {},
-                        onTransportProfileSelect = {},
-                        onDisconnect = {},
-                        onSensorSelect = {},
-                        onChannelSelect = {},
-                        onChartWindowSelect = {},
-                        onFollowLiveChange = {},
-                        onChartPanLeft = {},
-                        onChartPanRight = {},
-                        onChartZoomIn = {},
-                        onChartZoomOut = {},
-                        onChartZoomReset = {},
-                        onChartPanGesture = { _ -> },
-                        onChartZoomGesture = { _, _ -> },
-                        canSharePacketFile = canSharePacketFile,
-                        canShareRawFile = canShareRawFile,
-                        canShareLogFile = canShareLogFile,
-                        onSharePacketFile = onSharePacketFile,
-                        onShareRawFile = onShareRawFile,
-                        onShareLogFile = onShareLogFile,
-                        showReplayAction = true,
-                        onReplayRequest = {},
-                    )
+            AppLocalizationProvider(
+                language = AppLanguage.ENGLISH,
+                textResolver = AppTextResolver(composeRule.activity) { AppLanguage.ENGLISH },
+            ) {
+                MaterialTheme {
+                    Surface(modifier = Modifier.fillMaxSize()) {
+                        DeviceAppShell(
+                            uiState = uiState,
+                            selectedLanguage = AppLanguage.ENGLISH,
+                            onStartScan = {},
+                            onConnect = {},
+                            onTransportProfileSelect = {},
+                            onLanguageSelect = {},
+                            onDisconnect = {},
+                            onSensorSelect = {},
+                            onChannelSelect = {},
+                            onChartWindowSelect = {},
+                            onFollowLiveChange = {},
+                            onChartPanLeft = {},
+                            onChartPanRight = {},
+                            onChartZoomIn = {},
+                            onChartZoomOut = {},
+                            onChartZoomReset = {},
+                            onChartPanGesture = { _ -> },
+                            onChartZoomGesture = { _, _ -> },
+                            canSharePacketFile = canSharePacketFile,
+                            canShareRawFile = canShareRawFile,
+                            canShareLogFile = canShareLogFile,
+                            onSharePacketFile = onSharePacketFile,
+                            onShareRawFile = onShareRawFile,
+                            onShareLogFile = onShareLogFile,
+                            showReplayAction = true,
+                            onReplayRequest = {},
+                        )
+                    }
                 }
             }
         }

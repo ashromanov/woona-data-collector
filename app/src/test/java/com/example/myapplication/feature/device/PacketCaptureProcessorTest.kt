@@ -369,7 +369,7 @@ class PacketCaptureProcessorTest {
             diagnosticLogFileStore = BleDiagnosticLogFileStore(directory = directory, timestampProvider = { 555L }),
             onPacketProcessed = { updates += it },
             onError = { message, throwable -> throw AssertionError(message, throwable) },
-            maxPendingFragments = 4,
+            maxPendingFragments = 1,
         )
 
         repeat(12) { counter ->

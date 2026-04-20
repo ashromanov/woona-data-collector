@@ -7,7 +7,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.example.myapplication.feature.device.DeviceFeatureController
+import com.example.myapplication.localization.AppLanguage
+import com.example.myapplication.localization.AppLanguagePreferences
+import com.example.myapplication.localization.AppLocalizationProvider
+import com.example.myapplication.localization.AppTextResolver
 import com.example.myapplication.ui.theme.MyApplicationTheme
 import androidx.core.content.ContextCompat
 import java.util.UUID
@@ -22,13 +29,25 @@ class MainActivity : ComponentActivity() {
         Manifest.permission.BLUETOOTH_CONNECT,
     )
 
+    private val appLanguagePreferences by lazy {
+        AppLanguagePreferences(applicationContext)
+    }
+    private var selectedLanguage by mutableStateOf(AppLanguage.ENGLISH)
+    private val appTextResolver by lazy {
+        AppTextResolver(applicationContext) { selectedLanguage }
+    }
+
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { permissions ->
         val allGranted = permissions.values.all { it }
         deviceFeatureController.onPermissionsResult(allGranted)
         if (!allGranted) {
-            Toast.makeText(this, "Нужны разрешения!", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                this,
+                appTextResolver.getString(R.string.permissions_required),
+                Toast.LENGTH_SHORT,
+            ).show()
         }
     }
 
@@ -42,13 +61,21 @@ class MainActivity : ComponentActivity() {
                 inputStream.readBytes()
             }
             if (fileBytes == null || fileBytes.isEmpty()) {
-                Toast.makeText(this, "Не удалось прочитать BIN файл", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    this,
+                    appTextResolver.getString(R.string.unable_read_bin_file),
+                    Toast.LENGTH_SHORT,
+                ).show()
                 return@registerForActivityResult
             }
 
             deviceFeatureController.startReplay(fileBytes)
         } catch (exception: Exception) {
-            Toast.makeText(this, "Не удалось загрузить BIN файл", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                this,
+                appTextResolver.getString(R.string.unable_load_bin_file),
+                Toast.LENGTH_SHORT,
+            ).show()
         }
     }
 
@@ -60,66 +87,78 @@ class MainActivity : ComponentActivity() {
             serviceUuid = serviceUuid,
             characteristicUuid = characteristicUuid,
             descriptorUuid = descriptorUuid,
+            appTextResolver = appTextResolver,
         )
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        selectedLanguage = appLanguagePreferences.selectedLanguage()
         deviceFeatureController
         enableEdgeToEdge()
         setContent {
-            val uiState = deviceFeatureController.uiState
-            MyApplicationTheme {
-                DeviceAppShell(
-                    uiState = uiState,
-                    onStartScan = {
-                        deviceFeatureController.onStartScanRequested(
-                            hasPermissions = ::hasBlePermissions,
-                            requestPermissions = {
-                                requestPermissionLauncher.launch(blePermissions)
-                            },
-                        )
-                    },
-                    onConnect = { mac -> deviceFeatureController.onConnectRequested(mac) },
-                    onTransportProfileSelect = { profile ->
-                        deviceFeatureController.onTransportProfileSelected(profile)
-                    },
-                    onDisconnect = { deviceFeatureController.onDisconnectRequested() },
-                    onSensorSelect = { type -> deviceFeatureController.onSensorSelected(type) },
-                    onChannelSelect = { channel -> deviceFeatureController.onChannelSelected(channel) },
-                    onChartWindowSelect = { windowPreset ->
-                        deviceFeatureController.onChartWindowSelected(windowPreset)
-                    },
-                    onFollowLiveChange = { enabled ->
-                        deviceFeatureController.onFollowLiveChanged(enabled)
-                    },
-                    onChartPanLeft = { deviceFeatureController.onChartPanLeftRequested() },
-                    onChartPanRight = { deviceFeatureController.onChartPanRightRequested() },
-                    onChartZoomIn = { deviceFeatureController.onChartZoomInRequested() },
-                    onChartZoomOut = { deviceFeatureController.onChartZoomOutRequested() },
-                    onChartZoomReset = { deviceFeatureController.onChartZoomResetRequested() },
-                    onChartPanGesture = { deltaFraction ->
-                        deviceFeatureController.onChartPanned(deltaFraction)
-                    },
-                    onChartZoomGesture = { scaleFactor, anchorFractionY ->
-                        deviceFeatureController.onChartZoomChanged(scaleFactor, anchorFractionY)
-                    },
-                    canSharePacketFile = deviceFeatureController.canSharePacketFile(),
-                    canShareRawFile = deviceFeatureController.canShareRawFile(),
-                    canShareLogFile = deviceFeatureController.canShareLogFile(),
-                    onSharePacketFile = {
-                        deviceFeatureController.createPacketShareIntent(this)?.let(::startActivity)
-                    },
-                    onShareRawFile = {
-                        deviceFeatureController.createRawShareIntent(this)?.let(::startActivity)
-                    },
-                    onShareLogFile = {
-                        deviceFeatureController.createLogShareIntent(this)?.let(::startActivity)
-                    },
-                    showReplayAction = true,
-                    onReplayRequest = { replayFilePickerLauncher.launch("*/*") },
-                )
+            AppLocalizationProvider(
+                language = selectedLanguage,
+                textResolver = appTextResolver,
+            ) {
+                val uiState = deviceFeatureController.uiState
+                MyApplicationTheme {
+                    DeviceAppShell(
+                        uiState = uiState,
+                        selectedLanguage = selectedLanguage,
+                        onStartScan = {
+                            deviceFeatureController.onStartScanRequested(
+                                hasPermissions = ::hasBlePermissions,
+                                requestPermissions = {
+                                    requestPermissionLauncher.launch(blePermissions)
+                                },
+                            )
+                        },
+                        onConnect = { mac -> deviceFeatureController.onConnectRequested(mac) },
+                        onTransportProfileSelect = { profile ->
+                            deviceFeatureController.onTransportProfileSelected(profile)
+                        },
+                        onLanguageSelect = { language ->
+                            appLanguagePreferences.setSelectedLanguage(language)
+                            selectedLanguage = language
+                        },
+                        onDisconnect = { deviceFeatureController.onDisconnectRequested() },
+                        onSensorSelect = { type -> deviceFeatureController.onSensorSelected(type) },
+                        onChannelSelect = { channel -> deviceFeatureController.onChannelSelected(channel) },
+                        onChartWindowSelect = { windowPreset ->
+                            deviceFeatureController.onChartWindowSelected(windowPreset)
+                        },
+                        onFollowLiveChange = { enabled ->
+                            deviceFeatureController.onFollowLiveChanged(enabled)
+                        },
+                        onChartPanLeft = { deviceFeatureController.onChartPanLeftRequested() },
+                        onChartPanRight = { deviceFeatureController.onChartPanRightRequested() },
+                        onChartZoomIn = { deviceFeatureController.onChartZoomInRequested() },
+                        onChartZoomOut = { deviceFeatureController.onChartZoomOutRequested() },
+                        onChartZoomReset = { deviceFeatureController.onChartZoomResetRequested() },
+                        onChartPanGesture = { deltaFraction ->
+                            deviceFeatureController.onChartPanned(deltaFraction)
+                        },
+                        onChartZoomGesture = { scaleFactor, anchorFractionY ->
+                            deviceFeatureController.onChartZoomChanged(scaleFactor, anchorFractionY)
+                        },
+                        canSharePacketFile = deviceFeatureController.canSharePacketFile(),
+                        canShareRawFile = deviceFeatureController.canShareRawFile(),
+                        canShareLogFile = deviceFeatureController.canShareLogFile(),
+                        onSharePacketFile = {
+                            deviceFeatureController.createPacketShareIntent(this)?.let(::startActivity)
+                        },
+                        onShareRawFile = {
+                            deviceFeatureController.createRawShareIntent(this)?.let(::startActivity)
+                        },
+                        onShareLogFile = {
+                            deviceFeatureController.createLogShareIntent(this)?.let(::startActivity)
+                        },
+                        showReplayAction = true,
+                        onReplayRequest = { replayFilePickerLauncher.launch("*/*") },
+                    )
+                }
             }
         }
     }

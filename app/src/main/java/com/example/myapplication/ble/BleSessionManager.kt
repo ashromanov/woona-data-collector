@@ -19,6 +19,8 @@ import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
+import com.example.myapplication.R
+import com.example.myapplication.localization.AppTextResolver
 import java.util.Locale
 import java.util.UUID
 
@@ -48,6 +50,7 @@ class BleSessionManager(
     private val characteristicUuid: UUID,
     private val descriptorUuid: UUID,
     private val listener: BleSessionListener,
+    private val appTextResolver: AppTextResolver,
 ) : BleSessionController {
     private val scanHandler = Handler(Looper.getMainLooper())
     private val bluetoothAdapter by lazy {
@@ -67,6 +70,9 @@ class BleSessionManager(
     private var negotiatedMtu: Int? = null
     private var negotiatedTxPhy: Int? = null
     private var negotiatedRxPhy: Int? = null
+    private var negotiatedConnectionIntervalUnits: Int? = null
+    private var negotiatedConnectionLatency: Int? = null
+    private var negotiatedSupervisionTimeoutUnits: Int? = null
     private var notificationCount = 0L
     private var notificationGapSampleCount = 0L
     private var notificationGapTotalMillis = 0L
@@ -93,7 +99,7 @@ class BleSessionManager(
                     Manifest.permission.BLUETOOTH_CONNECT,
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
-                listener.onError("Missing BLUETOOTH_CONNECT permission during scan result handling")
+                listener.onError(appTextResolver.getString(R.string.ble_missing_connect_permission_scan_result))
                 return
             }
 
@@ -102,7 +108,7 @@ class BleSessionManager(
 
             listener.onDeviceFound(
                 BleDevice(
-                    name = result.device.name ?: "Unknown",
+                    name = result.device.name ?: appTextResolver.getString(R.string.ble_unknown_device),
                     address = address,
                 ),
             )
@@ -111,7 +117,7 @@ class BleSessionManager(
         override fun onScanFailed(errorCode: Int) {
             scanHandler.removeCallbacks(stopScanRunnable)
             transition(BleSessionEvent.Failure)
-            listener.onError("BLE scan failed: ${describeScanFailure(errorCode)}")
+            listener.onError(appTextResolver.getString(R.string.ble_scan_failed, describeScanFailure(errorCode)))
         }
     }
 
@@ -122,7 +128,7 @@ class BleSessionManager(
                     stopTransportSummaryLoop()
                     clearGattReference(gatt)
                     transition(BleSessionEvent.Failure)
-                    listener.onError("GATT connection error: $status")
+                    listener.onError(appTextResolver.getString(R.string.ble_gatt_connection_error, status))
                     safeCloseGatt(gatt)
                 }
 
@@ -137,7 +143,7 @@ class BleSessionManager(
                         ) != PackageManager.PERMISSION_GRANTED
                     ) {
                         stopTransportSummaryLoop()
-                        listener.onError("Missing BLUETOOTH_CONNECT permission before MTU request")
+                        listener.onError(appTextResolver.getString(R.string.ble_missing_connect_permission_before_mtu))
                         clearGattReference(gatt)
                         safeCloseGatt(gatt)
                         transition(BleSessionEvent.Failure)
@@ -145,11 +151,15 @@ class BleSessionManager(
                     }
 
                     emitDiagnostic(
-                        message = "BLE transport profile: ${activeProfile.title} (${activeProfile.shortDescription})",
+                        message = appTextResolver.getString(
+                            R.string.ble_transport_profile_message,
+                            appTextResolver.getString(activeProfile.titleRes),
+                            appTextResolver.getString(activeProfile.shortDescriptionRes),
+                        ),
                         level = DiagnosticLevel.INFO,
                     )
                     emitDiagnostic(
-                        message = "Exact BLE connection interval, latency, and timeout are unavailable via the public Android SDK",
+                        message = appTextResolver.getString(R.string.ble_best_effort_connection_logging),
                         level = DiagnosticLevel.INFO,
                     )
 
@@ -159,18 +169,18 @@ class BleSessionManager(
                         )
                         if (priorityRequested) {
                             emitDiagnostic(
-                                message = "Requested HIGH BLE connection priority",
+                                message = appTextResolver.getString(R.string.ble_requested_high_priority),
                                 level = DiagnosticLevel.INFO,
                             )
                         } else {
                             emitDiagnostic(
-                                message = "Failed to request high BLE connection priority",
+                                message = appTextResolver.getString(R.string.ble_failed_high_priority),
                                 level = DiagnosticLevel.WARNING,
                             )
                         }
                     } else {
                         emitDiagnostic(
-                            message = "Skipped BLE connection priority request due to selected profile",
+                            message = appTextResolver.getString(R.string.ble_skipped_priority_profile),
                             level = DiagnosticLevel.INFO,
                         )
                     }
@@ -180,12 +190,12 @@ class BleSessionManager(
                         val mtuRequested = gatt.requestMtu(requestedMtu)
                         if (mtuRequested) {
                             emitDiagnostic(
-                                message = "Requested BLE MTU $requestedMtu",
+                                message = appTextResolver.getString(R.string.ble_requested_mtu, requestedMtu),
                                 level = DiagnosticLevel.INFO,
                             )
                         } else {
                             emitDiagnostic(
-                                message = "Failed to request MTU $requestedMtu; continuing with current MTU",
+                                message = appTextResolver.getString(R.string.ble_failed_mtu_continue, requestedMtu),
                                 level = DiagnosticLevel.WARNING,
                             )
                             requestPreferredPhy(gatt, activeProfile)
@@ -193,7 +203,7 @@ class BleSessionManager(
                         }
                     } else {
                         emitDiagnostic(
-                            message = "Skipped explicit MTU request due to selected profile",
+                            message = appTextResolver.getString(R.string.ble_skipped_explicit_mtu),
                             level = DiagnosticLevel.INFO,
                         )
                         requestPreferredPhy(gatt, activeProfile)
@@ -220,7 +230,7 @@ class BleSessionManager(
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
                 stopTransportSummaryLoop()
-                listener.onError("Missing BLUETOOTH_CONNECT permission after MTU change")
+                listener.onError(appTextResolver.getString(R.string.ble_missing_connect_permission_after_mtu))
                 clearGattReference(gatt)
                 safeCloseGatt(gatt)
                 transition(BleSessionEvent.Failure)
@@ -228,7 +238,7 @@ class BleSessionManager(
             }
 
             emitDiagnostic(
-                message = "BLE MTU changed: mtu=$mtu status=$status",
+                message = appTextResolver.getString(R.string.ble_mtu_changed, mtu, status),
                 level = DiagnosticLevel.INFO,
             )
             negotiatedMtu = mtu
@@ -251,11 +261,42 @@ class BleSessionManager(
             if (bluetoothGatt !== gatt) return
 
             emitDiagnostic(
-                message = "BLE PHY updated: txPhy=$txPhy rxPhy=$rxPhy status=$status",
+                message = appTextResolver.getString(R.string.ble_phy_updated, txPhy, rxPhy, status),
                 level = DiagnosticLevel.INFO,
             )
             negotiatedTxPhy = txPhy
             negotiatedRxPhy = rxPhy
+            emitDiagnostic(
+                message = buildTransportSnapshotMessage(),
+                level = DiagnosticLevel.INFO,
+            )
+        }
+
+        // This callback is hidden from the public Android SDK stubs, so this is a
+        // best-effort runtime hook for debug builds rather than a guaranteed override.
+        @Suppress("unused")
+        fun onConnectionUpdated(
+            gatt: BluetoothGatt,
+            interval: Int,
+            latency: Int,
+            timeout: Int,
+            status: Int,
+        ) {
+            if (bluetoothGatt !== gatt) return
+
+            negotiatedConnectionIntervalUnits = interval
+            negotiatedConnectionLatency = latency
+            negotiatedSupervisionTimeoutUnits = timeout
+            emitDiagnostic(
+                message = appTextResolver.getString(
+                    R.string.ble_connection_updated,
+                    formatConnectionIntervalMillis(interval),
+                    latency,
+                    timeout * 10,
+                    status,
+                ),
+                level = DiagnosticLevel.INFO,
+            )
             emitDiagnostic(
                 message = buildTransportSnapshotMessage(),
                 level = DiagnosticLevel.INFO,
@@ -272,7 +313,7 @@ class BleSessionManager(
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
                 stopTransportSummaryLoop()
-                listener.onError("Missing BLUETOOTH_CONNECT permission during service discovery")
+                listener.onError(appTextResolver.getString(R.string.ble_missing_connect_permission_service_discovery))
                 clearGattReference(gatt)
                 safeCloseGatt(gatt)
                 transition(BleSessionEvent.Failure)
@@ -283,7 +324,7 @@ class BleSessionManager(
                 stopTransportSummaryLoop()
                 clearGattReference(gatt)
                 transition(BleSessionEvent.Failure)
-                listener.onError("Service discovery failed: $status")
+                listener.onError(appTextResolver.getString(R.string.ble_service_discovery_failed, status))
                 safeCloseGatt(gatt)
                 return
             }
@@ -296,7 +337,7 @@ class BleSessionManager(
                 stopTransportSummaryLoop()
                 clearGattReference(gatt)
                 transition(BleSessionEvent.Failure)
-                listener.onError("Required BLE service, characteristic, or descriptor missing")
+                listener.onError(appTextResolver.getString(R.string.ble_required_service_missing))
                 safeCloseGatt(gatt)
                 return
             }
@@ -306,7 +347,7 @@ class BleSessionManager(
                 stopTransportSummaryLoop()
                 clearGattReference(gatt)
                 transition(BleSessionEvent.Failure)
-                listener.onError("Failed to register local BLE notification callback")
+                listener.onError(appTextResolver.getString(R.string.ble_failed_register_notification_callback))
                 safeCloseGatt(gatt)
                 return
             }
@@ -322,7 +363,7 @@ class BleSessionManager(
                 stopTransportSummaryLoop()
                 clearGattReference(gatt)
                 transition(BleSessionEvent.Failure)
-                listener.onError("Failed to enable BLE notifications: $writeResult")
+                listener.onError(appTextResolver.getString(R.string.ble_failed_enable_notifications, writeResult))
                 safeCloseGatt(gatt)
                 return
             }
@@ -343,7 +384,7 @@ class BleSessionManager(
 
             if (!hasConnectPermission()) {
                 stopTransportSummaryLoop()
-                listener.onError("Missing BLUETOOTH_CONNECT permission during notification setup")
+                listener.onError(appTextResolver.getString(R.string.ble_missing_connect_permission_notification_setup))
                 clearGattReference(gatt)
                 safeCloseGatt(gatt)
                 transition(BleSessionEvent.Failure)
@@ -354,7 +395,7 @@ class BleSessionManager(
                 stopTransportSummaryLoop()
                 clearGattReference(gatt)
                 transition(BleSessionEvent.Failure)
-                listener.onError("BLE descriptor write failed: $status")
+                listener.onError(appTextResolver.getString(R.string.ble_descriptor_write_failed, status))
                 safeCloseGatt(gatt)
                 return
             }
@@ -383,7 +424,12 @@ class BleSessionManager(
                     if (nowElapsedRealtimeMs - lastLongGapLoggedElapsedRealtimeMs >= LONG_GAP_LOG_COOLDOWN_MS) {
                         lastLongGapLoggedElapsedRealtimeMs = nowElapsedRealtimeMs
                         emitDiagnostic(
-                            message = "BLE notification gap: gap=${gapMillis}ms threshold=${longGapThresholdMillis}ms notifications=$notificationCount",
+                            message = appTextResolver.getString(
+                                R.string.ble_notification_gap,
+                                gapMillis,
+                                longGapThresholdMillis,
+                                notificationCount,
+                            ),
                             level = DiagnosticLevel.WARNING,
                         )
                     }
@@ -404,33 +450,33 @@ class BleSessionManager(
     override fun startScanning() {
         if (!hasScanPermission()) {
             transition(BleSessionEvent.Failure)
-            listener.onError("Missing BLUETOOTH_SCAN permission")
+            listener.onError(appTextResolver.getString(R.string.ble_missing_scan_permission))
             return
         }
 
         if (!hasConnectPermission()) {
             transition(BleSessionEvent.Failure)
-            listener.onError("Missing BLUETOOTH_CONNECT permission")
+            listener.onError(appTextResolver.getString(R.string.ble_missing_connect_permission))
             return
         }
 
         val adapter = bluetoothAdapter
         if (adapter == null) {
             transition(BleSessionEvent.Failure)
-            listener.onError("Bluetooth adapter unavailable")
+            listener.onError(appTextResolver.getString(R.string.bluetooth_adapter_unavailable))
             return
         }
 
         if (!adapter.isEnabled) {
             transition(BleSessionEvent.Failure)
-            listener.onError("Bluetooth is turned off")
+            listener.onError(appTextResolver.getString(R.string.bluetooth_off))
             return
         }
 
         val scanner = adapter.bluetoothLeScanner
         if (scanner == null) {
             transition(BleSessionEvent.Failure)
-            listener.onError("BLE scanner unavailable")
+            listener.onError(appTextResolver.getString(R.string.ble_scanner_unavailable))
             return
         }
 
@@ -442,7 +488,7 @@ class BleSessionManager(
             transition(BleSessionEvent.ScanStarted)
         } catch (exception: SecurityException) {
             transition(BleSessionEvent.Failure)
-            listener.onError("Failed to start BLE scan", exception)
+            listener.onError(appTextResolver.getString(R.string.ble_failed_start_scan), exception)
         }
     }
 
@@ -450,14 +496,14 @@ class BleSessionManager(
         scanHandler.removeCallbacks(stopScanRunnable)
         if (!hasScanPermission()) {
             transition(BleSessionEvent.ScanStopped)
-            listener.onError("Missing BLUETOOTH_SCAN permission while stopping scan")
+            listener.onError(appTextResolver.getString(R.string.ble_missing_scan_permission_stop))
             return
         }
 
         try {
             bluetoothAdapter?.bluetoothLeScanner?.stopScan(scanCallback)
         } catch (exception: SecurityException) {
-            listener.onError("Failed to stop BLE scan", exception)
+            listener.onError(appTextResolver.getString(R.string.ble_failed_stop_scan), exception)
         }
         transition(BleSessionEvent.ScanStopped)
     }
@@ -465,7 +511,7 @@ class BleSessionManager(
     override fun connect(address: String) {
         if (!hasConnectPermission()) {
             transition(BleSessionEvent.Failure)
-            listener.onError("Missing BLUETOOTH_CONNECT permission")
+            listener.onError(appTextResolver.getString(R.string.ble_missing_connect_permission))
             return
         }
 
@@ -476,7 +522,7 @@ class BleSessionManager(
         if (device == null) {
             activeTransportProfile = null
             transition(BleSessionEvent.Failure)
-            listener.onError("BLE device not found for address: $address")
+            listener.onError(appTextResolver.getString(R.string.ble_device_not_found, address))
             return
         }
 
@@ -486,7 +532,7 @@ class BleSessionManager(
         } catch (exception: SecurityException) {
             activeTransportProfile = null
             transition(BleSessionEvent.Failure)
-            listener.onError("Failed to connect to BLE device", exception)
+            listener.onError(appTextResolver.getString(R.string.ble_failed_connect_device), exception)
         }
     }
 
@@ -496,7 +542,7 @@ class BleSessionManager(
             clearGattReference(gatt)
             safeCloseGatt(gatt)
             transition(BleSessionEvent.Disconnected)
-            listener.onError("Missing BLUETOOTH_CONNECT permission while disconnecting")
+            listener.onError(appTextResolver.getString(R.string.ble_missing_connect_permission_disconnect))
             return
         }
 
@@ -506,7 +552,7 @@ class BleSessionManager(
             clearGattReference(gatt)
             safeCloseGatt(gatt)
             transition(BleSessionEvent.Disconnected)
-            listener.onError("Failed to disconnect BLE device", exception)
+            listener.onError(appTextResolver.getString(R.string.ble_failed_disconnect_device), exception)
         }
     }
 
@@ -537,7 +583,7 @@ class BleSessionManager(
         when (profile.preferredPhy) {
             PreferredPhyMode.LE_2M -> {
                 emitDiagnostic(
-                    message = "Requested BLE preferred PHY: LE 2M",
+                    message = appTextResolver.getString(R.string.ble_requested_preferred_phy),
                     level = DiagnosticLevel.INFO,
                 )
                 gatt.setPreferredPhy(
@@ -549,7 +595,7 @@ class BleSessionManager(
 
             PreferredPhyMode.SYSTEM_DEFAULT -> {
                 emitDiagnostic(
-                    message = "Skipped BLE preferred PHY request due to selected profile",
+                    message = appTextResolver.getString(R.string.ble_skipped_preferred_phy),
                     level = DiagnosticLevel.INFO,
                 )
             }
@@ -571,6 +617,9 @@ class BleSessionManager(
         negotiatedMtu = null
         negotiatedTxPhy = null
         negotiatedRxPhy = null
+        negotiatedConnectionIntervalUnits = null
+        negotiatedConnectionLatency = null
+        negotiatedSupervisionTimeoutUnits = null
         notificationCount = 0L
         notificationGapSampleCount = 0L
         notificationGapTotalMillis = 0L
@@ -590,26 +639,55 @@ class BleSessionManager(
     }
 
     private fun buildTransportSnapshotMessage(): String {
+        val interval = negotiatedConnectionIntervalUnits?.let(::formatConnectionIntervalMillis)
+            ?: appTextResolver.getString(R.string.value_not_available)
+        val latency = negotiatedConnectionLatency?.toString() ?: appTextResolver.getString(R.string.value_not_available)
+        val timeout = negotiatedSupervisionTimeoutUnits?.let { "${it * 10}" }
+            ?: appTextResolver.getString(R.string.value_not_available)
         val mtu = negotiatedMtu?.toString() ?: "?"
         val phy = when {
             negotiatedTxPhy == null || negotiatedRxPhy == null -> "?"
             else -> "${describePhy(negotiatedTxPhy)} / ${describePhy(negotiatedRxPhy)}"
         }
-        return "BLE transport snapshot: profile=${(activeTransportProfile ?: transportProfile).title}, mtu=$mtu, phy=$phy, interval=n/a, latency=n/a, timeout=n/a"
+        return appTextResolver.getString(
+            R.string.ble_transport_snapshot,
+            appTextResolver.getString((activeTransportProfile ?: transportProfile).titleRes),
+            mtu,
+            phy,
+            interval,
+            latency,
+            timeout,
+        )
     }
 
     private fun buildTransportSummaryMessage(): String {
         val averageGapMillis = if (notificationGapSampleCount == 0L) {
-            "n/a"
+            appTextResolver.getString(R.string.value_not_available)
         } else {
             formatMillis(notificationGapTotalMillis.toDouble() / notificationGapSampleCount.toDouble())
         }
-        val maxGapMillis = if (notificationGapSampleCount == 0L) "n/a" else "${notificationGapMaxMillis}"
-        return "${buildTransportSnapshotMessage()}, notifications=$notificationCount, notifGapAvg=${averageGapMillis}ms, notifGapMax=${maxGapMillis}ms, notifGapLong=$longNotificationGapCount"
+        val maxGapMillis = if (notificationGapSampleCount == 0L) {
+            appTextResolver.getString(R.string.value_not_available)
+        } else {
+            "${notificationGapMaxMillis}"
+        }
+        return appTextResolver.getString(
+            R.string.ble_transport_summary,
+            buildTransportSnapshotMessage(),
+            notificationCount,
+            averageGapMillis,
+            maxGapMillis,
+            longNotificationGapCount,
+        )
     }
 
     private fun longNotificationGapThresholdMillis(): Long {
-        return DEFAULT_LONG_NOTIFICATION_GAP_MS
+        val negotiatedIntervalMs = negotiatedConnectionIntervalUnits?.let { it * 1.25 } ?: return DEFAULT_LONG_NOTIFICATION_GAP_MS
+        return maxOf(DEFAULT_LONG_NOTIFICATION_GAP_MS, (negotiatedIntervalMs * 4).toLong())
+    }
+
+    private fun formatConnectionIntervalMillis(intervalUnits: Int): String {
+        return formatMillis(intervalUnits * 1.25)
     }
 
     private fun formatMillis(value: Double): String {
@@ -660,13 +738,19 @@ class BleSessionManager(
 
     private fun describeScanFailure(errorCode: Int): String {
         return when (errorCode) {
-            ScanCallback.SCAN_FAILED_ALREADY_STARTED -> "already started"
-            ScanCallback.SCAN_FAILED_APPLICATION_REGISTRATION_FAILED -> "application registration failed"
-            ScanCallback.SCAN_FAILED_FEATURE_UNSUPPORTED -> "feature unsupported"
-            ScanCallback.SCAN_FAILED_INTERNAL_ERROR -> "internal error"
-            ScanCallback.SCAN_FAILED_OUT_OF_HARDWARE_RESOURCES -> "out of hardware resources"
-            ScanCallback.SCAN_FAILED_SCANNING_TOO_FREQUENTLY -> "scanning too frequently"
-            else -> "code=$errorCode"
+            ScanCallback.SCAN_FAILED_ALREADY_STARTED ->
+                appTextResolver.getString(R.string.ble_scan_failure_already_started)
+            ScanCallback.SCAN_FAILED_APPLICATION_REGISTRATION_FAILED ->
+                appTextResolver.getString(R.string.ble_scan_failure_app_registration)
+            ScanCallback.SCAN_FAILED_FEATURE_UNSUPPORTED ->
+                appTextResolver.getString(R.string.ble_scan_failure_feature_unsupported)
+            ScanCallback.SCAN_FAILED_INTERNAL_ERROR ->
+                appTextResolver.getString(R.string.ble_scan_failure_internal_error)
+            ScanCallback.SCAN_FAILED_OUT_OF_HARDWARE_RESOURCES ->
+                appTextResolver.getString(R.string.ble_scan_failure_out_of_hw)
+            ScanCallback.SCAN_FAILED_SCANNING_TOO_FREQUENTLY ->
+                appTextResolver.getString(R.string.ble_scan_failure_too_frequent)
+            else -> appTextResolver.getString(R.string.ble_scan_failure_code, errorCode)
         }
     }
 

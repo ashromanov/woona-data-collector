@@ -3,8 +3,11 @@ package com.example.myapplication.feature.device
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import com.example.myapplication.R
 import com.example.myapplication.ble.BleTransportProfile
 import com.example.myapplication.ble.BleSessionController
+import com.example.myapplication.localization.EnglishTextResolver
+import com.example.myapplication.localization.TextResolver
 import com.example.myapplication.storage.FileShareIntentFactory
 import java.io.File
 import java.nio.file.Files
@@ -14,6 +17,7 @@ class DeviceFeatureController(
     private val bleSessionController: BleSessionController,
     private val packetCaptureController: PacketCaptureController,
     private val fileShareIntentFactory: FileShareIntentFactory,
+    private val appTextResolver: TextResolver = EnglishTextResolver,
     private val packetReplayController: PacketReplayController? = null,
     private val uiStateHolder: DeviceUiStateHolder = DeviceUiStateHolder(),
 ) : AutoCloseable {
@@ -40,7 +44,7 @@ class DeviceFeatureController(
         if (allGranted) {
             bleSessionController.startScanning()
         } else {
-            uiStateHolder.showError(PERMISSION_REQUIRED_MESSAGE)
+            uiStateHolder.showError(appTextResolver.getString(R.string.permissions_required))
         }
     }
 
@@ -75,7 +79,10 @@ class DeviceFeatureController(
         if (uiState.showCaptureUi || awaitingCaptureReady) {
             packetCaptureController.recordDiagnosticEvent(
                 type = PacketDiagnosticType.INFO,
-                message = "BLE transport profile selected: ${profile.title}. Changes apply on next connection.",
+                message = appTextResolver.getString(
+                    R.string.transport_profile_selected_next_connection,
+                    appTextResolver.getString(profile.titleRes),
+                ),
             )
         }
     }
@@ -190,7 +197,7 @@ class DeviceFeatureController(
 
     fun startReplay(fileBytes: ByteArray) {
         if (packetReplayController == null) {
-            uiStateHolder.showError("Replay is unavailable")
+            uiStateHolder.showError(appTextResolver.getString(R.string.replay_unavailable))
             return
         }
 
@@ -245,7 +252,7 @@ class DeviceFeatureController(
 
             fileShareIntentFactory.createChooserIntent(context, snapshotFile)
         } catch (exception: Exception) {
-            uiStateHolder.showError("Failed to share file")
+            uiStateHolder.showError(appTextResolver.getString(R.string.share_file_failed))
             Log.e("BLE_SHARE", "Failed to share file", exception)
             null
         }
@@ -321,7 +328,7 @@ class DeviceFeatureController(
     }
 
     companion object {
-        const val PERMISSION_REQUIRED_MESSAGE = "Нужны разрешения!"
+        const val PERMISSION_REQUIRED_MESSAGE = "Permissions are required!"
     }
 }
 

@@ -1,5 +1,8 @@
 package com.example.myapplication.feature.device
 
+import com.example.myapplication.R
+import com.example.myapplication.localization.EnglishTextResolver
+import com.example.myapplication.localization.TextResolver
 import com.example.myapplication.protocol.RecordedPacketFileParser
 import kotlin.math.min
 
@@ -14,6 +17,7 @@ class DebugPacketReplayController(
     private val onReplayCompleted: () -> Unit,
     private val onReplayStopped: () -> Unit,
     private val onError: (String, Throwable?) -> Unit,
+    private val appTextResolver: TextResolver = EnglishTextResolver,
     private val packetFileParser: RecordedPacketFileParser = RecordedPacketFileParser(),
     private val chunkSize: Int = DEFAULT_CHUNK_SIZE,
     private val chunkDelayMs: Long = DEFAULT_CHUNK_DELAY_MS,
@@ -29,7 +33,7 @@ class DebugPacketReplayController(
 
     override fun startReplay(fileBytes: ByteArray) {
         if (fileBytes.isEmpty()) {
-            onError("Replay file is empty", null)
+            onError(appTextResolver.getString(R.string.replay_file_empty), null)
             onReplayStopped()
             return
         }
@@ -39,7 +43,7 @@ class DebugPacketReplayController(
         val packets = try {
             packetFileParser.splitIntoPackets(fileBytes)
         } catch (exception: IllegalArgumentException) {
-            onError("Replay file is not a valid packet dump", exception)
+            onError(appTextResolver.getString(R.string.replay_file_invalid), exception)
             onReplayStopped()
             return
         }
@@ -61,11 +65,11 @@ class DebugPacketReplayController(
                         onReplayStopped()
                     } else {
                         Thread.currentThread().interrupt()
-                        onError("Replay interrupted", exception)
+                        onError(appTextResolver.getString(R.string.replay_interrupted), exception)
                         onReplayStopped()
                     }
                 } catch (exception: Exception) {
-                    onError("Replay failed", exception)
+                    onError(appTextResolver.getString(R.string.replay_failed), exception)
                     onReplayStopped()
                 } finally {
                     synchronized(workerLock) {
