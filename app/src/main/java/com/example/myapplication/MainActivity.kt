@@ -7,13 +7,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.ui.Modifier
-import com.example.myapplication.feature.device.DeviceScreen
 import com.example.myapplication.feature.device.DeviceFeatureController
+import com.example.myapplication.ui.theme.MyApplicationTheme
+import androidx.core.content.ContextCompat
 import java.util.UUID
 
 class MainActivity : ComponentActivity() {
@@ -74,56 +70,56 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             val uiState = deviceFeatureController.uiState
-            MaterialTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
-                        DeviceScreen(
-                            uiState = uiState,
-                            onStartScan = {
-                                deviceFeatureController.onStartScanRequested(
-                                    hasPermissions = ::hasBlePermissions,
-                                    requestPermissions = {
-                                        requestPermissionLauncher.launch(blePermissions)
-                                    },
-                                )
+            MyApplicationTheme {
+                DeviceAppShell(
+                    uiState = uiState,
+                    onStartScan = {
+                        deviceFeatureController.onStartScanRequested(
+                            hasPermissions = ::hasBlePermissions,
+                            requestPermissions = {
+                                requestPermissionLauncher.launch(blePermissions)
                             },
-                        onConnect = { mac -> deviceFeatureController.onConnectRequested(mac) },
-                        onTransportProfileSelect = { profile ->
-                            deviceFeatureController.onTransportProfileSelected(profile)
-                        },
-                        onDisconnect = { deviceFeatureController.onDisconnectRequested() },
-                        onSensorSelect = { type -> deviceFeatureController.onSensorSelected(type) },
-                        onChannelSelect = { channel -> deviceFeatureController.onChannelSelected(channel) },
-                        onTabSelect = { tab -> deviceFeatureController.onTabSelected(tab) },
-                        onChartWindowSelect = { windowPreset ->
-                            deviceFeatureController.onChartWindowSelected(windowPreset)
-                        },
-                        onFollowLiveChange = { enabled ->
-                            deviceFeatureController.onFollowLiveChanged(enabled)
-                        },
-                        onChartPanLeft = { deviceFeatureController.onChartPanLeftRequested() },
-                        onChartPanRight = { deviceFeatureController.onChartPanRightRequested() },
-                        onChartZoomIn = { deviceFeatureController.onChartZoomInRequested() },
-                        onChartZoomOut = { deviceFeatureController.onChartZoomOutRequested() },
-                        onChartZoomReset = { deviceFeatureController.onChartZoomResetRequested() },
-                        onChartPanGesture = { deltaFraction ->
-                            deviceFeatureController.onChartPanned(deltaFraction)
-                        },
-                        onChartZoomGesture = { scaleFactor, anchorFractionY ->
-                            deviceFeatureController.onChartZoomChanged(scaleFactor, anchorFractionY)
-                        },
-                        onSharePacketFile = {
-                            deviceFeatureController.createPacketShareIntent(this)?.let(::startActivity)
-                        },
-                        onShareRawFile = {
-                            deviceFeatureController.createRawShareIntent(this)?.let(::startActivity)
-                        },
-                        onShareLogFile = {
-                            deviceFeatureController.createLogShareIntent(this)?.let(::startActivity)
-                        },
-                        showReplayAction = true,
-                        onReplayRequest = { replayFilePickerLauncher.launch("*/*") },
-                    )
-                }
+                        )
+                    },
+                    onConnect = { mac -> deviceFeatureController.onConnectRequested(mac) },
+                    onTransportProfileSelect = { profile ->
+                        deviceFeatureController.onTransportProfileSelected(profile)
+                    },
+                    onDisconnect = { deviceFeatureController.onDisconnectRequested() },
+                    onSensorSelect = { type -> deviceFeatureController.onSensorSelected(type) },
+                    onChannelSelect = { channel -> deviceFeatureController.onChannelSelected(channel) },
+                    onChartWindowSelect = { windowPreset ->
+                        deviceFeatureController.onChartWindowSelected(windowPreset)
+                    },
+                    onFollowLiveChange = { enabled ->
+                        deviceFeatureController.onFollowLiveChanged(enabled)
+                    },
+                    onChartPanLeft = { deviceFeatureController.onChartPanLeftRequested() },
+                    onChartPanRight = { deviceFeatureController.onChartPanRightRequested() },
+                    onChartZoomIn = { deviceFeatureController.onChartZoomInRequested() },
+                    onChartZoomOut = { deviceFeatureController.onChartZoomOutRequested() },
+                    onChartZoomReset = { deviceFeatureController.onChartZoomResetRequested() },
+                    onChartPanGesture = { deltaFraction ->
+                        deviceFeatureController.onChartPanned(deltaFraction)
+                    },
+                    onChartZoomGesture = { scaleFactor, anchorFractionY ->
+                        deviceFeatureController.onChartZoomChanged(scaleFactor, anchorFractionY)
+                    },
+                    canSharePacketFile = deviceFeatureController.canSharePacketFile(),
+                    canShareRawFile = deviceFeatureController.canShareRawFile(),
+                    canShareLogFile = deviceFeatureController.canShareLogFile(),
+                    onSharePacketFile = {
+                        deviceFeatureController.createPacketShareIntent(this)?.let(::startActivity)
+                    },
+                    onShareRawFile = {
+                        deviceFeatureController.createRawShareIntent(this)?.let(::startActivity)
+                    },
+                    onShareLogFile = {
+                        deviceFeatureController.createLogShareIntent(this)?.let(::startActivity)
+                    },
+                    showReplayAction = true,
+                    onReplayRequest = { replayFilePickerLauncher.launch("*/*") },
+                )
             }
         }
     }

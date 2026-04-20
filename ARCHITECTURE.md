@@ -114,6 +114,48 @@ Rules:
 - depends on abstractions, not concrete Android BLE calls
 - no direct `BluetoothGatt` / `BluetoothAdapter` access
 
+## App Shell And Navigation
+
+The app shell belongs to the `app` layer and must provide stable top-level navigation around the existing device feature set.
+
+Top-level destinations:
+- `Overview`
+- `Charts`
+- `Settings`
+
+Rules:
+- `Overview` is the default destination.
+- `Charts` stays accessible even when no capture data exists.
+- `Settings` owns preferences and future app-level options.
+- top-level navigation must not appear or disappear based on BLE connection state.
+- session state changes destination content, not the navigation structure.
+
+Destination responsibilities:
+
+`Overview`
+- scan for devices
+- connect / disconnect
+- replay captured dumps
+- show session summary
+- show diagnostic/event log
+
+`Charts`
+- show compact capture health
+- sensor and channel selection
+- chart window, follow-live, pan, and zoom controls
+- render chart data or a stable empty state
+
+`Settings`
+- BLE transport profile selection
+- theme placeholder
+- language placeholder
+
+Export rules:
+- export is a session-level action, not a destination
+- export is available from the top app bar on `Overview` and `Charts`
+- export opens a bottom sheet with packet, raw-fragment, and diagnostic-log actions
+- export does not own file generation logic; it only invokes existing feature/storage flows
+
 ## State Boundaries
 
 The app should converge on these boundaries:
@@ -236,4 +278,3 @@ A refactor step is only complete when:
 - new boundaries are easier to test than the old ones
 - tests cover the moved logic
 - `MainActivity` becomes thinner, not thicker
-

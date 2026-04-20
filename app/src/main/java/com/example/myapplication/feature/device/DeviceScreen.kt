@@ -6,6 +6,7 @@ import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -45,6 +46,140 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.myapplication.ble.BleTransportProfile
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DeviceOverviewScreen(
+    uiState: DeviceUiState,
+    onStartScan: () -> Unit,
+    onConnect: (String) -> Unit,
+    onDisconnect: () -> Unit,
+    showReplayAction: Boolean,
+    onReplayRequest: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (!uiState.errorMessage.isNullOrBlank()) {
+            item {
+                ErrorCard(message = uiState.errorMessage)
+            }
+        }
+
+        if (shouldShowSessionSummary(uiState)) {
+            item {
+                SessionSummaryCard(uiState = uiState, compact = false)
+            }
+        }
+
+        if (!uiState.showCaptureUi && !uiState.isReplayRunning) {
+            item {
+                DeviceDiscoverySection(
+                    uiState = uiState,
+                    onStartScan = onStartScan,
+                    onConnect = onConnect,
+                    showReplayAction = showReplayAction,
+                    onReplayRequest = onReplayRequest,
+                )
+            }
+        } else {
+            item {
+                DisconnectCard(onDisconnect = onDisconnect)
+            }
+        }
+
+        item {
+            EventLogSection(uiState = uiState)
+        }
+    }
+}
+
+@Composable
+fun DeviceChartsScreen(
+    uiState: DeviceUiState,
+    onSensorSelect: (Int) -> Unit,
+    onChannelSelect: (Int) -> Unit,
+    onChartWindowSelect: (ChartWindowPreset) -> Unit,
+    onFollowLiveChange: (Boolean) -> Unit,
+    onChartPanLeft: () -> Unit,
+    onChartPanRight: () -> Unit,
+    onChartZoomIn: () -> Unit,
+    onChartZoomOut: () -> Unit,
+    onChartZoomReset: () -> Unit,
+    onChartPanGesture: (Float) -> Unit,
+    onChartZoomGesture: (Float, Float) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (!uiState.errorMessage.isNullOrBlank()) {
+            ErrorCard(message = uiState.errorMessage)
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+        ) {
+            ChartTab(
+                uiState = uiState,
+                onSensorSelect = onSensorSelect,
+                onChannelSelect = onChannelSelect,
+                onChartWindowSelect = onChartWindowSelect,
+                onFollowLiveChange = onFollowLiveChange,
+                onChartPanLeft = onChartPanLeft,
+                onChartPanRight = onChartPanRight,
+                onChartZoomIn = onChartZoomIn,
+                onChartZoomOut = onChartZoomOut,
+                onChartZoomReset = onChartZoomReset,
+                onChartPanGesture = onChartPanGesture,
+                onChartZoomGesture = onChartZoomGesture,
+            )
+        }
+    }
+}
+
+@Composable
+fun DeviceSettingsScreen(
+    uiState: DeviceUiState,
+    onTransportProfileSelect: (BleTransportProfile) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        item {
+            BleTransportProfileCard(
+                selectedProfile = uiState.transportProfile,
+                onTransportProfileSelect = onTransportProfileSelect,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+
+        item {
+            SettingsPlaceholderCard(
+                title = "Theme",
+                description = "Theme controls will live here once the app shell baseline is in place.",
+            )
+        }
+
+        item {
+            SettingsPlaceholderCard(
+                title = "Language",
+                description = "Language settings will live here when localization support is introduced.",
+            )
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -147,6 +282,166 @@ private fun ErrorCard(message: String) {
             modifier = Modifier.padding(10.dp),
         )
     }
+}
+
+@Composable
+private fun DeviceDiscoverySection(
+    uiState: DeviceUiState,
+    onStartScan: () -> Unit,
+    onConnect: (String) -> Unit,
+    showReplayAction: Boolean,
+    onReplayRequest: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFAFAFA)),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+        ) {
+            Text("BLE devices", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "Start a scan, pick a discovered device, or replay a captured dump.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.Gray,
+            )
+            Spacer(Modifier.height(8.dp))
+            Button(
+                onClick = onStartScan,
+                enabled = !uiState.isScanning,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (uiState.isScanning) "ИДЕТ СКАНИРОВАНИЕ..." else "НАЧАТЬ ПОИСК")
+            }
+            if (showReplayAction) {
+                Spacer(Modifier.height(6.dp))
+                OutlinedButton(
+                    onClick = onReplayRequest,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("REPLAY BIN (DEBUG)")
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            if (uiState.foundDevices.isEmpty()) {
+                Text(
+                    text = if (uiState.isScanning) {
+                        "Scanning for nearby BLE devices..."
+                    } else {
+                        "No discovered devices yet."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray,
+                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    uiState.foundDevices.forEach { device ->
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onConnect(device.address) },
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text(text = device.name, style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    text = device.address,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.Gray,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DisconnectCard(onDisconnect: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFAFAFA)),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+        ) {
+            Text("Connection", style = MaterialTheme.typography.labelMedium)
+            Spacer(Modifier.height(6.dp))
+            OutlinedButton(
+                onClick = onDisconnect,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("ОТКЛЮЧИТЬ")
+            }
+        }
+    }
+}
+
+@Composable
+private fun EventLogSection(uiState: DeviceUiState) {
+    if (uiState.diagnosticEvents.isNotEmpty()) {
+        DiagnosticEventsCard(uiState = uiState)
+        return
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFAFAFA)),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+        ) {
+            Text("Последние события", style = MaterialTheme.typography.labelMedium)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "Session diagnostics and capture events will appear here.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.Gray,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsPlaceholderCard(
+    title: String,
+    description: String,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFAFAFA)),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+        ) {
+            Text(title, style = MaterialTheme.typography.labelMedium)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.Gray,
+            )
+        }
+    }
+}
+
+private fun shouldShowSessionSummary(uiState: DeviceUiState): Boolean {
+    return uiState.showCaptureUi ||
+        uiState.isReplayRunning ||
+        uiState.packetsReceived > 0L ||
+        uiState.packetsLost > 0L ||
+        uiState.packetsRejected > 0L ||
+        uiState.fragmentsReceived > 0L
 }
 
 @Composable

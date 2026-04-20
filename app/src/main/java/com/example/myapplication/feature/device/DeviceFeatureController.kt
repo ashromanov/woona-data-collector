@@ -151,6 +151,12 @@ class DeviceFeatureController(
         file = packetCaptureController.currentLogFile(),
     )
 
+    fun canSharePacketFile(): Boolean = packetCaptureController.currentPacketFile()?.exists() == true
+
+    fun canShareRawFile(): Boolean = packetCaptureController.currentRawFile()?.exists() == true
+
+    fun canShareLogFile(): Boolean = packetCaptureController.currentLogFile()?.exists() == true
+
     override fun close() {
         packetReplayController?.close()
         invalidateExportSnapshot()
