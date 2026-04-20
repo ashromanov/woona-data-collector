@@ -1406,27 +1406,58 @@ private fun buildChartSummary(
         modeLabel,
         chart.windowPreset.label,
         yZoom,
-        formatRelativeRawTimer(viewportStart - sessionStart),
-        formatRelativeRawTimer(viewportEnd - sessionStart),
+        formatRelativeMillis(viewportStart - sessionStart),
+        formatRelativeMillis(viewportEnd - sessionStart),
     )
 }
 
-internal fun formatRelativeRawTimer(rawTimerDelta: Long): String {
-    return rawTimerDelta.coerceAtLeast(0L).toString()
+@Composable
+private fun formatRelativeMillis(durationMillis: Long): String {
+    val parts = relativeTimeParts(durationMillis)
+    return if (parts.showMinutes) {
+        appStringResource(R.string.relative_time_minutes_seconds, parts.minutes, parts.seconds)
+    } else {
+        appStringResource(R.string.relative_time_seconds, parts.seconds)
+    }
 }
 
-internal fun buildXAxisTicks(
+@Composable
+private fun buildXAxisTicks(
     viewportStart: Long,
     viewportEnd: Long,
     sessionStart: Long,
 ): List<TimeAxisTick> {
+    return buildXAxisTickModels(viewportStart, viewportEnd, sessionStart).map { tick ->
+        TimeAxisTick(
+            timeMillis = tick.timeMillis,
+            label = formatRelativeMillis(tick.relativeMillis),
+        )
+    }
+}
+
+internal fun relativeTimeParts(durationMillis: Long): RelativeTimeParts {
+    val totalSeconds = (durationMillis / 1000L).coerceAtLeast(0L)
+    val minutes = totalSeconds / 60L
+    val seconds = totalSeconds % 60L
+    return RelativeTimeParts(
+        minutes = minutes,
+        seconds = seconds,
+        showMinutes = minutes > 0L,
+    )
+}
+
+internal fun buildXAxisTickModels(
+    viewportStart: Long,
+    viewportEnd: Long,
+    sessionStart: Long,
+): List<TimeAxisTickModel> {
     val stepCount = 4
     val duration = (viewportEnd - viewportStart).coerceAtLeast(1L)
     return (0..stepCount).map { index ->
         val timeMillis = viewportStart + (duration * index / stepCount)
-        TimeAxisTick(
+        TimeAxisTickModel(
             timeMillis = timeMillis,
-            label = formatRelativeRawTimer(timeMillis - sessionStart),
+            relativeMillis = timeMillis - sessionStart,
         )
     }
 }
@@ -1518,7 +1549,18 @@ private data class AxisTick(
     val value: Float,
 )
 
-internal data class TimeAxisTick(
+internal data class RelativeTimeParts(
+    val minutes: Long,
+    val seconds: Long,
+    val showMinutes: Boolean,
+)
+
+internal data class TimeAxisTickModel(
+    val timeMillis: Long,
+    val relativeMillis: Long,
+)
+
+private data class TimeAxisTick(
     val timeMillis: Long,
     val label: String,
 )
