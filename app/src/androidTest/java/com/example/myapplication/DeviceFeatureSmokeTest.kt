@@ -121,7 +121,7 @@ private class FakeBleSessionController(
     var stopScanningCalls = 0
     var connectedAddress: String? = null
     var closeCalled = false
-    private var transportProfile = BleTransportProfile.DEFAULT
+    private var transportProfile = BleTransportProfile.COMPATIBILITY
 
     override fun currentState(): BleSessionState = BleSessionState.IDLE
 

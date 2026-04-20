@@ -107,13 +107,13 @@ class DeviceFeatureControllerTest {
 
         controller.onConnectRequested("AA:BB")
         controller.onTransportDiagnostic("BLE MTU changed: mtu=247 status=0")
-        controller.onTransportDiagnostic("BLE transport snapshot: profile=Default, mtu=247, phy=?, interval=n/a, latency=n/a, timeout=n/a")
+        controller.onTransportDiagnostic("BLE transport snapshot: profile=Maximum performance, mtu=247, phy=?, interval=n/a, latency=n/a, timeout=n/a")
         controller.onSessionError("Service discovery failed: 133")
 
         assertEquals(
             listOf(
                 "BLE MTU changed: mtu=247 status=0",
-                "BLE transport snapshot: profile=Default, mtu=247, phy=?, interval=n/a, latency=n/a, timeout=n/a",
+                "BLE transport snapshot: profile=Maximum performance, mtu=247, phy=?, interval=n/a, latency=n/a, timeout=n/a",
             ),
             packetCapture.recordedDiagnostics.map { it.message },
         )
@@ -355,7 +355,7 @@ private class FakeBleSessionController : BleSessionController {
     var stopScanningCalls = 0
     var connectedAddress: String? = null
     var closeCalls = 0
-    var transportProfile = BleTransportProfile.DEFAULT
+    var transportProfile = BleTransportProfile.COMPATIBILITY
 
     override fun currentState(): BleSessionState = BleSessionState.IDLE
 

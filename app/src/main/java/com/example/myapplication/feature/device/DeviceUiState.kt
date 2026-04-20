@@ -61,7 +61,7 @@ data class DeviceUiState(
     val chart: ChartUiState = ChartUiState(),
     val selectedTab: DeviceCaptureTab = DeviceCaptureTab.OVERVIEW,
     val foundDevices: List<DeviceListItem> = emptyList(),
-    val transportProfile: BleTransportProfile = BleTransportProfile.DEFAULT,
+    val transportProfile: BleTransportProfile = BleTransportProfile.COMPATIBILITY,
     val selectedSensorType: Int = DEFAULT_SENSOR_TYPE_VALUE,
     val selectedChannel: Int = DEFAULT_CHANNEL_VALUE,
     val showCaptureUi: Boolean = false,

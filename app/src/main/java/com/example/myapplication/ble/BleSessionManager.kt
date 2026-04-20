@@ -64,7 +64,7 @@ class BleSessionManager(
     private var pendingNotificationDescriptorUuid: UUID? = null
     private var sessionState = BleSessionState.IDLE
     @Volatile
-    private var transportProfile = BleTransportProfile.DEFAULT
+    private var transportProfile = BleTransportProfile.COMPATIBILITY
     @Volatile
     private var activeTransportProfile: BleTransportProfile? = null
     private var negotiatedMtu: Int? = null

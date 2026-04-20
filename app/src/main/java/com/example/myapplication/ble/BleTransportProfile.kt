@@ -11,7 +11,7 @@ enum class BleTransportProfile(
     val requestedMtu: Int?,
     val preferredPhy: PreferredPhyMode,
 ) {
-    DEFAULT(
+    MAXIMUM_PERFORMANCE(
         titleRes = R.string.transport_profile_default,
         shortDescriptionRes = R.string.transport_profile_default_short,
         detailedDescriptionResIds = listOf(

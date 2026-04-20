@@ -53,7 +53,7 @@ object EnglishTextResolver : TextResolver {
             R.string.packet_validation_invalid_start -> "Invalid packet start marker"
             R.string.packet_validation_invalid_length -> "Invalid packet length"
             R.string.packet_validation_invalid_measurement_count -> "Invalid measurement count"
-            R.string.transport_profile_default -> "Default"
+            R.string.transport_profile_default -> "Maximum performance"
             R.string.transport_profile_compatibility -> "Compatibility"
             R.string.transport_profile_conservative -> "Conservative"
             else -> "res-$resId"

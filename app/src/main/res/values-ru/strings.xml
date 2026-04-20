@@ -47,7 +47,7 @@
 
     <string name="ble_transport_profile_title">Профиль BLE-транспорта</string>
     <string name="ble_transport_profile_desc">Применяется при следующем BLE-подключении. Используйте для сравнения совместимости телефонов.</string>
-    <string name="transport_profile_default">Стандартный</string>
+    <string name="transport_profile_default">Максимальная производительность</string>
     <string name="transport_profile_default_short">Высокий приоритет, запрос MTU 512, запрос PHY 2M.</string>
     <string name="transport_profile_default_detail_1">Запрашивает высокий приоритет соединения.</string>
     <string name="transport_profile_default_detail_2">Запрашивает MTU 512 и продолжает работу, даже если стек согласовал меньшее значение.</string>
