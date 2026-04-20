@@ -25,6 +25,36 @@ import java.util.UUID
 @RunWith(AndroidJUnit4::class)
 class DeviceFeatureSmokeTest {
     @Test
+    fun initialTransportProfile_isRestoredIntoControllerAndBleSession() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        lateinit var bleSessionController: FakeBleSessionController
+
+        val controller = createDeviceFeatureController(
+            context = context,
+            filesDir = context.filesDir,
+            fileProviderAuthority = "${context.packageName}.provider",
+            serviceUuid = UUID.randomUUID(),
+            characteristicUuid = UUID.randomUUID(),
+            descriptorUuid = UUID.randomUUID(),
+            initialTransportProfile = BleTransportProfile.MAXIMUM_PERFORMANCE,
+            packetCaptureControllerFactory = { _: DeviceUiStateHolder, _ ->
+                FakePacketCaptureController(File(context.filesDir, "restore-profile.bin"))
+            },
+            bleSessionControllerFactory = { listener ->
+                FakeBleSessionController(listener).also {
+                    bleSessionController = it
+                }
+            },
+            fileShareIntentFactory = FakeFileShareIntentFactory(),
+        )
+
+        assertEquals(BleTransportProfile.MAXIMUM_PERFORMANCE, controller.uiState.transportProfile)
+        assertEquals(BleTransportProfile.MAXIMUM_PERFORMANCE, bleSessionController.currentTransportProfile())
+
+        controller.close()
+    }
+
+    @Test
     fun fakeDrivenSmokePath_coversScanConnectCaptureAndShare() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext

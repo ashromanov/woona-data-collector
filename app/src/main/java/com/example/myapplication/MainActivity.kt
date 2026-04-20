@@ -12,6 +12,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.example.myapplication.AppShellEntryPoint
 import com.example.myapplication.DeviceFeatureModuleEntryPoint
+import com.example.myapplication.ble.BleTransportProfilePreferences
 import com.example.myapplication.feature.device.DeviceFeatureController
 import com.example.myapplication.localization.AppLanguage
 import com.example.myapplication.localization.AppLocalizationEntryPoint
@@ -39,6 +40,9 @@ class MainActivity : ComponentActivity() {
     }
     private val appThemePreferences by lazy {
         AppThemePreferences(applicationContext)
+    }
+    private val bleTransportProfilePreferences by lazy {
+        BleTransportProfilePreferences(applicationContext)
     }
     private var selectedLanguage by mutableStateOf(AppLanguage.ENGLISH)
     private var selectedThemeMode by mutableStateOf(AppThemeMode.SYSTEM)
@@ -96,6 +100,7 @@ class MainActivity : ComponentActivity() {
             serviceUuid = serviceUuid,
             characteristicUuid = characteristicUuid,
             descriptorUuid = descriptorUuid,
+            initialTransportProfile = bleTransportProfilePreferences.selectedTransportProfile(),
             appTextResolver = appTextResolver,
         )
     }
@@ -130,6 +135,7 @@ class MainActivity : ComponentActivity() {
                         },
                         onConnect = { mac -> deviceFeatureController.onConnectRequested(mac) },
                         onTransportProfileSelect = { profile ->
+                            bleTransportProfilePreferences.setSelectedTransportProfile(profile)
                             deviceFeatureController.onTransportProfileSelected(profile)
                         },
                         onLanguageSelect = { language ->

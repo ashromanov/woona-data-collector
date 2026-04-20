@@ -10,6 +10,7 @@ import com.example.myapplication.ble.BleSessionController
 import com.example.myapplication.ble.BleSessionListener
 import com.example.myapplication.ble.BleSessionManager
 import com.example.myapplication.ble.BleSessionState
+import com.example.myapplication.ble.BleTransportProfile
 import com.example.myapplication.feature.device.DeviceFeatureController
 import com.example.myapplication.feature.device.DebugPacketReplayController
 import com.example.myapplication.feature.device.DeviceUiStateHolder
@@ -34,6 +35,7 @@ fun createDeviceFeatureController(
     serviceUuid: UUID,
     characteristicUuid: UUID,
     descriptorUuid: UUID,
+    initialTransportProfile: BleTransportProfile? = null,
     packetCaptureControllerFactory: ((DeviceUiStateHolder, Handler) -> PacketCaptureController)? = null,
     bleSessionControllerFactory: ((BleSessionListener) -> BleSessionController)? = null,
     fileShareIntentFactory: FileShareIntentFactory? = null,
@@ -171,6 +173,10 @@ fun createDeviceFeatureController(
         packetReplayController = packetReplayController,
         uiStateHolder = uiStateHolder,
     )
+
+    initialTransportProfile?.let { profile ->
+        deviceFeatureController.onTransportProfileSelected(profile)
+    }
     return requireNotNull(deviceFeatureController)
 }
 
@@ -182,6 +188,7 @@ object DeviceFeatureModuleEntryPoint {
         serviceUuid: UUID,
         characteristicUuid: UUID,
         descriptorUuid: UUID,
+        initialTransportProfile: BleTransportProfile? = null,
         packetCaptureControllerFactory: ((DeviceUiStateHolder, Handler) -> PacketCaptureController)? = null,
         bleSessionControllerFactory: ((BleSessionListener) -> BleSessionController)? = null,
         fileShareIntentFactory: FileShareIntentFactory? = null,
@@ -196,6 +203,7 @@ object DeviceFeatureModuleEntryPoint {
             serviceUuid = serviceUuid,
             characteristicUuid = characteristicUuid,
             descriptorUuid = descriptorUuid,
+            initialTransportProfile = initialTransportProfile,
             packetCaptureControllerFactory = packetCaptureControllerFactory,
             bleSessionControllerFactory = bleSessionControllerFactory,
             fileShareIntentFactory = fileShareIntentFactory,
