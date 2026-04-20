@@ -168,10 +168,14 @@ class MainActivity : ComponentActivity() {
                             deviceFeatureController.onChartZoomChanged(scaleFactor, anchorFractionY)
                         },
                         canSharePacketFile = deviceFeatureController.canSharePacketFile(),
+                        canShareCsvFile = deviceFeatureController.canShareCsvFile(),
                         canShareRawFile = deviceFeatureController.canShareRawFile(),
                         canShareLogFile = deviceFeatureController.canShareLogFile(),
                         onSharePacketFile = {
                             deviceFeatureController.createPacketShareIntent(this)?.let(::startActivity)
+                        },
+                        onShareCsvFile = {
+                            deviceFeatureController.createCsvShareIntent(this)?.let(::startActivity)
                         },
                         onShareRawFile = {
                             deviceFeatureController.createRawShareIntent(this)?.let(::startActivity)

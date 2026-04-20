@@ -8,6 +8,7 @@ import com.example.myapplication.ble.BleTransportProfile
 import com.example.myapplication.ble.BleSessionController
 import com.example.myapplication.localization.EnglishTextResolver
 import com.example.myapplication.localization.TextResolver
+import com.example.myapplication.storage.BleSessionCsvExporter
 import com.example.myapplication.storage.FileShareIntentFactory
 import java.io.File
 import java.nio.file.Files
@@ -20,10 +21,13 @@ class DeviceFeatureController(
     private val appTextResolver: TextResolver = EnglishTextResolver,
     private val packetReplayController: PacketReplayController? = null,
     private val uiStateHolder: DeviceUiStateHolder = DeviceUiStateHolder(),
+    private val sessionCsvExporter: BleSessionCsvExporter = BleSessionCsvExporter(),
+    private val wallClockMillisProvider: () -> Long = System::currentTimeMillis,
 ) : AutoCloseable {
     private var pendingTransportDiagnostics = mutableListOf<String>()
     private var awaitingCaptureReady = false
     private var exportSnapshot: SessionExportSnapshot? = null
+    private var exportSessionStartMillis: Long? = null
 
     val uiState: DeviceUiState
         get() = uiStateHolder.uiState
@@ -158,15 +162,36 @@ class DeviceFeatureController(
         file = packetCaptureController.currentLogFile(),
     )
 
+    fun createCsvShareIntent(context: Context): Intent? {
+        return try {
+            val snapshot = ensureExportSnapshot()
+            val packetSnapshot = snapshot.packetSnapshot ?: return null
+            val csvSnapshot = snapshot.csvSnapshot ?: createCsvSnapshot(
+                source = packetSnapshot,
+                sessionStartMillis = snapshot.sessionStartMillis ?: wallClockMillisProvider(),
+            ).also { generatedCsv ->
+                exportSnapshot = snapshot.copy(csvSnapshot = generatedCsv)
+            }
+            fileShareIntentFactory.createChooserIntent(context, csvSnapshot)
+        } catch (exception: Exception) {
+            uiStateHolder.showError(appTextResolver.getString(R.string.share_file_failed))
+            Log.e("BLE_SHARE", "Failed to share file", exception)
+            null
+        }
+    }
+
     fun canSharePacketFile(): Boolean = packetCaptureController.currentPacketFile()?.exists() == true
 
     fun canShareRawFile(): Boolean = packetCaptureController.currentRawFile()?.exists() == true
 
     fun canShareLogFile(): Boolean = packetCaptureController.currentLogFile()?.exists() == true
 
+    fun canShareCsvFile(): Boolean = packetCaptureController.currentPacketFile()?.exists() == true
+
     override fun close() {
         packetReplayController?.close()
         invalidateExportSnapshot()
+        exportSessionStartMillis = null
         bleSessionController.close()
         packetCaptureController.close()
     }
@@ -207,6 +232,7 @@ class DeviceFeatureController(
         awaitingCaptureReady = false
         invalidateExportSnapshot()
         packetCaptureController.resetSession()
+        exportSessionStartMillis = wallClockMillisProvider()
         uiStateHolder.startReplaySession()
         packetReplayController.startReplay(fileBytes)
     }
@@ -222,6 +248,7 @@ class DeviceFeatureController(
     private fun resetCaptureSession() {
         invalidateExportSnapshot()
         packetCaptureController.resetSession()
+        exportSessionStartMillis = wallClockMillisProvider()
         uiStateHolder.resetCaptureSession()
     }
 
@@ -268,20 +295,24 @@ class DeviceFeatureController(
             existingSnapshot != null &&
             existingSnapshot.packetSourcePath == currentPacketFile?.absolutePath &&
             existingSnapshot.rawSourcePath == currentRawFile?.absolutePath &&
-            existingSnapshot.logSourcePath == currentLogFile?.absolutePath
+            existingSnapshot.logSourcePath == currentLogFile?.absolutePath &&
+            existingSnapshot.sessionStartMillis == exportSessionStartMillis
         ) {
             return existingSnapshot
         }
 
         invalidateExportSnapshot()
         packetCaptureController.flush()
+        val packetSnapshot = currentPacketFile?.let { createSnapshotCopy(it, "packet") }
         val snapshot = SessionExportSnapshot(
             packetSourcePath = currentPacketFile?.absolutePath,
             rawSourcePath = currentRawFile?.absolutePath,
             logSourcePath = currentLogFile?.absolutePath,
-            packetSnapshot = currentPacketFile?.let { createSnapshotCopy(it, "packet") },
+            sessionStartMillis = exportSessionStartMillis,
+            packetSnapshot = packetSnapshot,
             rawSnapshot = currentRawFile?.let { createSnapshotCopy(it, "raw") },
             logSnapshot = currentLogFile?.let { createSnapshotCopy(it, "log") },
+            csvSnapshot = null,
         )
         exportSnapshot = snapshot
         return snapshot
@@ -289,7 +320,7 @@ class DeviceFeatureController(
 
     private fun invalidateExportSnapshot() {
         val snapshot = exportSnapshot ?: return
-        listOf(snapshot.packetSnapshot, snapshot.rawSnapshot, snapshot.logSnapshot)
+        listOf(snapshot.packetSnapshot, snapshot.rawSnapshot, snapshot.logSnapshot, snapshot.csvSnapshot)
             .filterNotNull()
             .forEach { file ->
                 try {
@@ -320,6 +351,21 @@ class DeviceFeatureController(
         return target
     }
 
+    private fun createCsvSnapshot(
+        source: File,
+        sessionStartMillis: Long,
+    ): File {
+        val target = File(
+            source.parentFile,
+            "${source.nameWithoutExtension}_snapshot_csv.csv",
+        )
+        return sessionCsvExporter.export(
+            packetFile = source,
+            sessionStartMillis = sessionStartMillis,
+            targetFile = target,
+        )
+    }
+
     private fun syncProcessorSelection() {
         packetCaptureController.updateSelection(
             sensorType = uiStateHolder.uiState.selectedSensorType,
@@ -336,7 +382,9 @@ private data class SessionExportSnapshot(
     val packetSourcePath: String?,
     val rawSourcePath: String?,
     val logSourcePath: String?,
+    val sessionStartMillis: Long?,
     val packetSnapshot: File?,
     val rawSnapshot: File?,
     val logSnapshot: File?,
+    val csvSnapshot: File?,
 )

@@ -78,6 +78,7 @@ class AppShellNavigationTest {
     fun exportSheet_showsAvailableActions_andDisablesUnavailableOnes() {
         setShellContent(
             canSharePacketFile = true,
+            canShareCsvFile = true,
             canShareRawFile = false,
             canShareLogFile = true,
         )
@@ -85,6 +86,7 @@ class AppShellNavigationTest {
         composeRule.onNodeWithText("Export").assertIsEnabled().performClick()
 
         composeRule.onNodeWithText("Compiled binary").assertIsEnabled()
+        composeRule.onNodeWithText("Channel CSV").assertIsEnabled()
         composeRule.onNodeWithText("Raw data stream").assertIsNotEnabled()
         composeRule.onNodeWithText("Session log").assertIsEnabled()
     }
@@ -139,10 +141,12 @@ class AppShellNavigationTest {
     private fun setShellContent(
         uiState: DeviceUiState = DeviceUiState(),
         canSharePacketFile: Boolean = false,
+        canShareCsvFile: Boolean = false,
         canShareRawFile: Boolean = false,
         canShareLogFile: Boolean = false,
         selectedThemeMode: AppThemeMode = AppThemeMode.SYSTEM,
         onSharePacketFile: () -> Unit = {},
+        onShareCsvFile: () -> Unit = {},
         onShareRawFile: () -> Unit = {},
         onShareLogFile: () -> Unit = {},
         onThemeModeSelect: (AppThemeMode) -> Unit = {},
@@ -176,9 +180,11 @@ class AppShellNavigationTest {
                             onChartPanGesture = { _ -> },
                             onChartZoomGesture = { _, _ -> },
                             canSharePacketFile = canSharePacketFile,
+                            canShareCsvFile = canShareCsvFile,
                             canShareRawFile = canShareRawFile,
                             canShareLogFile = canShareLogFile,
                             onSharePacketFile = onSharePacketFile,
+                            onShareCsvFile = onShareCsvFile,
                             onShareRawFile = onShareRawFile,
                             onShareLogFile = onShareLogFile,
                             showReplayAction = true,

@@ -15,6 +15,8 @@
     <string name="export_choose_artifact">Выберите артефакт сессии для отправки.</string>
     <string name="export_compiled_binary">Собранный бинарный файл</string>
     <string name="export_compiled_binary_desc">Проверенные пакеты сессии, сохраненные в итоговом выходном файле.</string>
+    <string name="export_channel_csv">CSV по каналам</string>
+    <string name="export_channel_csv_desc">Принятые сэмплы каналов, разложенные по CSV-столбцам с синтетической временной шкалой сессии.</string>
     <string name="export_raw_data_stream">Сырой поток данных</string>
     <string name="export_raw_data_stream_desc">Входящие BLE-фрагменты до парсинга и валидации.</string>
     <string name="export_session_log">Лог сессии</string>

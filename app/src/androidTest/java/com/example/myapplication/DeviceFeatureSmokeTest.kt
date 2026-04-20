@@ -59,7 +59,7 @@ class DeviceFeatureSmokeTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val packetFile = File(context.filesDir, "smoke-share.bin").apply {
-            writeBytes(byteArrayOf(0x01, 0x02, 0x03))
+            writeBytes(validPacket())
         }
         val packetCaptureController = FakePacketCaptureController(packetFile)
         val fileShareIntentFactory = FakeFileShareIntentFactory()
@@ -142,6 +142,82 @@ class DeviceFeatureSmokeTest {
         assertTrue(bleSessionController.closeCalled)
         assertTrue(packetCaptureController.closeCalled)
     }
+
+    @Test
+    fun finishedSession_exportsRemainAvailableAfterDisconnect() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val packetFile = File(context.filesDir, "smoke-disconnect-packet.bin").apply {
+            writeBytes(validPacket())
+        }
+        val rawFile = File(context.filesDir, "smoke-disconnect-raw.binlog").apply {
+            writeText("raw-data")
+        }
+        val logFile = File(context.filesDir, "smoke-disconnect-log.log").apply {
+            writeText("log-data")
+        }
+        val packetCaptureController = FakePacketCaptureController(
+            packetFile = packetFile,
+            rawFile = rawFile,
+            logFile = logFile,
+        )
+        val fileShareIntentFactory = FakeFileShareIntentFactory()
+        lateinit var bleSessionController: FakeBleSessionController
+
+        val controller = createDeviceFeatureController(
+            context = context,
+            filesDir = context.filesDir,
+            fileProviderAuthority = "${context.packageName}.provider",
+            serviceUuid = UUID.randomUUID(),
+            characteristicUuid = UUID.randomUUID(),
+            descriptorUuid = UUID.randomUUID(),
+            packetCaptureControllerFactory = { _: DeviceUiStateHolder, _ ->
+                packetCaptureController
+            },
+            bleSessionControllerFactory = { listener ->
+                FakeBleSessionController(listener).also {
+                    bleSessionController = it
+                }
+            },
+            fileShareIntentFactory = fileShareIntentFactory,
+        )
+
+        controller.onConnectRequested("AA:BB:CC:DD:EE:FF")
+        bleSessionController.listener.onStateChanged(BleSessionState.CONNECTED)
+        bleSessionController.listener.onCaptureReady()
+        instrumentation.waitForIdleSync()
+
+        controller.onDisconnectRequested()
+        instrumentation.waitForIdleSync()
+
+        assertTrue(controller.canSharePacketFile())
+        assertTrue(controller.canShareCsvFile())
+        assertTrue(controller.canShareRawFile())
+        assertTrue(controller.canShareLogFile())
+
+        assertNotNull(controller.createPacketShareIntent(context))
+        assertTrue(requireNotNull(fileShareIntentFactory.sharedFile).name.contains("_snapshot_packet"))
+
+        assertNotNull(controller.createRawShareIntent(context))
+        assertTrue(requireNotNull(fileShareIntentFactory.sharedFile).name.contains("_snapshot_raw"))
+
+        assertNotNull(controller.createLogShareIntent(context))
+        assertTrue(requireNotNull(fileShareIntentFactory.sharedFile).name.contains("_snapshot_log"))
+
+        assertNotNull(controller.createCsvShareIntent(context))
+        val csvSnapshot = requireNotNull(fileShareIntentFactory.sharedFile)
+        assertTrue(csvSnapshot.name.contains("_snapshot_csv"))
+        assertTrue(
+            csvSnapshot.readLines().first() ==
+                "time_millis,packet_device_time_millis,sample_device_time_millis,sample_device_time_normalized_millis,axl_sensor_2_ch_1",
+        )
+
+        controller.close()
+
+        packetFile.delete()
+        rawFile.delete()
+        logFile.delete()
+    }
 }
 
 private class FakeBleSessionController(
@@ -182,6 +258,8 @@ private class FakeBleSessionController(
 
 private class FakePacketCaptureController(
     private val packetFile: File,
+    private val rawFile: File? = null,
+    private val logFile: File? = null,
 ) : PacketCaptureController {
     val submittedFragments = mutableListOf<ByteArray>()
     var resetCalled = false
@@ -218,6 +296,12 @@ private class FakePacketCaptureController(
 
     override fun currentFile(): File = packetFile
 
+    override fun currentPacketFile(): File = packetFile
+
+    override fun currentRawFile(): File? = rawFile
+
+    override fun currentLogFile(): File? = logFile
+
     override fun close() {
         closeCalled = true
     }
@@ -229,5 +313,68 @@ private class FakeFileShareIntentFactory : FileShareIntentFactory {
     override fun createChooserIntent(context: Context, file: File): Intent {
         sharedFile = file
         return Intent("test-share")
+    }
+}
+
+private fun validPacket(): ByteArray {
+    return packet(
+        counter = 1,
+        timerMillis = 50,
+        blocks = listOf(
+            sensorBlock(sensorType = 2, channelSamples = listOf(listOf(10, 20))),
+        ),
+    )
+}
+
+private fun packet(
+    counter: Int,
+    timerMillis: Int,
+    blocks: List<ByteArray>,
+): ByteArray {
+    val payload = blocks.fold(ByteArray(0)) { acc, block -> acc + block }
+    val length = 16 + payload.size
+    return ByteArray(length).apply {
+        this[0] = 0x33
+        this[1] = 0x99.toByte()
+        this[2] = 0xAA.toByte()
+        this[3] = 0x55
+        this[4] = (length and 0xFF).toByte()
+        this[5] = ((length shr 8) and 0xFF).toByte()
+        this[6] = blocks.size.toByte()
+        this[7] = (counter and 0xFF).toByte()
+        this[8] = ((counter shr 8) and 0xFF).toByte()
+        this[9] = ((counter shr 16) and 0xFF).toByte()
+        this[10] = ((counter shr 24) and 0xFF).toByte()
+        this[11] = (timerMillis and 0xFF).toByte()
+        this[12] = ((timerMillis shr 8) and 0xFF).toByte()
+        this[13] = ((timerMillis shr 16) and 0xFF).toByte()
+        this[14] = ((timerMillis shr 24) and 0xFF).toByte()
+
+        System.arraycopy(payload, 0, this, 16, payload.size)
+    }
+}
+
+private fun sensorBlock(
+    sensorType: Int,
+    channelSamples: List<List<Int>>,
+): ByteArray {
+    val channelCount = channelSamples.size
+    val samplesPerChannel = channelSamples.firstOrNull()?.size ?: 0
+    val payloadSize = channelCount * samplesPerChannel * 2
+
+    return ByteArray(6 + payloadSize).apply {
+        this[0] = sensorType.toByte()
+        this[1] = channelCount.toByte()
+        this[2] = (samplesPerChannel and 0xFF).toByte()
+        this[3] = ((samplesPerChannel shr 8) and 0xFF).toByte()
+
+        var offset = 6
+        channelSamples.forEach { samples ->
+            samples.forEach { sample ->
+                this[offset] = (sample and 0xFF).toByte()
+                this[offset + 1] = ((sample shr 8) and 0xFF).toByte()
+                offset += 2
+            }
+        }
     }
 }

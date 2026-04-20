@@ -98,9 +98,11 @@ fun DeviceAppShell(
     onChartPanGesture: (Float) -> Unit,
     onChartZoomGesture: (Float, Float) -> Unit,
     canSharePacketFile: Boolean,
+    canShareCsvFile: Boolean,
     canShareRawFile: Boolean,
     canShareLogFile: Boolean,
     onSharePacketFile: () -> Unit,
+    onShareCsvFile: () -> Unit,
     onShareRawFile: () -> Unit,
     onShareLogFile: () -> Unit,
     showReplayAction: Boolean,
@@ -111,7 +113,7 @@ fun DeviceAppShell(
     }
     var isExportSheetVisible by rememberSaveable { mutableStateOf(false) }
     val selectedDestination = AppDestination.valueOf(selectedDestinationName)
-    val canExportAnyFile = canSharePacketFile || canShareRawFile || canShareLogFile
+    val canExportAnyFile = canSharePacketFile || canShareCsvFile || canShareRawFile || canShareLogFile
 
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
@@ -192,11 +194,16 @@ fun DeviceAppShell(
         ) {
             ExportSheet(
                 canSharePacketFile = canSharePacketFile,
+                canShareCsvFile = canShareCsvFile,
                 canShareRawFile = canShareRawFile,
                 canShareLogFile = canShareLogFile,
                 onSharePacketFile = {
                     isExportSheetVisible = false
                     onSharePacketFile()
+                },
+                onShareCsvFile = {
+                    isExportSheetVisible = false
+                    onShareCsvFile()
                 },
                 onShareRawFile = {
                     isExportSheetVisible = false
@@ -337,9 +344,11 @@ private fun ShellNavItem(
 @Composable
 private fun ExportSheet(
     canSharePacketFile: Boolean,
+    canShareCsvFile: Boolean,
     canShareRawFile: Boolean,
     canShareLogFile: Boolean,
     onSharePacketFile: () -> Unit,
+    onShareCsvFile: () -> Unit,
     onShareRawFile: () -> Unit,
     onShareLogFile: () -> Unit,
 ) {
@@ -362,6 +371,12 @@ private fun ExportSheet(
             description = appStringResource(R.string.export_compiled_binary_desc),
             enabled = canSharePacketFile,
             onClick = onSharePacketFile,
+        )
+        ExportActionButton(
+            title = appStringResource(R.string.export_channel_csv),
+            description = appStringResource(R.string.export_channel_csv_desc),
+            enabled = canShareCsvFile,
+            onClick = onShareCsvFile,
         )
         ExportActionButton(
             title = appStringResource(R.string.export_raw_data_stream),
@@ -440,9 +455,11 @@ object AppShellEntryPoint {
         onChartPanGesture: (Float) -> Unit,
         onChartZoomGesture: (Float, Float) -> Unit,
         canSharePacketFile: Boolean,
+        canShareCsvFile: Boolean,
         canShareRawFile: Boolean,
         canShareLogFile: Boolean,
         onSharePacketFile: () -> Unit,
+        onShareCsvFile: () -> Unit,
         onShareRawFile: () -> Unit,
         onShareLogFile: () -> Unit,
         showReplayAction: Boolean,
@@ -470,9 +487,11 @@ object AppShellEntryPoint {
             onChartPanGesture = onChartPanGesture,
             onChartZoomGesture = onChartZoomGesture,
             canSharePacketFile = canSharePacketFile,
+            canShareCsvFile = canShareCsvFile,
             canShareRawFile = canShareRawFile,
             canShareLogFile = canShareLogFile,
             onSharePacketFile = onSharePacketFile,
+            onShareCsvFile = onShareCsvFile,
             onShareRawFile = onShareRawFile,
             onShareLogFile = onShareLogFile,
             showReplayAction = showReplayAction,

@@ -24,7 +24,7 @@ class BleFileShareIntentFactory(
         )
 
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
-            type = "application/octet-stream"
+            type = mimeTypeFor(file)
             putExtra(Intent.EXTRA_STREAM, contentUri)
             clipData = ClipData.newRawUri(file.name, contentUri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -33,5 +33,13 @@ class BleFileShareIntentFactory(
             shareIntent,
             appTextResolver.getString(R.string.share_chooser_title),
         )
+    }
+
+    private fun mimeTypeFor(file: File): String {
+        return when (file.extension.lowercase()) {
+            "csv" -> "text/csv"
+            "log" -> "text/plain"
+            else -> "application/octet-stream"
+        }
     }
 }

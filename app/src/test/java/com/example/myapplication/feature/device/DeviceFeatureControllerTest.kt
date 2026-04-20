@@ -272,6 +272,165 @@ class DeviceFeatureControllerTest {
     }
 
     @Test
+    fun createCsvShareIntent_generatesChannelCsvFromPacketDump() {
+        val packetFile = File("/tmp/share-csv.bin").apply {
+            writeBytes(
+                packet(
+                    counter = 10,
+                    timerMillis = 50,
+                    blocks = listOf(
+                        sensorBlock(sensorType = 2, channelSamples = listOf(listOf(10, 20), listOf(30, 40))),
+                    ),
+                ),
+            )
+        }
+        val shareFactory = FakeFileShareIntentFactory()
+        val controller = DeviceFeatureController(
+            bleSessionController = FakeBleSessionController(),
+            packetCaptureController = FakePacketCaptureController(
+                currentFile = packetFile,
+                currentPacketFile = packetFile,
+            ),
+            fileShareIntentFactory = shareFactory,
+            wallClockMillisProvider = { 1_000L },
+        )
+
+        val intent = controller.createCsvShareIntent(ContextWrapper(null))
+
+        assertNotNull(intent)
+        assertNotNull(shareFactory.sharedFile)
+        assertEquals(
+            listOf(
+                "time_millis,packet_device_time_millis,sample_device_time_millis,sample_device_time_normalized_millis,axl_sensor_2_ch_1,axl_sensor_2_ch_2",
+                "1000,50,50,0,10,30",
+                "1001,50,50,0,20,40",
+            ),
+            requireNotNull(shareFactory.sharedFile).readLines(),
+        )
+
+        packetFile.delete()
+        shareFactory.sharedFile?.delete()
+    }
+
+    @Test
+    fun createCsvShareIntent_usesCaptureReadyTimeInsteadOfConnectTapTime() {
+        val packetFile = File("/tmp/share-csv-capture-ready.bin").apply {
+            writeBytes(
+                packet(
+                    counter = 10,
+                    timerMillis = 50,
+                    blocks = listOf(
+                        sensorBlock(sensorType = 2, channelSamples = listOf(listOf(10, 20))),
+                    ),
+                ),
+            )
+        }
+        var now = 1_000L
+        val shareFactory = FakeFileShareIntentFactory()
+        val controller = DeviceFeatureController(
+            bleSessionController = FakeBleSessionController(),
+            packetCaptureController = FakePacketCaptureController(
+                currentFile = packetFile,
+                currentPacketFile = packetFile,
+            ),
+            fileShareIntentFactory = shareFactory,
+            wallClockMillisProvider = { now },
+        )
+
+        controller.onConnectRequested("AA:BB")
+        now = 2_000L
+        controller.onCaptureReady()
+        val intent = controller.createCsvShareIntent(ContextWrapper(null))
+
+        assertNotNull(intent)
+        assertEquals(
+            listOf(
+                "time_millis,packet_device_time_millis,sample_device_time_millis,sample_device_time_normalized_millis,axl_sensor_2_ch_1",
+                "2000,50,50,0,10",
+                "2001,50,50,0,20",
+            ),
+            requireNotNull(shareFactory.sharedFile).readLines(),
+        )
+
+        packetFile.delete()
+        shareFactory.sharedFile?.delete()
+    }
+
+    @Test
+    fun createCsvShareIntent_preservesSessionTimeBaseAfterDisconnect() {
+        val packetFile = File("/tmp/share-csv-disconnect.bin").apply {
+            writeBytes(
+                packet(
+                    counter = 10,
+                    timerMillis = 50,
+                    blocks = listOf(
+                        sensorBlock(sensorType = 2, channelSamples = listOf(listOf(10, 20))),
+                    ),
+                ),
+            )
+        }
+        var now = 1_000L
+        val shareFactory = FakeFileShareIntentFactory()
+        val controller = DeviceFeatureController(
+            bleSessionController = FakeBleSessionController(),
+            packetCaptureController = FakePacketCaptureController(
+                currentFile = packetFile,
+                currentPacketFile = packetFile,
+            ),
+            fileShareIntentFactory = shareFactory,
+            wallClockMillisProvider = { now },
+        )
+
+        controller.onConnectRequested("AA:BB")
+        now = 2_000L
+        controller.onCaptureReady()
+        controller.onDisconnectRequested()
+        now = 9_000L
+        val intent = controller.createCsvShareIntent(ContextWrapper(null))
+
+        assertNotNull(intent)
+        assertEquals(
+            listOf(
+                "time_millis,packet_device_time_millis,sample_device_time_millis,sample_device_time_normalized_millis,axl_sensor_2_ch_1",
+                "2000,50,50,0,10",
+                "2001,50,50,0,20",
+            ),
+            requireNotNull(shareFactory.sharedFile).readLines(),
+        )
+
+        packetFile.delete()
+        shareFactory.sharedFile?.delete()
+    }
+
+    @Test
+    fun canShareFiles_remainAvailableAfterDisconnectForCompletedSession() {
+        val packetFile = File("/tmp/share-disconnect-packet.bin").apply { writeText("packet") }
+        val rawFile = File("/tmp/share-disconnect-raw.binlog").apply { writeText("raw") }
+        val logFile = File("/tmp/share-disconnect-log.log").apply { writeText("log") }
+        val controller = DeviceFeatureController(
+            bleSessionController = FakeBleSessionController(),
+            packetCaptureController = FakePacketCaptureController(
+                currentFile = packetFile,
+                currentPacketFile = packetFile,
+                currentRawFile = rawFile,
+                currentLogFile = logFile,
+            ),
+            fileShareIntentFactory = FakeFileShareIntentFactory(),
+        )
+
+        controller.onDisconnectRequested()
+
+        assertTrue(controller.canSharePacketFile())
+        assertTrue(controller.canShareCsvFile())
+        assertTrue(controller.canShareRawFile())
+        assertTrue(controller.canShareLogFile())
+
+        packetFile.delete()
+        rawFile.delete()
+        logFile.delete()
+    }
+
+    @Test
     fun shareIntents_useSingleFrozenSnapshotAcrossFiles() {
         val packetFile = File("/tmp/share-snapshot-packet.bin").apply { writeText("packet-v1") }
         val rawFile = File("/tmp/share-snapshot-raw.binlog").apply { writeText("raw-v1") }
@@ -347,6 +506,61 @@ class DeviceFeatureControllerTest {
             fileShareIntentFactory = FakeFileShareIntentFactory(),
             packetReplayController = packetReplayController,
         )
+    }
+}
+
+private fun packet(
+    counter: Int,
+    timerMillis: Int,
+    blocks: List<ByteArray> = emptyList(),
+): ByteArray {
+    val payload = blocks.fold(ByteArray(0)) { acc, block -> acc + block }
+    val length = 16 + payload.size
+    return ByteArray(length).apply {
+        this[0] = 0x33
+        this[1] = 0x99.toByte()
+        this[2] = 0xAA.toByte()
+        this[3] = 0x55
+        this[4] = (length and 0xFF).toByte()
+        this[5] = ((length shr 8) and 0xFF).toByte()
+        this[6] = blocks.size.coerceAtLeast(1).toByte()
+        this[7] = (counter and 0xFF).toByte()
+        this[8] = ((counter shr 8) and 0xFF).toByte()
+        this[9] = ((counter shr 16) and 0xFF).toByte()
+        this[10] = ((counter shr 24) and 0xFF).toByte()
+        this[11] = (timerMillis and 0xFF).toByte()
+        this[12] = ((timerMillis shr 8) and 0xFF).toByte()
+        this[13] = ((timerMillis shr 16) and 0xFF).toByte()
+        this[14] = ((timerMillis shr 24) and 0xFF).toByte()
+
+        if (payload.isNotEmpty()) {
+            System.arraycopy(payload, 0, this, 16, payload.size)
+        }
+    }
+}
+
+private fun sensorBlock(
+    sensorType: Int,
+    channelSamples: List<List<Int>>,
+): ByteArray {
+    val channelCount = channelSamples.size
+    val samplesPerChannel = channelSamples.firstOrNull()?.size ?: 0
+    val payloadSize = channelCount * samplesPerChannel * 2
+
+    return ByteArray(6 + payloadSize).apply {
+        this[0] = sensorType.toByte()
+        this[1] = channelCount.toByte()
+        this[2] = (samplesPerChannel and 0xFF).toByte()
+        this[3] = ((samplesPerChannel shr 8) and 0xFF).toByte()
+
+        var offset = 6
+        channelSamples.forEach { samples ->
+            samples.forEach { sample ->
+                this[offset] = (sample and 0xFF).toByte()
+                this[offset + 1] = ((sample shr 8) and 0xFF).toByte()
+                offset += 2
+            }
+        }
     }
 }
 

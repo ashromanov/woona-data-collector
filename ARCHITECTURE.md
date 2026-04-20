@@ -153,7 +153,7 @@ Destination responsibilities:
 Export rules:
 - export is a session-level action, not a destination
 - export is available from the top app bar on `Overview` and `Charts`
-- export opens a bottom sheet with packet, raw-fragment, and diagnostic-log actions
+- export opens a bottom sheet with packet, channel-csv, raw-fragment, and diagnostic-log actions
 - export does not own file generation logic; it only invokes existing feature/storage flows
 
 ## State Boundaries
