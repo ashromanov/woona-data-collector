@@ -10,15 +10,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
+    primary = AppThemeTokens.purple80,
+    secondary = AppThemeTokens.purpleGrey80,
+    tertiary = AppThemeTokens.pink80
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
+    primary = AppThemeTokens.purple40,
+    secondary = AppThemeTokens.purpleGrey40,
+    tertiary = AppThemeTokens.pink40
 
     /* Other default colors to override
     background = Color(0xFFFFFBFE),
@@ -33,11 +33,16 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun MyApplicationTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    themeMode: AppThemeMode = AppThemeMode.SYSTEM,
     // minSdk is Android 13+, so dynamic color is always available when enabled.
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
+    val darkTheme = when (themeMode) {
+        AppThemeMode.SYSTEM -> isSystemInDarkTheme()
+        AppThemeMode.LIGHT -> false
+        AppThemeMode.DARK -> true
+    }
     val colorScheme = when {
         dynamicColor -> {
             val context = LocalContext.current
@@ -50,7 +55,22 @@ fun MyApplicationTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = Typography,
+        typography = AppTypography.material3,
         content = content
     )
+}
+
+object AppThemeEntryPoint {
+    @Composable
+    fun Render(
+        themeMode: AppThemeMode = AppThemeMode.SYSTEM,
+        dynamicColor: Boolean = true,
+        content: @Composable () -> Unit,
+    ) {
+        MyApplicationTheme(
+            themeMode = themeMode,
+            dynamicColor = dynamicColor,
+            content = content,
+        )
+    }
 }

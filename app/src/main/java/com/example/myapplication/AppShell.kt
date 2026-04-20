@@ -42,12 +42,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.myapplication.ble.BleTransportProfile
 import com.example.myapplication.feature.device.ChartWindowPreset
-import com.example.myapplication.feature.device.DeviceChartsScreen
-import com.example.myapplication.feature.device.DeviceOverviewScreen
-import com.example.myapplication.feature.device.DeviceSettingsScreen
+import com.example.myapplication.feature.device.DeviceScreenEntryPoint
 import com.example.myapplication.feature.device.DeviceUiState
 import com.example.myapplication.localization.AppLanguage
 import com.example.myapplication.localization.appStringResource
+import com.example.myapplication.ui.theme.AppThemeMode
 
 private enum class AppDestination(
     val titleRes: Int,
@@ -80,10 +79,12 @@ private enum class AppDestination(
 fun DeviceAppShell(
     uiState: DeviceUiState,
     selectedLanguage: AppLanguage,
+    selectedThemeMode: AppThemeMode,
     onStartScan: () -> Unit,
     onConnect: (String) -> Unit,
     onTransportProfileSelect: (BleTransportProfile) -> Unit,
     onLanguageSelect: (AppLanguage) -> Unit,
+    onThemeModeSelect: (AppThemeMode) -> Unit,
     onDisconnect: () -> Unit,
     onSensorSelect: (Int) -> Unit,
     onChannelSelect: (Int) -> Unit,
@@ -149,7 +150,7 @@ fun DeviceAppShell(
                 .padding(innerPadding),
         ) {
             when (selectedDestination) {
-                AppDestination.OVERVIEW -> DeviceOverviewScreen(
+                AppDestination.OVERVIEW -> DeviceScreenEntryPoint.Overview(
                     uiState = uiState,
                     onStartScan = onStartScan,
                     onConnect = onConnect,
@@ -158,7 +159,7 @@ fun DeviceAppShell(
                     onReplayRequest = onReplayRequest,
                 )
 
-                AppDestination.CHARTS -> DeviceChartsScreen(
+                AppDestination.CHARTS -> DeviceScreenEntryPoint.Charts(
                     uiState = uiState,
                     onSensorSelect = onSensorSelect,
                     onChannelSelect = onChannelSelect,
@@ -173,11 +174,13 @@ fun DeviceAppShell(
                     onChartZoomGesture = onChartZoomGesture,
                 )
 
-                AppDestination.SETTINGS -> DeviceSettingsScreen(
+                AppDestination.SETTINGS -> DeviceScreenEntryPoint.Settings(
                     uiState = uiState,
                     selectedLanguage = selectedLanguage,
+                    selectedThemeMode = selectedThemeMode,
                     onTransportProfileSelect = onTransportProfileSelect,
                     onLanguageSelect = onLanguageSelect,
+                    onThemeModeSelect = onThemeModeSelect,
                 )
             }
         }
@@ -210,11 +213,31 @@ fun DeviceAppShell(
 
 @Composable
 private fun ConnectionStatusBadge(uiState: DeviceUiState) {
+    val colorScheme = MaterialTheme.colorScheme
     val (label, containerColor, contentColor) = when {
-        uiState.isReplayRunning -> Triple(appStringResource(R.string.status_replay), Color(0xFFE3F2FD), Color(0xFF1565C0))
-        uiState.isConnected -> Triple(appStringResource(R.string.status_connected), Color(0xFFE8F5E9), Color(0xFF2E7D32))
-        uiState.isScanning -> Triple(appStringResource(R.string.status_scanning), Color(0xFFFFF3E0), Color(0xFFEF6C00))
-        else -> Triple(appStringResource(R.string.status_idle), Color(0xFFF1F3F5), Color(0xFF455A64))
+        uiState.isReplayRunning -> Triple(
+            appStringResource(R.string.status_replay),
+            colorScheme.tertiaryContainer,
+            colorScheme.onTertiaryContainer,
+        )
+
+        uiState.isConnected -> Triple(
+            appStringResource(R.string.status_connected),
+            colorScheme.primaryContainer,
+            colorScheme.onPrimaryContainer,
+        )
+
+        uiState.isScanning -> Triple(
+            appStringResource(R.string.status_scanning),
+            colorScheme.secondaryContainer,
+            colorScheme.onSecondaryContainer,
+        )
+
+        else -> Triple(
+            appStringResource(R.string.status_idle),
+            colorScheme.surfaceVariant,
+            colorScheme.onSurfaceVariant,
+        )
     }
 
     Surface(
@@ -237,7 +260,7 @@ private fun AppBottomNavigation(
     onDestinationSelected: (AppDestination) -> Unit,
 ) {
     Surface(
-        color = Color(0xFFF4EFE8),
+        color = MaterialTheme.colorScheme.surfaceContainer,
         tonalElevation = 6.dp,
         shadowElevation = 10.dp,
         modifier = Modifier
@@ -270,8 +293,9 @@ private fun ShellNavItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val containerColor = if (selected) Color(0xFFE4DDD1) else Color.Transparent
-    val titleColor = if (selected) Color(0xFF223133) else Color(0xFF5C676A)
+    val colorScheme = MaterialTheme.colorScheme
+    val containerColor = if (selected) colorScheme.secondaryContainer else Color.Transparent
+    val titleColor = if (selected) colorScheme.onSecondaryContainer else colorScheme.onSurfaceVariant
 
     Surface(
         color = containerColor,
@@ -331,7 +355,7 @@ private fun ExportSheet(
         Text(
             text = appStringResource(R.string.export_choose_artifact),
             style = MaterialTheme.typography.bodySmall,
-            color = Color.Gray,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         ExportActionButton(
             title = appStringResource(R.string.export_compiled_binary),
@@ -384,9 +408,75 @@ private fun ExportActionButton(
                 Text(
                     text = description,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
+    }
+}
+
+object AppShellEntryPoint {
+    @OptIn(ExperimentalMaterial3Api::class)
+    @Composable
+    fun Render(
+        uiState: DeviceUiState,
+        selectedLanguage: AppLanguage,
+        selectedThemeMode: AppThemeMode,
+        onStartScan: () -> Unit,
+        onConnect: (String) -> Unit,
+        onTransportProfileSelect: (BleTransportProfile) -> Unit,
+        onLanguageSelect: (AppLanguage) -> Unit,
+        onThemeModeSelect: (AppThemeMode) -> Unit,
+        onDisconnect: () -> Unit,
+        onSensorSelect: (Int) -> Unit,
+        onChannelSelect: (Int) -> Unit,
+        onChartWindowSelect: (ChartWindowPreset) -> Unit,
+        onFollowLiveChange: (Boolean) -> Unit,
+        onChartPanLeft: () -> Unit,
+        onChartPanRight: () -> Unit,
+        onChartZoomIn: () -> Unit,
+        onChartZoomOut: () -> Unit,
+        onChartZoomReset: () -> Unit,
+        onChartPanGesture: (Float) -> Unit,
+        onChartZoomGesture: (Float, Float) -> Unit,
+        canSharePacketFile: Boolean,
+        canShareRawFile: Boolean,
+        canShareLogFile: Boolean,
+        onSharePacketFile: () -> Unit,
+        onShareRawFile: () -> Unit,
+        onShareLogFile: () -> Unit,
+        showReplayAction: Boolean,
+        onReplayRequest: () -> Unit,
+    ) {
+        DeviceAppShell(
+            uiState = uiState,
+            selectedLanguage = selectedLanguage,
+            selectedThemeMode = selectedThemeMode,
+            onStartScan = onStartScan,
+            onConnect = onConnect,
+            onTransportProfileSelect = onTransportProfileSelect,
+            onLanguageSelect = onLanguageSelect,
+            onThemeModeSelect = onThemeModeSelect,
+            onDisconnect = onDisconnect,
+            onSensorSelect = onSensorSelect,
+            onChannelSelect = onChannelSelect,
+            onChartWindowSelect = onChartWindowSelect,
+            onFollowLiveChange = onFollowLiveChange,
+            onChartPanLeft = onChartPanLeft,
+            onChartPanRight = onChartPanRight,
+            onChartZoomIn = onChartZoomIn,
+            onChartZoomOut = onChartZoomOut,
+            onChartZoomReset = onChartZoomReset,
+            onChartPanGesture = onChartPanGesture,
+            onChartZoomGesture = onChartZoomGesture,
+            canSharePacketFile = canSharePacketFile,
+            canShareRawFile = canShareRawFile,
+            canShareLogFile = canShareLogFile,
+            onSharePacketFile = onSharePacketFile,
+            onShareRawFile = onShareRawFile,
+            onShareLogFile = onShareLogFile,
+            showReplayAction = showReplayAction,
+            onReplayRequest = onReplayRequest,
+        )
     }
 }

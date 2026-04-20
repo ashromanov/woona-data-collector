@@ -25,7 +25,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.IconButton
@@ -34,6 +33,9 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -54,6 +56,7 @@ import com.example.myapplication.R
 import com.example.myapplication.ble.BleTransportProfile
 import com.example.myapplication.localization.AppLanguage
 import com.example.myapplication.localization.appStringResource
+import com.example.myapplication.ui.theme.AppThemeMode
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -158,8 +161,10 @@ fun DeviceChartsScreen(
 fun DeviceSettingsScreen(
     uiState: DeviceUiState,
     selectedLanguage: AppLanguage,
+    selectedThemeMode: AppThemeMode,
     onTransportProfileSelect: (BleTransportProfile) -> Unit,
     onLanguageSelect: (AppLanguage) -> Unit,
+    onThemeModeSelect: (AppThemeMode) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
@@ -176,9 +181,9 @@ fun DeviceSettingsScreen(
         }
 
         item {
-            SettingsPlaceholderCard(
-                title = appStringResource(R.string.settings_theme_title),
-                description = appStringResource(R.string.settings_theme_desc),
+            ThemeSettingsCard(
+                selectedThemeMode = selectedThemeMode,
+                onThemeModeSelect = onThemeModeSelect,
             )
         }
 
@@ -284,11 +289,11 @@ private fun ErrorCard(message: String) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 8.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
     ) {
         Text(
             text = message,
-            color = Color(0xFFB00020),
+            color = MaterialTheme.colorScheme.onErrorContainer,
             modifier = Modifier.padding(10.dp),
         )
     }
@@ -309,7 +314,7 @@ private fun DeviceDiscoverySection(
     }
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFAFAFA)),
+        colors = appCardColors(),
     ) {
         Column(
             modifier = Modifier
@@ -321,7 +326,7 @@ private fun DeviceDiscoverySection(
             Text(
                 text = appStringResource(R.string.ble_devices_desc),
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray,
+                color = supportingTextColor(),
             )
             Spacer(Modifier.height(8.dp))
             Button(
@@ -349,7 +354,7 @@ private fun DeviceDiscoverySection(
                         appStringResource(R.string.ble_devices_empty)
                     },
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray,
+                    color = supportingTextColor(),
                 )
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -364,7 +369,7 @@ private fun DeviceDiscoverySection(
                                 Text(
                                     text = device.address,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Color.Gray,
+                                    color = supportingTextColor(),
                                 )
                             }
                         }
@@ -379,7 +384,7 @@ private fun DeviceDiscoverySection(
 private fun DisconnectCard(onDisconnect: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFAFAFA)),
+        colors = appCardColors(),
     ) {
         Column(
             modifier = Modifier
@@ -407,7 +412,7 @@ private fun EventLogSection(uiState: DeviceUiState) {
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFAFAFA)),
+        colors = appCardColors(),
     ) {
         Column(
             modifier = Modifier
@@ -419,36 +424,61 @@ private fun EventLogSection(uiState: DeviceUiState) {
             Text(
                 text = appStringResource(R.string.latest_events_desc),
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray,
+                color = supportingTextColor(),
             )
         }
     }
 }
 
 @Composable
-private fun SettingsPlaceholderCard(
-    title: String,
-    description: String,
+private fun ThemeSettingsCard(
+    selectedThemeMode: AppThemeMode,
+    onThemeModeSelect: (AppThemeMode) -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFAFAFA)),
+        colors = appCardColors(),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(title, style = MaterialTheme.typography.labelMedium)
-            Spacer(Modifier.height(4.dp))
+            Text(appStringResource(R.string.settings_theme_title), style = MaterialTheme.typography.labelMedium)
             Text(
-                text = description,
+                text = appStringResource(R.string.settings_theme_desc),
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray,
+                color = supportingTextColor(),
             )
+            SingleChoiceSegmentedButtonRow(
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                AppThemeMode.entries.forEachIndexed { index, themeMode ->
+                    SegmentedButton(
+                        selected = selectedThemeMode == themeMode,
+                        onClick = { onThemeModeSelect(themeMode) },
+                        shape = SegmentedButtonDefaults.itemShape(
+                            index = index,
+                            count = AppThemeMode.entries.size,
+                        ),
+                        label = {
+                            Text(appStringResource(themeMode.labelRes))
+                        },
+                    )
+                }
+            }
         }
     }
 }
+
+@Composable
+private fun appCardColors() = CardDefaults.cardColors(
+    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+)
+
+@Composable
+private fun supportingTextColor(): Color = MaterialTheme.colorScheme.onSurfaceVariant
 
 @Composable
 private fun LanguageSettingsCard(
@@ -457,7 +487,7 @@ private fun LanguageSettingsCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFAFAFA)),
+        colors = appCardColors(),
     ) {
         Column(
             modifier = Modifier
@@ -469,7 +499,7 @@ private fun LanguageSettingsCard(
             Text(
                 text = appStringResource(R.string.settings_language_desc),
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray,
+                color = supportingTextColor(),
             )
             Column(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -511,7 +541,7 @@ private fun LanguageOptionRow(
         Text(
             text = languageDisplayName(language),
             style = MaterialTheme.typography.bodyMedium,
-            color = Color(0xFF37474F),
+            color = MaterialTheme.colorScheme.onSurface,
         )
     }
 }
@@ -579,7 +609,7 @@ private fun ScanSection(
                         Text(
                             text = device.address,
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color.Gray,
+                            color = supportingTextColor(),
                         )
                     }
                 }
@@ -658,7 +688,7 @@ private fun BleTransportProfileCard(
 ) {
     Card(
         modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFAFAFA)),
+        colors = appCardColors(),
     ) {
         Column(
             modifier = Modifier
@@ -670,7 +700,7 @@ private fun BleTransportProfileCard(
             Text(
                 text = appStringResource(R.string.ble_transport_profile_desc),
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray,
+                color = supportingTextColor(),
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -694,14 +724,14 @@ private fun BleTransportProfileCard(
             Text(
                 text = appStringResource(selectedProfile.shortDescriptionRes),
                 style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFF37474F),
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 selectedProfile.detailedDescriptionResIds.forEach { lineResId ->
                     Text(
                         text = "• ${appStringResource(lineResId)}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF455A64),
+                        color = supportingTextColor(),
                     )
                 }
             }
@@ -765,7 +795,7 @@ private fun SessionSummaryCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
     ) {
         Column(
             modifier = Modifier
@@ -774,7 +804,10 @@ private fun SessionSummaryCard(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             if (uiState.isReplayRunning) {
-                Text(appStringResource(R.string.debug_replay), color = Color(0xFF1565C0))
+                Text(
+                    appStringResource(R.string.debug_replay),
+                    color = MaterialTheme.colorScheme.tertiary,
+                )
                 Spacer(Modifier.height(8.dp))
             }
 
@@ -785,17 +818,17 @@ private fun SessionSummaryCard(
                 SummaryMetric(
                     label = appStringResource(R.string.summary_packets_received),
                     value = "${uiState.packetsReceived}",
-                    color = Color(0xFF2E7D32),
+                    color = MaterialTheme.colorScheme.primary,
                 )
                 SummaryMetric(
                     label = appStringResource(R.string.summary_gap),
                     value = "${uiState.packetsLost}",
-                    color = if (uiState.packetsLost > 0) Color.Red else Color.Gray,
+                    color = if (uiState.packetsLost > 0) MaterialTheme.colorScheme.error else supportingTextColor(),
                 )
                 SummaryMetric(
                     label = appStringResource(R.string.summary_rejected),
                     value = "${uiState.packetsRejected}",
-                    color = if (uiState.packetsRejected > 0) Color(0xFFB00020) else Color.Gray,
+                    color = if (uiState.packetsRejected > 0) MaterialTheme.colorScheme.error else supportingTextColor(),
                 )
             }
 
@@ -808,7 +841,7 @@ private fun SessionSummaryCard(
                         uiState.rawBytesReceived,
                     ),
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF455A64),
+                    color = supportingTextColor(),
                 )
             } else {
                 Spacer(Modifier.height(8.dp))
@@ -819,25 +852,29 @@ private fun SessionSummaryCard(
                         uiState.rawBytesReceived,
                     ),
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF455A64),
+                    color = supportingTextColor(),
                 )
                 Spacer(Modifier.height(8.dp))
                 StatusLine(
                     label = appStringResource(R.string.summary_last_issue),
                     value = uiState.lastPacketIssue ?: appStringResource(R.string.summary_none),
-                    valueColor = if (uiState.lastPacketIssue.isNullOrBlank()) Color.Gray else Color(0xFFB00020),
+                    valueColor = if (uiState.lastPacketIssue.isNullOrBlank()) supportingTextColor() else MaterialTheme.colorScheme.error,
                 )
                 Spacer(Modifier.height(4.dp))
                 StatusLine(
                     label = appStringResource(R.string.summary_timer_regressions),
                     value = "${uiState.timerRegressionRejects}",
-                    valueColor = if (uiState.timerRegressionRejects > 0) Color(0xFFB00020) else Color.Gray,
+                    valueColor = if (uiState.timerRegressionRejects > 0) MaterialTheme.colorScheme.error else supportingTextColor(),
                 )
                 Spacer(Modifier.height(4.dp))
                 StatusLine(
                     label = appStringResource(R.string.summary_rejection_breakdown),
                     value = uiState.rejectionBreakdown ?: appStringResource(R.string.summary_none),
-                    valueColor = if (uiState.rejectionBreakdown.isNullOrBlank()) Color.Gray else Color(0xFF6D4C41),
+                    valueColor = if (uiState.rejectionBreakdown.isNullOrBlank()) {
+                        supportingTextColor()
+                    } else {
+                        MaterialTheme.colorScheme.tertiary
+                    },
                 )
             }
         }
@@ -864,7 +901,7 @@ private fun SummaryMetric(
 private fun DiagnosticEventsCard(uiState: DeviceUiState) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFAFAFA)),
+        colors = appCardColors(),
     ) {
         Column(
             modifier = Modifier
@@ -875,7 +912,7 @@ private fun DiagnosticEventsCard(uiState: DeviceUiState) {
             Text(
                 appStringResource(R.string.latest_events_order),
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray,
+                color = supportingTextColor(),
             )
             Spacer(Modifier.height(8.dp))
             val logState = rememberLazyListState()
@@ -914,7 +951,7 @@ private fun SensorSelector(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFAFAFA)),
+        colors = appCardColors(),
     ) {
         Column(
             modifier = Modifier
@@ -970,7 +1007,7 @@ private fun ChartControls(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFAFAFA)),
+        colors = appCardColors(),
     ) {
         Column(
             modifier = Modifier
@@ -1068,7 +1105,7 @@ private fun ChartStatusLine(uiState: DeviceUiState) {
             uiState.packetsRejected,
         ),
         style = MaterialTheme.typography.labelMedium,
-        color = Color(0xFF455A64),
+        color = supportingTextColor(),
         modifier = Modifier.fillMaxWidth(),
         textAlign = TextAlign.Center,
     )
@@ -1081,11 +1118,11 @@ private fun EmptyChartState(chart: ChartUiState) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text(appStringResource(R.string.chart_empty_state), color = Color.Gray)
+        Text(appStringResource(R.string.chart_empty_state), color = supportingTextColor())
         Text(
             appStringResource(R.string.chart_empty_state_window, chart.windowPreset.label),
             style = MaterialTheme.typography.bodySmall,
-            color = Color.Gray,
+            color = supportingTextColor(),
         )
     }
 }
@@ -1114,7 +1151,6 @@ private fun ActionButtons(
             Button(
                 onClick = onSharePacketFile,
                 modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6200EE)),
             ) {
                 Text(appStringResource(R.string.action_send_file))
             }
@@ -1139,12 +1175,13 @@ private fun ActionButtons(
     }
 }
 
+@Composable
 private fun diagnosticColor(type: PacketDiagnosticType): Color {
     return when (type) {
-        PacketDiagnosticType.INFO -> Color(0xFF1565C0)
-        PacketDiagnosticType.ACCEPTED -> Color(0xFF2E7D32)
-        PacketDiagnosticType.GAP -> Color(0xFFEF6C00)
-        PacketDiagnosticType.REJECTED -> Color(0xFFB00020)
+        PacketDiagnosticType.INFO -> MaterialTheme.colorScheme.primary
+        PacketDiagnosticType.ACCEPTED -> MaterialTheme.colorScheme.tertiary
+        PacketDiagnosticType.GAP -> MaterialTheme.colorScheme.secondary
+        PacketDiagnosticType.REJECTED -> MaterialTheme.colorScheme.error
     }
 }
 
@@ -1161,7 +1198,7 @@ private fun StatusLine(
         Text(
             text = "$label: ",
             style = MaterialTheme.typography.bodySmall,
-            color = Color(0xFF455A64),
+            color = supportingTextColor(),
         )
         Text(
             text = value,
@@ -1180,6 +1217,7 @@ private fun DeviceChart(
     val viewportStart = chart.viewportStartMillis ?: return
     val viewportEnd = chart.viewportEndMillis ?: return
     val sessionStart = chart.sessionStartMillis ?: viewportStart
+    val colorScheme = MaterialTheme.colorScheme
     val xTicks = buildXAxisTicks(viewportStart, viewportEnd, sessionStart)
     val yTicks = remember(chart.yAxisCenter, chart.yAxisAbsRange) {
         buildYAxisTicks(chart.yAxisCenter, chart.yAxisAbsRange)
@@ -1196,7 +1234,7 @@ private fun DeviceChart(
         Text(
             text = buildChartSummary(chart, sessionStart, viewportStart, viewportEnd),
             style = MaterialTheme.typography.labelSmall,
-            color = Color(0xFF455A64),
+            color = supportingTextColor(),
             modifier = Modifier.padding(horizontal = 4.dp),
         )
         Row(
@@ -1221,7 +1259,7 @@ private fun DeviceChart(
                         Text(
                             text = tick.label,
                             style = MaterialTheme.typography.labelSmall,
-                            color = Color.Gray,
+                            color = supportingTextColor(),
                         )
                     }
                 }
@@ -1263,7 +1301,11 @@ private fun DeviceChart(
                     yTicks.forEach { tick ->
                         val y = height - ((tick.value - minPoint) / range * height)
                         drawLine(
-                            color = if (tick.value == 0f) Color(0xFFD0D7DE) else Color(0xFFECEFF1),
+                            color = if (tick.value == 0f) {
+                                colorScheme.outline
+                            } else {
+                                colorScheme.outlineVariant
+                            },
                             start = Offset(0f, y),
                             end = Offset(width, y),
                             strokeWidth = if (tick.value == 0f) 2f else 1f,
@@ -1273,7 +1315,7 @@ private fun DeviceChart(
                     xTicks.forEach { tick ->
                         val x = ((tick.timeMillis - viewportStart) / timeRange) * width
                         drawLine(
-                            color = Color(0xFFF0F2F5),
+                            color = colorScheme.outlineVariant,
                             start = Offset(x, 0f),
                             end = Offset(x, height),
                             strokeWidth = 1f,
@@ -1295,7 +1337,7 @@ private fun DeviceChart(
 
                     drawPath(
                         path = path,
-                        color = Color(0xFF1565C0),
+                        color = colorScheme.primary,
                         style = Stroke(width = 3f),
                     )
                 }
@@ -1318,7 +1360,7 @@ private fun DeviceChart(
                             Text(
                                 text = tick.label,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color.Gray,
+                                color = supportingTextColor(),
                             )
                         }
                     }
@@ -1401,6 +1443,83 @@ private fun buildXAxisTicks(
 @Composable
 private fun languageDisplayName(language: AppLanguage): String {
     return appStringResource(language.displayNameRes)
+}
+
+object DeviceScreenEntryPoint {
+    @Composable
+    fun Overview(
+        uiState: DeviceUiState,
+        onStartScan: () -> Unit,
+        onConnect: (String) -> Unit,
+        onDisconnect: () -> Unit,
+        showReplayAction: Boolean,
+        onReplayRequest: () -> Unit,
+        modifier: Modifier = Modifier,
+    ) {
+        DeviceOverviewScreen(
+            uiState = uiState,
+            onStartScan = onStartScan,
+            onConnect = onConnect,
+            onDisconnect = onDisconnect,
+            showReplayAction = showReplayAction,
+            onReplayRequest = onReplayRequest,
+            modifier = modifier,
+        )
+    }
+
+    @Composable
+    fun Charts(
+        uiState: DeviceUiState,
+        onSensorSelect: (Int) -> Unit,
+        onChannelSelect: (Int) -> Unit,
+        onChartWindowSelect: (ChartWindowPreset) -> Unit,
+        onFollowLiveChange: (Boolean) -> Unit,
+        onChartPanLeft: () -> Unit,
+        onChartPanRight: () -> Unit,
+        onChartZoomIn: () -> Unit,
+        onChartZoomOut: () -> Unit,
+        onChartZoomReset: () -> Unit,
+        onChartPanGesture: (Float) -> Unit,
+        onChartZoomGesture: (Float, Float) -> Unit,
+        modifier: Modifier = Modifier,
+    ) {
+        DeviceChartsScreen(
+            uiState = uiState,
+            onSensorSelect = onSensorSelect,
+            onChannelSelect = onChannelSelect,
+            onChartWindowSelect = onChartWindowSelect,
+            onFollowLiveChange = onFollowLiveChange,
+            onChartPanLeft = onChartPanLeft,
+            onChartPanRight = onChartPanRight,
+            onChartZoomIn = onChartZoomIn,
+            onChartZoomOut = onChartZoomOut,
+            onChartZoomReset = onChartZoomReset,
+            onChartPanGesture = onChartPanGesture,
+            onChartZoomGesture = onChartZoomGesture,
+            modifier = modifier,
+        )
+    }
+
+    @Composable
+    fun Settings(
+        uiState: DeviceUiState,
+        selectedLanguage: AppLanguage,
+        selectedThemeMode: AppThemeMode,
+        onTransportProfileSelect: (BleTransportProfile) -> Unit,
+        onLanguageSelect: (AppLanguage) -> Unit,
+        onThemeModeSelect: (AppThemeMode) -> Unit,
+        modifier: Modifier = Modifier,
+    ) {
+        DeviceSettingsScreen(
+            uiState = uiState,
+            selectedLanguage = selectedLanguage,
+            selectedThemeMode = selectedThemeMode,
+            onTransportProfileSelect = onTransportProfileSelect,
+            onLanguageSelect = onLanguageSelect,
+            onThemeModeSelect = onThemeModeSelect,
+            modifier = modifier,
+        )
+    }
 }
 
 private data class AxisTick(

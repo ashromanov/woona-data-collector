@@ -10,12 +10,17 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.example.myapplication.AppShellEntryPoint
+import com.example.myapplication.DeviceFeatureModuleEntryPoint
 import com.example.myapplication.feature.device.DeviceFeatureController
 import com.example.myapplication.localization.AppLanguage
+import com.example.myapplication.localization.AppLocalizationEntryPoint
 import com.example.myapplication.localization.AppLanguagePreferences
-import com.example.myapplication.localization.AppLocalizationProvider
 import com.example.myapplication.localization.AppTextResolver
-import com.example.myapplication.ui.theme.MyApplicationTheme
+import com.example.myapplication.ui.theme.AppThemeMode
+import com.example.myapplication.ui.theme.AppThemeEntryPoint
+import com.example.myapplication.ui.theme.AppThemePreferences
+import com.example.myapplication.ui.theme.applyAppThemeMode
 import androidx.core.content.ContextCompat
 import java.util.UUID
 
@@ -32,7 +37,11 @@ class MainActivity : ComponentActivity() {
     private val appLanguagePreferences by lazy {
         AppLanguagePreferences(applicationContext)
     }
+    private val appThemePreferences by lazy {
+        AppThemePreferences(applicationContext)
+    }
     private var selectedLanguage by mutableStateOf(AppLanguage.ENGLISH)
+    private var selectedThemeMode by mutableStateOf(AppThemeMode.SYSTEM)
     private val appTextResolver by lazy {
         AppTextResolver(applicationContext) { selectedLanguage }
     }
@@ -80,7 +89,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private val deviceFeatureController: DeviceFeatureController by lazy {
-        createDeviceFeatureController(
+        DeviceFeatureModuleEntryPoint.create(
             context = this,
             filesDir = filesDir,
             fileProviderAuthority = "com.example.myapplication.provider",
@@ -92,21 +101,25 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        selectedLanguage = appLanguagePreferences.selectedLanguage()
+        selectedThemeMode = appThemePreferences.selectedThemeMode()
+        applyThemeMode(selectedThemeMode)
+
         super.onCreate(savedInstanceState)
 
-        selectedLanguage = appLanguagePreferences.selectedLanguage()
         deviceFeatureController
         enableEdgeToEdge()
         setContent {
-            AppLocalizationProvider(
+            AppLocalizationEntryPoint.Provide(
                 language = selectedLanguage,
                 textResolver = appTextResolver,
             ) {
                 val uiState = deviceFeatureController.uiState
-                MyApplicationTheme {
-                    DeviceAppShell(
+                AppThemeEntryPoint.Render(themeMode = selectedThemeMode) {
+                    AppShellEntryPoint.Render(
                         uiState = uiState,
                         selectedLanguage = selectedLanguage,
+                        selectedThemeMode = selectedThemeMode,
                         onStartScan = {
                             deviceFeatureController.onStartScanRequested(
                                 hasPermissions = ::hasBlePermissions,
@@ -122,6 +135,11 @@ class MainActivity : ComponentActivity() {
                         onLanguageSelect = { language ->
                             appLanguagePreferences.setSelectedLanguage(language)
                             selectedLanguage = language
+                        },
+                        onThemeModeSelect = { themeMode ->
+                            appThemePreferences.setSelectedThemeMode(themeMode)
+                            selectedThemeMode = themeMode
+                            applyThemeMode(themeMode)
                         },
                         onDisconnect = { deviceFeatureController.onDisconnectRequested() },
                         onSensorSelect = { type -> deviceFeatureController.onSensorSelected(type) },
@@ -180,5 +198,9 @@ class MainActivity : ComponentActivity() {
         return blePermissions.all { permission ->
             ContextCompat.checkSelfPermission(this, permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
         }
+    }
+
+    private fun applyThemeMode(themeMode: AppThemeMode) {
+        applyAppThemeMode(this, themeMode)
     }
 }

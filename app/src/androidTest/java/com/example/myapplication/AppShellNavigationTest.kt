@@ -20,6 +20,7 @@ import com.example.myapplication.feature.device.DeviceUiState
 import com.example.myapplication.localization.AppLanguage
 import com.example.myapplication.localization.AppLocalizationProvider
 import com.example.myapplication.localization.AppTextResolver
+import com.example.myapplication.ui.theme.AppThemeMode
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -120,14 +121,31 @@ class AppShellNavigationTest {
         composeRule.onNodeWithText("Y Reset").assertIsDisplayed()
     }
 
+    @Test
+    fun settingsThemeControl_emitsSelectionChanges() {
+        var selectedThemeMode = AppThemeMode.SYSTEM
+        setShellContent(
+            onThemeModeSelect = { themeMode -> selectedThemeMode = themeMode },
+        )
+
+        navTab("Settings").performClick()
+        composeRule.onNodeWithText("Dark").assertIsDisplayed().performClick()
+
+        composeRule.runOnIdle {
+            assertEquals(AppThemeMode.DARK, selectedThemeMode)
+        }
+    }
+
     private fun setShellContent(
         uiState: DeviceUiState = DeviceUiState(),
         canSharePacketFile: Boolean = false,
         canShareRawFile: Boolean = false,
         canShareLogFile: Boolean = false,
+        selectedThemeMode: AppThemeMode = AppThemeMode.SYSTEM,
         onSharePacketFile: () -> Unit = {},
         onShareRawFile: () -> Unit = {},
         onShareLogFile: () -> Unit = {},
+        onThemeModeSelect: (AppThemeMode) -> Unit = {},
     ) {
         composeRule.setContent {
             AppLocalizationProvider(
@@ -139,10 +157,12 @@ class AppShellNavigationTest {
                         DeviceAppShell(
                             uiState = uiState,
                             selectedLanguage = AppLanguage.ENGLISH,
+                            selectedThemeMode = selectedThemeMode,
                             onStartScan = {},
                             onConnect = {},
                             onTransportProfileSelect = {},
                             onLanguageSelect = {},
+                            onThemeModeSelect = onThemeModeSelect,
                             onDisconnect = {},
                             onSensorSelect = {},
                             onChannelSelect = {},

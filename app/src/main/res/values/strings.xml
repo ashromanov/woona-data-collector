@@ -21,7 +21,10 @@
     <string name="export_session_log_desc">Connection events, warnings, and packet diagnostics for the session.</string>
 
     <string name="settings_theme_title">Theme</string>
-    <string name="settings_theme_desc">Theme controls will live here once the app shell baseline is in place.</string>
+    <string name="settings_theme_desc">Choose whether the app follows the system appearance or always uses a light or dark theme.</string>
+    <string name="settings_theme_mode_system">System</string>
+    <string name="settings_theme_mode_light">Light</string>
+    <string name="settings_theme_mode_dark">Dark</string>
     <string name="settings_language_title">Language</string>
     <string name="settings_language_desc">Choose the app language for the entire shell and device flow.</string>
     <string name="settings_current_language">Current language: %1$s</string>
@@ -47,7 +50,7 @@
 
     <string name="ble_transport_profile_title">BLE transport profile</string>
     <string name="ble_transport_profile_desc">Applies on the next BLE connection. Use it to compare phone compatibility.</string>
-    <string name="transport_profile_default">Default</string>
+    <string name="transport_profile_default">Maximum performance</string>
     <string name="transport_profile_default_short">High priority, MTU 512 request, 2M PHY request.</string>
     <string name="transport_profile_default_detail_1">Requests HIGH connection priority.</string>
     <string name="transport_profile_default_detail_2">Requests MTU 512 and continues even if the stack negotiates lower.</string>

@@ -173,3 +173,33 @@ fun createDeviceFeatureController(
     )
     return requireNotNull(deviceFeatureController)
 }
+
+object DeviceFeatureModuleEntryPoint {
+    fun create(
+        context: Context,
+        filesDir: File,
+        fileProviderAuthority: String,
+        serviceUuid: UUID,
+        characteristicUuid: UUID,
+        descriptorUuid: UUID,
+        packetCaptureControllerFactory: ((DeviceUiStateHolder, Handler) -> PacketCaptureController)? = null,
+        bleSessionControllerFactory: ((BleSessionListener) -> BleSessionController)? = null,
+        fileShareIntentFactory: FileShareIntentFactory? = null,
+        appTextResolver: AppTextResolver = AppTextResolver(context.applicationContext) {
+            AppLanguage.defaultFrom()
+        },
+    ): DeviceFeatureController {
+        return createDeviceFeatureController(
+            context = context,
+            filesDir = filesDir,
+            fileProviderAuthority = fileProviderAuthority,
+            serviceUuid = serviceUuid,
+            characteristicUuid = characteristicUuid,
+            descriptorUuid = descriptorUuid,
+            packetCaptureControllerFactory = packetCaptureControllerFactory,
+            bleSessionControllerFactory = bleSessionControllerFactory,
+            fileShareIntentFactory = fileShareIntentFactory,
+            appTextResolver = appTextResolver,
+        )
+    }
+}

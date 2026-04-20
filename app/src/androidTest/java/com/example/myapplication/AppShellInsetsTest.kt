@@ -18,6 +18,7 @@ import com.example.myapplication.feature.device.DeviceUiState
 import com.example.myapplication.localization.AppLanguage
 import com.example.myapplication.localization.AppLocalizationProvider
 import com.example.myapplication.localization.AppTextResolver
+import com.example.myapplication.ui.theme.AppThemeMode
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -124,10 +125,12 @@ class AppShellInsetsTest {
                         DeviceAppShell(
                             uiState = uiState,
                             selectedLanguage = AppLanguage.ENGLISH,
+                            selectedThemeMode = AppThemeMode.SYSTEM,
                             onStartScan = {},
                             onConnect = {},
                             onTransportProfileSelect = {},
                             onLanguageSelect = {},
+                            onThemeModeSelect = {},
                             onDisconnect = {},
                             onSensorSelect = {},
                             onChannelSelect = {},

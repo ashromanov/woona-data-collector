@@ -32,3 +32,7 @@ val Typography = Typography(
     )
     */
 )
+
+object AppTypography {
+    val material3 = Typography
+}
