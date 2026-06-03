@@ -176,7 +176,7 @@ class BleSessionCsvExporter(
         const val COLUMN_DEVICE_TIMER_MILLIS = "device_timer_millis"
         const val COLUMN_SAMPLE_TIMER_MILLIS = "sample_timer_millis"
         const val CSV_SEPARATOR = ','
-        val DEFAULT_TIME_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS")
+        val DEFAULT_TIME_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss.SSS")
 
         fun sensorNamePrefix(sensorType: Int): String {
             return when (sensorType) {
