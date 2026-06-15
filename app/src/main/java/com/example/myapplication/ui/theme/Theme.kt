@@ -34,7 +34,7 @@ private val LightColorScheme = lightColorScheme(
 @Composable
 fun MyApplicationTheme(
     themeMode: AppThemeMode = AppThemeMode.SYSTEM,
-    // minSdk is Android 13+, so dynamic color is always available when enabled.
+    // minSdk is Android 12+, so dynamic color is always available when enabled.
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {

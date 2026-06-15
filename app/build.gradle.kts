@@ -3,6 +3,17 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+val androidSigningStoreFile = providers.environmentVariable("ANDROID_SIGNING_STORE_FILE")
+val androidSigningStorePassword = providers.environmentVariable("ANDROID_SIGNING_STORE_PASSWORD")
+val androidSigningKeyAlias = providers.environmentVariable("ANDROID_SIGNING_KEY_ALIAS")
+val androidSigningKeyPassword = providers.environmentVariable("ANDROID_SIGNING_KEY_PASSWORD")
+val hasAndroidSigningConfig = listOf(
+    androidSigningStoreFile,
+    androidSigningStorePassword,
+    androidSigningKeyAlias,
+    androidSigningKeyPassword,
+).all { it.isPresent }
+
 android {
     namespace = "com.example.myapplication"
     compileSdk {
@@ -13,7 +24,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.myapplication"
-        minSdk = 33
+        minSdk = 31
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -21,9 +32,23 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (hasAndroidSigningConfig) {
+            create("release") {
+                storeFile = file(androidSigningStoreFile.get())
+                storePassword = androidSigningStorePassword.get()
+                keyAlias = androidSigningKeyAlias.get()
+                keyPassword = androidSigningKeyPassword.get()
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (hasAndroidSigningConfig) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

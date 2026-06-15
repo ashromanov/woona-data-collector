@@ -8,14 +8,14 @@ The current implementation concentrates nearly all logic in `MainActivity`. That
 
 ## Platform Baseline
 
-- `minSdk = 33` (Android 13+ only)
-- No Android 12 or lower compatibility paths
+- `minSdk = 31` (Android 12+ only)
+- Android 12 compatibility paths are allowed only at platform API boundaries
 - One BLE permission model only:
   - `BLUETOOTH_SCAN`
   - `BLUETOOTH_CONNECT`
-- Use only modern Android 13+ GATT callback forms
+- Prefer modern Android 13+ GATT forms, with API 31-32 fallbacks where required
 
-This is intentional. Supporting Android 12 and below adds permission branching, deprecated callbacks, and more lifecycle edge cases without helping the current project goals.
+This is intentional. Android 12 is the compatibility floor for the modern Nearby Devices Bluetooth permission model, while older Android versions still require additional permission branching and lifecycle edge cases that do not help the current project goals.
 
 ## Design Principles
 
@@ -262,7 +262,7 @@ This can begin as a lightweight fake-driven integration test before full instrum
 
 Refactoring should happen in this order:
 
-1. Raise platform floor to Android 13+ and delete pre-13 compatibility code.
+1. Keep platform support at Android 12+ and isolate Android 12 BLE compatibility code at API boundaries.
 2. Extract packet framing, parsing, and counters from `MainActivity` into plain Kotlin classes.
 3. Extract BLE scan/connect/subscribe logic into a session component behind an interface.
 4. Extract file persistence into a storage component.

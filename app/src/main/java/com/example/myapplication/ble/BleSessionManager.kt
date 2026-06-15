@@ -14,6 +14,7 @@ import android.bluetooth.BluetoothStatusCodes
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.content.Context
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -353,10 +354,7 @@ class BleSessionManager(
             }
 
             pendingNotificationDescriptorUuid = descriptor.uuid
-            val writeResult = gatt.writeDescriptor(
-                descriptor,
-                BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE,
-            )
+            val writeResult = writeNotificationDescriptor(gatt, descriptor)
 
             if (writeResult != BluetoothStatusCodes.SUCCESS) {
                 pendingNotificationDescriptorUuid = null
@@ -404,38 +402,24 @@ class BleSessionManager(
             listener.onCaptureReady()
         }
 
+        @Suppress("DEPRECATION")
+        override fun onCharacteristicChanged(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+        ) {
+            if (bluetoothGatt !== gatt) return
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) return
+            val value = characteristic.value?.clone() ?: return
+            handleCharacteristicChanged(value)
+        }
+
         override fun onCharacteristicChanged(
             gatt: BluetoothGatt,
             characteristic: BluetoothGattCharacteristic,
             value: ByteArray,
         ) {
-            val nowElapsedRealtimeMs = SystemClock.elapsedRealtime()
-            val previousNotificationElapsedRealtimeMs = lastNotificationElapsedRealtimeMs
-            lastNotificationElapsedRealtimeMs = nowElapsedRealtimeMs
-            notificationCount++
-            if (previousNotificationElapsedRealtimeMs != null) {
-                val gapMillis = (nowElapsedRealtimeMs - previousNotificationElapsedRealtimeMs).coerceAtLeast(0L)
-                notificationGapSampleCount++
-                notificationGapTotalMillis += gapMillis
-                notificationGapMaxMillis = maxOf(notificationGapMaxMillis, gapMillis)
-                val longGapThresholdMillis = longNotificationGapThresholdMillis()
-                if (gapMillis >= longGapThresholdMillis) {
-                    longNotificationGapCount++
-                    if (nowElapsedRealtimeMs - lastLongGapLoggedElapsedRealtimeMs >= LONG_GAP_LOG_COOLDOWN_MS) {
-                        lastLongGapLoggedElapsedRealtimeMs = nowElapsedRealtimeMs
-                        emitDiagnostic(
-                            message = appTextResolver.getString(
-                                R.string.ble_notification_gap,
-                                gapMillis,
-                                longGapThresholdMillis,
-                                notificationCount,
-                            ),
-                            level = DiagnosticLevel.WARNING,
-                        )
-                    }
-                }
-            }
-            listener.onPacketReceived(value.clone())
+            if (bluetoothGatt !== gatt) return
+            handleCharacteristicChanged(value)
         }
     }
 
@@ -576,21 +560,31 @@ class BleSessionManager(
         }
     }
 
+    @SuppressLint("MissingPermission")
     private fun requestPreferredPhy(
         gatt: BluetoothGatt,
         profile: BleTransportProfile,
     ) {
         when (profile.preferredPhy) {
             PreferredPhyMode.LE_2M -> {
+                if (!hasConnectPermission()) {
+                    listener.onError(appTextResolver.getString(R.string.ble_missing_connect_permission))
+                    return
+                }
+
                 emitDiagnostic(
                     message = appTextResolver.getString(R.string.ble_requested_preferred_phy),
                     level = DiagnosticLevel.INFO,
                 )
-                gatt.setPreferredPhy(
-                    BluetoothDevice.PHY_LE_2M_MASK,
-                    BluetoothDevice.PHY_LE_2M_MASK,
-                    BluetoothDevice.PHY_OPTION_NO_PREFERRED,
-                )
+                try {
+                    gatt.setPreferredPhy(
+                        BluetoothDevice.PHY_LE_2M_MASK,
+                        BluetoothDevice.PHY_LE_2M_MASK,
+                        BluetoothDevice.PHY_OPTION_NO_PREFERRED,
+                    )
+                } catch (exception: SecurityException) {
+                    listener.onError(appTextResolver.getString(R.string.ble_missing_connect_permission), exception)
+                }
             }
 
             PreferredPhyMode.SYSTEM_DEFAULT -> {
@@ -600,6 +594,66 @@ class BleSessionManager(
                 )
             }
         }
+    }
+
+    @Suppress("DEPRECATION")
+    @SuppressLint("MissingPermission")
+    private fun writeNotificationDescriptor(
+        gatt: BluetoothGatt,
+        descriptor: BluetoothGattDescriptor,
+    ): Int {
+        if (!hasConnectPermission()) {
+            return BluetoothStatusCodes.ERROR_MISSING_BLUETOOTH_CONNECT_PERMISSION
+        }
+
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                gatt.writeDescriptor(
+                    descriptor,
+                    BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE,
+                )
+            } else {
+                if (!descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)) {
+                    BluetoothStatusCodes.ERROR_UNKNOWN
+                } else if (gatt.writeDescriptor(descriptor)) {
+                    BluetoothStatusCodes.SUCCESS
+                } else {
+                    BluetoothStatusCodes.ERROR_UNKNOWN
+                }
+            }
+        } catch (_: SecurityException) {
+            BluetoothStatusCodes.ERROR_MISSING_BLUETOOTH_CONNECT_PERMISSION
+        }
+    }
+
+    private fun handleCharacteristicChanged(value: ByteArray) {
+        val nowElapsedRealtimeMs = SystemClock.elapsedRealtime()
+        val previousNotificationElapsedRealtimeMs = lastNotificationElapsedRealtimeMs
+        lastNotificationElapsedRealtimeMs = nowElapsedRealtimeMs
+        notificationCount++
+        if (previousNotificationElapsedRealtimeMs != null) {
+            val gapMillis = (nowElapsedRealtimeMs - previousNotificationElapsedRealtimeMs).coerceAtLeast(0L)
+            notificationGapSampleCount++
+            notificationGapTotalMillis += gapMillis
+            notificationGapMaxMillis = maxOf(notificationGapMaxMillis, gapMillis)
+            val longGapThresholdMillis = longNotificationGapThresholdMillis()
+            if (gapMillis >= longGapThresholdMillis) {
+                longNotificationGapCount++
+                if (nowElapsedRealtimeMs - lastLongGapLoggedElapsedRealtimeMs >= LONG_GAP_LOG_COOLDOWN_MS) {
+                    lastLongGapLoggedElapsedRealtimeMs = nowElapsedRealtimeMs
+                    emitDiagnostic(
+                        message = appTextResolver.getString(
+                            R.string.ble_notification_gap,
+                            gapMillis,
+                            longGapThresholdMillis,
+                            notificationCount,
+                        ),
+                        level = DiagnosticLevel.WARNING,
+                    )
+                }
+            }
+        }
+        listener.onPacketReceived(value.clone())
     }
 
     private fun emitDiagnostic(

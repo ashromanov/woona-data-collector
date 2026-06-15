@@ -30,6 +30,9 @@
 
     <string name="settings_theme_title">Тема</string>
     <string name="settings_theme_desc">Настройки темы появятся здесь после завершения базовой структуры оболочки приложения.</string>
+    <string name="settings_theme_mode_system">Системная</string>
+    <string name="settings_theme_mode_light">Светлая</string>
+    <string name="settings_theme_mode_dark">Темная</string>
     <string name="settings_language_title">Язык</string>
     <string name="settings_language_desc">Выберите язык для всей оболочки приложения и экрана устройства.</string>
     <string name="settings_current_language">Текущий язык: %1$s</string>
