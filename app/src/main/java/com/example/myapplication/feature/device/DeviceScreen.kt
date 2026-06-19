@@ -1095,6 +1095,9 @@ private fun DialogImmersiveModeEffect() {
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
         )
+        dialogWindow?.attributes = dialogWindow?.attributes?.apply {
+            layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
         val insetsController = dialogWindow?.let { window ->
             WindowCompat.getInsetsController(window, window.decorView)
         }
@@ -1129,19 +1132,19 @@ private fun ChartFullscreenContent(
         modifier = Modifier
             .fillMaxSize()
             .testTag(CHART_FULLSCREEN_DIALOG_TEST_TAG)
-            .displayCutoutPadding()
-            .padding(horizontal = 6.dp, vertical = 4.dp),
     ) {
         val useLandscapeLayout = maxWidth > maxHeight
         val contentMaxWidth = maxWidth
 
         Column(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 4.dp, vertical = 3.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             ChartFullscreenToolbar(
                 uiState = uiState,
-                onDismiss = onDismiss,
+                modifier = Modifier.padding(end = 48.dp),
             )
             if (useLandscapeLayout) {
                 Row(
@@ -1202,16 +1205,22 @@ private fun ChartFullscreenContent(
                 )
             }
         }
+        ChartFullscreenCloseButton(
+            onDismiss = onDismiss,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 1.dp, end = 1.dp),
+        )
     }
 }
 
 @Composable
 private fun ChartFullscreenToolbar(
     uiState: DeviceUiState,
-    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -1226,9 +1235,23 @@ private fun ChartFullscreenToolbar(
             )
             ChartStatusLine(uiState = uiState)
         }
+    }
+}
+
+@Composable
+private fun ChartFullscreenCloseButton(
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.size(44.dp),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+        contentColor = MaterialTheme.colorScheme.onSurface,
+    ) {
         IconButton(
             onClick = onDismiss,
-            modifier = Modifier.size(44.dp),
+            modifier = Modifier.fillMaxSize(),
         ) {
             Icon(
                 imageVector = Icons.Rounded.Close,
