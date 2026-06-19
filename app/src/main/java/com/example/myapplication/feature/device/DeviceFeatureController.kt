@@ -10,6 +10,7 @@ import com.example.myapplication.localization.EnglishTextResolver
 import com.example.myapplication.localization.TextResolver
 import com.example.myapplication.storage.BleSessionCsvExporter
 import com.example.myapplication.storage.FileShareIntentFactory
+import com.example.myapplication.storage.SessionArchiveExporter
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -22,6 +23,7 @@ class DeviceFeatureController(
     private val packetReplayController: PacketReplayController? = null,
     private val uiStateHolder: DeviceUiStateHolder = DeviceUiStateHolder(),
     private val sessionCsvExporter: BleSessionCsvExporter = BleSessionCsvExporter(),
+    private val sessionArchiveExporter: SessionArchiveExporter = SessionArchiveExporter(),
     private val wallClockMillisProvider: () -> Long = System::currentTimeMillis,
     private val runOnUiThread: (() -> Unit) -> Unit = { action -> action() },
 ) : AutoCloseable {
@@ -72,12 +74,23 @@ class DeviceFeatureController(
         packetReplayController?.stop()
         pendingTransportDiagnostics.clear()
         awaitingCaptureReady = false
+        packetCaptureController.stopCapture()
+        packetCaptureController.flush()
         val staleSnapshot = synchronized(exportLock) {
             invalidateExportSnapshotLocked()
         }
         deleteSnapshotFiles(staleSnapshot)
         uiStateHolder.stopCaptureSession()
         bleSessionController.disconnect()
+    }
+
+    fun finishCaptureForExport(): Boolean {
+        packetReplayController?.stop()
+        val finished = packetCaptureController.finishCapture(CAPTURE_FINISH_TIMEOUT_MILLIS)
+        if (!finished) {
+            Log.w("BLE_SHARE", "Timed out waiting for capture queue before export")
+        }
+        return finished
     }
 
     fun onSensorSelected(sensorType: Int) {
@@ -196,6 +209,27 @@ class DeviceFeatureController(
         } catch (exception: Exception) {
             showErrorOnMainThread(appTextResolver.getString(R.string.share_file_failed))
             Log.e("BLE_SHARE", "Failed to share file", exception)
+            null
+        }
+    }
+
+    fun createSessionArchive(targetDirectory: File): File? {
+        return try {
+            showExportPhaseOnMainThread(ExportPhase.PREPARING_SNAPSHOTS)
+            val snapshot = ensureExportSnapshot() ?: return null
+            val files = buildAvailableExportFiles(snapshot)
+            if (files.isEmpty()) return null
+
+            showExportPhaseOnMainThread(ExportPhase.PACKAGING_ARCHIVE)
+            sessionArchiveExporter.export(
+                files = files,
+                targetDirectory = targetDirectory,
+                sessionStartMillis = snapshot.sessionStartMillis,
+                createdAtMillis = wallClockMillisProvider(),
+            )
+        } catch (exception: Exception) {
+            showErrorOnMainThread(appTextResolver.getString(R.string.drive_backup_prepare_failed))
+            Log.e("BLE_SHARE", "Failed to prepare Drive backup", exception)
             null
         }
     }
@@ -482,6 +516,7 @@ class DeviceFeatureController(
 
     companion object {
         const val PERMISSION_REQUIRED_MESSAGE = "Permissions are required!"
+        private const val CAPTURE_FINISH_TIMEOUT_MILLIS = 2_000L
     }
 }
 

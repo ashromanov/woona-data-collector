@@ -17,6 +17,7 @@
     <string name="export_phase_preparing_snapshots">Preparing snapshots</string>
     <string name="export_phase_generating_csv">Generating CSV</string>
     <string name="export_phase_opening_share_sheet">Opening share sheet</string>
+    <string name="export_phase_packaging_archive">Packaging archive</string>
     <string name="export_all_files">All files</string>
     <string name="export_all_files_desc">Share every available session artifact together in one chooser.</string>
     <string name="export_compiled_binary">Compiled binary</string>
@@ -40,6 +41,34 @@
     <string name="settings_switch_to_english">Switch to English</string>
     <string name="language_english">English</string>
     <string name="language_russian">Russian</string>
+    <string name="drive_backup_title">Google Drive backup</string>
+    <string name="drive_backup_desc">Upload a ZIP archive of each completed session to your Google Drive.</string>
+    <string name="drive_backup_status_connected">Connected</string>
+    <string name="drive_backup_status_not_connected">Not connected</string>
+    <string name="drive_backup_connect">Connect Google Drive</string>
+    <string name="drive_backup_reconnect">Reconnect Google Drive</string>
+    <string name="drive_backup_auto_upload">Auto-upload after disconnect</string>
+    <string name="drive_backup_wifi_only">Upload on Wi-Fi only</string>
+    <string name="drive_backup_pending">Pending uploads: %1$d</string>
+    <string name="drive_backup_failed">Failed uploads: %1$d</string>
+    <string name="drive_backup_retry_pending">Retry pending uploads</string>
+    <string name="drive_backup_authorized">Google Drive backup connected</string>
+    <string name="drive_backup_authorization_failed">Google Drive authorization failed</string>
+    <string name="drive_backup_authorization_failed_with_reason">Google Drive authorization failed: %1$s</string>
+    <string name="drive_backup_setup_failed_with_reason">Google Drive setup failed: %1$s</string>
+    <string name="drive_backup_queued">Google Drive backup queued</string>
+    <string name="drive_backup_no_files">No session files to upload</string>
+    <string name="drive_backup_prepare_failed">Failed to prepare Google Drive backup</string>
+    <string name="drive_backup_capture_not_ready">Google Drive backup skipped because capture was still finishing</string>
+    <string name="drive_backup_pending_limit_reached">Google Drive backup skipped because too many uploads are pending</string>
+    <string name="drive_backup_status_idle">Drive upload idle</string>
+    <string name="drive_backup_status_ready">Google Drive ready</string>
+    <string name="drive_backup_status_connecting">Connecting to Google Drive</string>
+    <string name="drive_backup_status_preparing">Preparing Drive backup</string>
+    <string name="drive_backup_status_queued">Drive upload queued</string>
+    <string name="drive_backup_status_waiting">Waiting to upload</string>
+    <string name="drive_backup_status_uploading">Uploading to Google Drive</string>
+    <string name="drive_backup_status_needs_attention">Google Drive needs attention</string>
 
     <string name="ble_devices_title">BLE devices</string>
     <string name="ble_devices_desc">Start a scan, pick a discovered device, or replay a captured dump.</string>
@@ -79,10 +108,13 @@
     <string name="chart_follow_live">Live</string>
     <string name="chart_follow_history">History</string>
     <string name="chart_y_reset">Y Reset</string>
+    <string name="chart_enter_fullscreen">Open fullscreen chart</string>
+    <string name="chart_exit_fullscreen">Close fullscreen chart</string>
+    <string name="chart_fullscreen_title">Fullscreen chart</string>
     <string name="chart_status_line">%1$s | packets %2$d | gap %3$d | rejected %4$d</string>
     <string name="chart_empty_state">No data for the selected sensor/channel</string>
     <string name="chart_empty_state_window">Session history is retained, window: %1$s</string>
-    <string name="chart_summary">%1$s | %2$s | Y x%3$d | T %4$s - %5$s</string>
+    <string name="chart_summary">%1$s | %2$s | Y x%3$d | %4$s - %5$s</string>
     <string name="relative_time_minutes_seconds">%1$dm %2$ds</string>
     <string name="relative_time_seconds">%1$ds</string>
 

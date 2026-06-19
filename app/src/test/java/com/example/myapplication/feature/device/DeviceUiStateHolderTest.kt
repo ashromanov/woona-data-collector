@@ -9,6 +9,14 @@ import org.junit.Test
 
 class DeviceUiStateHolderTest {
     @Test
+    fun chartWindowPresetLabels_useRawTimerUnits() {
+        assertEquals(
+            listOf("30k", "60k", "300k", "900k"),
+            ChartWindowPreset.entries.map { it.label },
+        )
+    }
+
+    @Test
     fun addFoundDevice_ignoresDuplicateAddresses() {
         val holder = DeviceUiStateHolder()
 

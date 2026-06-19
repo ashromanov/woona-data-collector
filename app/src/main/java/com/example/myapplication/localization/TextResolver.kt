@@ -21,6 +21,9 @@ object EnglishTextResolver : TextResolver {
             R.string.replay_failed -> "Replay failed"
             R.string.replay_unavailable -> "Replay is unavailable"
             R.string.share_file_failed -> "Failed to share file"
+            R.string.drive_backup_prepare_failed -> "Failed to prepare Google Drive backup"
+            R.string.drive_backup_authorization_failed_with_reason -> "Google Drive authorization failed: %1\$s"
+            R.string.drive_backup_setup_failed_with_reason -> "Google Drive setup failed: %1\$s"
             R.string.transport_profile_selected_next_connection ->
                 "BLE transport profile selected: %1\$s. Changes apply on the next connection."
 

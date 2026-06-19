@@ -1,12 +1,17 @@
 package com.example.myapplication.feature.device
 
+import android.view.WindowManager
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.displayCutoutPadding
@@ -24,24 +29,34 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,14 +64,27 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.compose.ui.window.DialogProperties
 import com.example.myapplication.R
 import com.example.myapplication.ble.BleTransportProfile
+import com.example.myapplication.drive.DriveBackupStatus
+import com.example.myapplication.drive.DriveBackupUiState
 import com.example.myapplication.localization.AppLanguage
 import com.example.myapplication.localization.appStringResource
 import com.example.myapplication.ui.theme.AppThemeMode
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+
+private const val CHART_FULLSCREEN_DIALOG_TEST_TAG = "chart_fullscreen_dialog"
+private const val CHART_FULLSCREEN_CONTROLS_TEST_TAG = "chart_fullscreen_controls"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -122,8 +150,20 @@ fun DeviceChartsScreen(
     onChartZoomReset: () -> Unit,
     onChartPanGesture: (Float) -> Unit,
     onChartZoomGesture: (Float, Float) -> Unit,
+    onChartFullscreenChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val isChartFullscreenVisible = rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(isChartFullscreenVisible.value) {
+        onChartFullscreenChange(isChartFullscreenVisible.value)
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            onChartFullscreenChange(false)
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -152,8 +192,27 @@ fun DeviceChartsScreen(
                 onChartZoomReset = onChartZoomReset,
                 onChartPanGesture = onChartPanGesture,
                 onChartZoomGesture = onChartZoomGesture,
+                onChartFullscreenRequest = { isChartFullscreenVisible.value = true },
             )
         }
+    }
+
+    if (isChartFullscreenVisible.value) {
+        ChartFullscreenDialog(
+            uiState = uiState,
+            onSensorSelect = onSensorSelect,
+            onChannelSelect = onChannelSelect,
+            onChartWindowSelect = onChartWindowSelect,
+            onFollowLiveChange = onFollowLiveChange,
+            onChartPanLeft = onChartPanLeft,
+            onChartPanRight = onChartPanRight,
+            onChartZoomIn = onChartZoomIn,
+            onChartZoomOut = onChartZoomOut,
+            onChartZoomReset = onChartZoomReset,
+            onChartPanGesture = onChartPanGesture,
+            onChartZoomGesture = onChartZoomGesture,
+            onDismiss = { isChartFullscreenVisible.value = false },
+        )
     }
 }
 
@@ -165,6 +224,11 @@ fun DeviceSettingsScreen(
     onTransportProfileSelect: (BleTransportProfile) -> Unit,
     onLanguageSelect: (AppLanguage) -> Unit,
     onThemeModeSelect: (AppThemeMode) -> Unit,
+    driveBackupState: DriveBackupUiState = DriveBackupUiState(),
+    onDriveConnect: () -> Unit = {},
+    onDriveAutoUploadChange: (Boolean) -> Unit = {},
+    onDriveWifiOnlyChange: (Boolean) -> Unit = {},
+    onDriveRetryPending: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
@@ -191,6 +255,16 @@ fun DeviceSettingsScreen(
             LanguageSettingsCard(
                 selectedLanguage = selectedLanguage,
                 onLanguageSelect = onLanguageSelect,
+            )
+        }
+
+        item {
+            DriveBackupSettingsCard(
+                state = driveBackupState,
+                onConnect = onDriveConnect,
+                onAutoUploadChange = onDriveAutoUploadChange,
+                onWifiOnlyChange = onDriveWifiOnlyChange,
+                onRetryPending = onDriveRetryPending,
             )
         }
     }
@@ -546,6 +620,153 @@ private fun LanguageOptionRow(
     }
 }
 
+@Composable
+private fun DriveBackupSettingsCard(
+    state: DriveBackupUiState,
+    onConnect: () -> Unit,
+    onAutoUploadChange: (Boolean) -> Unit,
+    onWifiOnlyChange: (Boolean) -> Unit,
+    onRetryPending: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = appCardColors(),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(appStringResource(R.string.drive_backup_title), style = MaterialTheme.typography.labelMedium)
+            Text(
+                text = appStringResource(R.string.drive_backup_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = supportingTextColor(),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val statusRes = if (state.isAuthorized) {
+                    R.string.drive_backup_status_connected
+                } else {
+                    R.string.drive_backup_status_not_connected
+                }
+                Text(
+                    text = appStringResource(statusRes),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                OutlinedButton(onClick = onConnect) {
+                    Text(
+                        appStringResource(
+                            if (state.isAuthorized) {
+                                R.string.drive_backup_reconnect
+                            } else {
+                                R.string.drive_backup_connect
+                            },
+                        ),
+                    )
+                }
+            }
+            DriveBackupSwitchRow(
+                title = appStringResource(R.string.drive_backup_auto_upload),
+                checked = state.autoUploadEnabled,
+                enabled = state.isAuthorized,
+                onCheckedChange = onAutoUploadChange,
+            )
+            DriveBackupSwitchRow(
+                title = appStringResource(R.string.drive_backup_wifi_only),
+                checked = state.wifiOnly,
+                enabled = state.autoUploadEnabled,
+                onCheckedChange = onWifiOnlyChange,
+            )
+            Text(
+                text = appStringResource(R.string.drive_backup_pending, state.pendingUploadCount),
+                style = MaterialTheme.typography.bodySmall,
+                color = supportingTextColor(),
+            )
+            if (state.failedUploadCount > 0) {
+                Text(
+                    text = appStringResource(R.string.drive_backup_failed, state.failedUploadCount),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            DriveBackupProgressStatus(state = state)
+            OutlinedButton(
+                onClick = onRetryPending,
+                enabled = state.isAuthorized && state.pendingUploadCount + state.failedUploadCount > 0,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(appStringResource(R.string.drive_backup_retry_pending))
+            }
+        }
+    }
+}
+
+@Composable
+private fun DriveBackupProgressStatus(state: DriveBackupUiState) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            text = appStringResource(driveBackupStatusLabelRes(state.status)),
+            style = MaterialTheme.typography.bodySmall,
+            color = if (state.status == DriveBackupStatus.NEEDS_ATTENTION) {
+                MaterialTheme.colorScheme.error
+            } else {
+                supportingTextColor()
+            },
+        )
+        if (state.status.isInProgress) {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        }
+    }
+}
+
+private fun driveBackupStatusLabelRes(status: DriveBackupStatus): Int {
+    return when (status) {
+        DriveBackupStatus.IDLE -> R.string.drive_backup_status_idle
+        DriveBackupStatus.READY -> R.string.drive_backup_status_ready
+        DriveBackupStatus.CONNECTING -> R.string.drive_backup_status_connecting
+        DriveBackupStatus.PREPARING -> R.string.drive_backup_status_preparing
+        DriveBackupStatus.QUEUED -> R.string.drive_backup_status_queued
+        DriveBackupStatus.WAITING -> R.string.drive_backup_status_waiting
+        DriveBackupStatus.UPLOADING -> R.string.drive_backup_status_uploading
+        DriveBackupStatus.NEEDS_ATTENTION -> R.string.drive_backup_status_needs_attention
+    }
+}
+
+@Composable
+private fun DriveBackupSwitchRow(
+    title: String,
+    checked: Boolean,
+    enabled: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (enabled) MaterialTheme.colorScheme.onSurface else supportingTextColor(),
+            modifier = Modifier.weight(1f),
+        )
+        Switch(
+            checked = checked,
+            enabled = enabled,
+            onCheckedChange = onCheckedChange,
+        )
+    }
+}
+
 private fun shouldShowSessionSummary(uiState: DeviceUiState): Boolean {
     return uiState.showCaptureUi ||
         uiState.isReplayRunning ||
@@ -753,12 +974,16 @@ private fun ChartTab(
     onChartZoomReset: () -> Unit,
     onChartPanGesture: (Float) -> Unit,
     onChartZoomGesture: (Float, Float) -> Unit,
+    onChartFullscreenRequest: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        ChartStatusLine(uiState = uiState)
+        ChartHeader(
+            uiState = uiState,
+            onChartFullscreenRequest = onChartFullscreenRequest,
+        )
         SensorSelector(
             uiState = uiState,
             onSensorSelect = onSensorSelect,
@@ -774,16 +999,410 @@ private fun ChartTab(
             onChartZoomOut = onChartZoomOut,
             onChartZoomReset = onChartZoomReset,
         )
-        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            if (uiState.chart.points.isNotEmpty()) {
-                DeviceChart(
+        ChartViewport(
+            chart = uiState.chart,
+            onPanGesture = onChartPanGesture,
+            onZoomGesture = onChartZoomGesture,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+        )
+    }
+}
+
+@Composable
+private fun ChartHeader(
+    uiState: DeviceUiState,
+    onChartFullscreenRequest: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        ChartStatusLine(
+            uiState = uiState,
+            modifier = Modifier.weight(1f),
+        )
+        IconButton(
+            onClick = onChartFullscreenRequest,
+            modifier = Modifier.size(40.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Fullscreen,
+                contentDescription = appStringResource(R.string.chart_enter_fullscreen),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ChartFullscreenDialog(
+    uiState: DeviceUiState,
+    onSensorSelect: (Int) -> Unit,
+    onChannelSelect: (Int) -> Unit,
+    onChartWindowSelect: (ChartWindowPreset) -> Unit,
+    onFollowLiveChange: (Boolean) -> Unit,
+    onChartPanLeft: () -> Unit,
+    onChartPanRight: () -> Unit,
+    onChartZoomIn: () -> Unit,
+    onChartZoomOut: () -> Unit,
+    onChartZoomReset: () -> Unit,
+    onChartPanGesture: (Float) -> Unit,
+    onChartZoomGesture: (Float, Float) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false,
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
+        ),
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.surface,
+        ) {
+            DialogImmersiveModeEffect()
+            ChartFullscreenContent(
+                uiState = uiState,
+                onSensorSelect = onSensorSelect,
+                onChannelSelect = onChannelSelect,
+                onChartWindowSelect = onChartWindowSelect,
+                onFollowLiveChange = onFollowLiveChange,
+                onChartPanLeft = onChartPanLeft,
+                onChartPanRight = onChartPanRight,
+                onChartZoomIn = onChartZoomIn,
+                onChartZoomOut = onChartZoomOut,
+                onChartZoomReset = onChartZoomReset,
+                onChartPanGesture = onChartPanGesture,
+                onChartZoomGesture = onChartZoomGesture,
+                onDismiss = onDismiss,
+            )
+        }
+    }
+}
+
+@Composable
+private fun DialogImmersiveModeEffect() {
+    val view = LocalView.current
+
+    DisposableEffect(view) {
+        val dialogWindow = (view.parent as? DialogWindowProvider)?.window
+        dialogWindow?.setLayout(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+        )
+        val insetsController = dialogWindow?.let { window ->
+            WindowCompat.getInsetsController(window, window.decorView)
+        }
+
+        insetsController?.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        insetsController?.hide(WindowInsetsCompat.Type.systemBars())
+
+        onDispose {
+            insetsController?.show(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+}
+
+@Composable
+private fun ChartFullscreenContent(
+    uiState: DeviceUiState,
+    onSensorSelect: (Int) -> Unit,
+    onChannelSelect: (Int) -> Unit,
+    onChartWindowSelect: (ChartWindowPreset) -> Unit,
+    onFollowLiveChange: (Boolean) -> Unit,
+    onChartPanLeft: () -> Unit,
+    onChartPanRight: () -> Unit,
+    onChartZoomIn: () -> Unit,
+    onChartZoomOut: () -> Unit,
+    onChartZoomReset: () -> Unit,
+    onChartPanGesture: (Float) -> Unit,
+    onChartZoomGesture: (Float, Float) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag(CHART_FULLSCREEN_DIALOG_TEST_TAG)
+            .displayCutoutPadding()
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+    ) {
+        val useLandscapeLayout = maxWidth > maxHeight
+        val contentMaxWidth = maxWidth
+
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            ChartFullscreenToolbar(
+                uiState = uiState,
+                onDismiss = onDismiss,
+            )
+            if (useLandscapeLayout) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .width(contentMaxWidth.coerceAtMost(320.dp))
+                            .fillMaxHeight()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        ChartFullscreenControls(
+                            uiState = uiState,
+                            onSensorSelect = onSensorSelect,
+                            onChannelSelect = onChannelSelect,
+                            onChartWindowSelect = onChartWindowSelect,
+                            onFollowLiveChange = onFollowLiveChange,
+                            onChartPanLeft = onChartPanLeft,
+                            onChartPanRight = onChartPanRight,
+                            onChartZoomIn = onChartZoomIn,
+                            onChartZoomOut = onChartZoomOut,
+                            onChartZoomReset = onChartZoomReset,
+                        )
+                    }
+                    ChartViewport(
+                        chart = uiState.chart,
+                        onPanGesture = onChartPanGesture,
+                        onZoomGesture = onChartZoomGesture,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                    )
+                }
+            } else {
+                ChartFullscreenControls(
+                    uiState = uiState,
+                    onSensorSelect = onSensorSelect,
+                    onChannelSelect = onChannelSelect,
+                    onChartWindowSelect = onChartWindowSelect,
+                    onFollowLiveChange = onFollowLiveChange,
+                    onChartPanLeft = onChartPanLeft,
+                    onChartPanRight = onChartPanRight,
+                    onChartZoomIn = onChartZoomIn,
+                    onChartZoomOut = onChartZoomOut,
+                    onChartZoomReset = onChartZoomReset,
+                )
+                ChartViewport(
                     chart = uiState.chart,
                     onPanGesture = onChartPanGesture,
                     onZoomGesture = onChartZoomGesture,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
                 )
-            } else {
-                EmptyChartState(chart = uiState.chart)
             }
+        }
+    }
+}
+
+@Composable
+private fun ChartFullscreenToolbar(
+    uiState: DeviceUiState,
+    onDismiss: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(1.dp),
+        ) {
+            Text(
+                text = appStringResource(R.string.chart_fullscreen_title),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            ChartStatusLine(uiState = uiState)
+        }
+        IconButton(
+            onClick = onDismiss,
+            modifier = Modifier.size(44.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Close,
+                contentDescription = appStringResource(R.string.chart_exit_fullscreen),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ChartFullscreenControls(
+    uiState: DeviceUiState,
+    onSensorSelect: (Int) -> Unit,
+    onChannelSelect: (Int) -> Unit,
+    onChartWindowSelect: (ChartWindowPreset) -> Unit,
+    onFollowLiveChange: (Boolean) -> Unit,
+    onChartPanLeft: () -> Unit,
+    onChartPanRight: () -> Unit,
+    onChartZoomIn: () -> Unit,
+    onChartZoomOut: () -> Unit,
+    onChartZoomReset: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag(CHART_FULLSCREEN_CONTROLS_TEST_TAG),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(6.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                listOf("T" to 1, "AXL" to 2, "GIR" to 3, "MIC" to 4).forEach { (label, sensorType) ->
+                    FullscreenControlButton(
+                        text = label,
+                        selected = uiState.selectedSensorType == sensorType,
+                        onClick = { onSensorSelect(sensorType) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+
+            val maxChannels = if (uiState.selectedSensorType == 2 || uiState.selectedSensorType == 3) 3 else 1
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                for (channel in 1..maxChannels) {
+                    FullscreenControlButton(
+                        text = appStringResource(R.string.chart_channel, channel),
+                        selected = uiState.selectedChannel == channel,
+                        onClick = { onChannelSelect(channel) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                ChartWindowPreset.entries.forEach { preset ->
+                    FullscreenControlButton(
+                        text = preset.label,
+                        selected = uiState.chart.windowPreset == preset,
+                        onClick = { onChartWindowSelect(preset) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                FullscreenControlButton(
+                    text = if (uiState.chart.isFollowingLive) {
+                        appStringResource(R.string.chart_follow_live)
+                    } else {
+                        appStringResource(R.string.chart_follow_history)
+                    },
+                    selected = uiState.chart.isFollowingLive,
+                    onClick = { onFollowLiveChange(!uiState.chart.isFollowingLive) },
+                    modifier = Modifier.weight(1.2f),
+                )
+                FullscreenControlButton(
+                    text = "←",
+                    enabled = uiState.chart.canPanLeft,
+                    onClick = onChartPanLeft,
+                    modifier = Modifier.width(34.dp),
+                )
+                FullscreenControlButton(
+                    text = "→",
+                    enabled = uiState.chart.canPanRight,
+                    onClick = onChartPanRight,
+                    modifier = Modifier.width(34.dp),
+                )
+                FullscreenControlButton(
+                    text = "−",
+                    enabled = uiState.chart.canZoomOut,
+                    onClick = onChartZoomOut,
+                    modifier = Modifier.width(34.dp),
+                )
+                FullscreenControlButton(
+                    text = "+",
+                    enabled = uiState.chart.canZoomIn,
+                    onClick = onChartZoomIn,
+                    modifier = Modifier.width(34.dp),
+                )
+                FullscreenControlButton(
+                    text = appStringResource(R.string.chart_y_reset),
+                    onClick = onChartZoomReset,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FullscreenControlButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    selected: Boolean = false,
+    enabled: Boolean = true,
+) {
+    val containerColor = if (selected) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.surface
+    }
+    val contentColor = when {
+        !enabled -> supportingTextColor()
+        selected -> MaterialTheme.colorScheme.onPrimaryContainer
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+
+    Surface(
+        modifier = modifier.height(32.dp),
+        shape = MaterialTheme.shapes.small,
+        color = containerColor,
+        contentColor = contentColor,
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.outlineVariant,
+        ),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(
+                    enabled = enabled,
+                    role = Role.Button,
+                    onClick = onClick,
+                )
+                .padding(horizontal = 6.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                textAlign = TextAlign.Center,
+            )
         }
     }
 }
@@ -1089,7 +1708,10 @@ private fun ChartControls(
 }
 
 @Composable
-private fun ChartStatusLine(uiState: DeviceUiState) {
+private fun ChartStatusLine(
+    uiState: DeviceUiState,
+    modifier: Modifier = Modifier,
+) {
     val connectionLabel = when {
         uiState.isReplayRunning -> appStringResource(R.string.status_replay)
         uiState.isConnected -> appStringResource(R.string.status_connected)
@@ -1106,15 +1728,18 @@ private fun ChartStatusLine(uiState: DeviceUiState) {
         ),
         style = MaterialTheme.typography.labelMedium,
         color = supportingTextColor(),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         textAlign = TextAlign.Center,
     )
 }
 
 @Composable
-private fun EmptyChartState(chart: ChartUiState) {
+private fun EmptyChartState(
+    chart: ChartUiState,
+    modifier: Modifier = Modifier,
+) {
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -1205,6 +1830,26 @@ private fun StatusLine(
             style = MaterialTheme.typography.bodySmall,
             color = valueColor,
         )
+    }
+}
+
+@Composable
+private fun ChartViewport(
+    chart: ChartUiState,
+    onPanGesture: (Float) -> Unit,
+    onZoomGesture: (Float, Float) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier = modifier) {
+        if (chart.points.isNotEmpty()) {
+            DeviceChart(
+                chart = chart,
+                onPanGesture = onPanGesture,
+                onZoomGesture = onZoomGesture,
+            )
+        } else {
+            EmptyChartState(chart = chart)
+        }
     }
 }
 
@@ -1503,6 +2148,7 @@ object DeviceScreenEntryPoint {
         onChartZoomReset: () -> Unit,
         onChartPanGesture: (Float) -> Unit,
         onChartZoomGesture: (Float, Float) -> Unit,
+        onChartFullscreenChange: (Boolean) -> Unit = {},
         modifier: Modifier = Modifier,
     ) {
         DeviceChartsScreen(
@@ -1518,6 +2164,7 @@ object DeviceScreenEntryPoint {
             onChartZoomReset = onChartZoomReset,
             onChartPanGesture = onChartPanGesture,
             onChartZoomGesture = onChartZoomGesture,
+            onChartFullscreenChange = onChartFullscreenChange,
             modifier = modifier,
         )
     }
@@ -1530,15 +2177,25 @@ object DeviceScreenEntryPoint {
         onTransportProfileSelect: (BleTransportProfile) -> Unit,
         onLanguageSelect: (AppLanguage) -> Unit,
         onThemeModeSelect: (AppThemeMode) -> Unit,
+        driveBackupState: DriveBackupUiState = DriveBackupUiState(),
+        onDriveConnect: () -> Unit = {},
+        onDriveAutoUploadChange: (Boolean) -> Unit = {},
+        onDriveWifiOnlyChange: (Boolean) -> Unit = {},
+        onDriveRetryPending: () -> Unit = {},
         modifier: Modifier = Modifier,
     ) {
         DeviceSettingsScreen(
             uiState = uiState,
             selectedLanguage = selectedLanguage,
             selectedThemeMode = selectedThemeMode,
+            driveBackupState = driveBackupState,
             onTransportProfileSelect = onTransportProfileSelect,
             onLanguageSelect = onLanguageSelect,
             onThemeModeSelect = onThemeModeSelect,
+            onDriveConnect = onDriveConnect,
+            onDriveAutoUploadChange = onDriveAutoUploadChange,
+            onDriveWifiOnlyChange = onDriveWifiOnlyChange,
+            onDriveRetryPending = onDriveRetryPending,
             modifier = modifier,
         )
     }

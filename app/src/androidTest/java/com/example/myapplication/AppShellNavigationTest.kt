@@ -10,12 +10,17 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.example.myapplication.feature.device.ChartPoint
+import com.example.myapplication.feature.device.ChartUiState
 import com.example.myapplication.feature.device.DeviceUiState
 import com.example.myapplication.feature.device.ExportPhase
 import com.example.myapplication.localization.AppLanguage
@@ -26,6 +31,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+
+private const val CHART_FULLSCREEN_DIALOG_TEST_TAG = "chart_fullscreen_dialog"
 
 @RunWith(AndroidJUnit4::class)
 class AppShellNavigationTest {
@@ -139,6 +146,51 @@ class AppShellNavigationTest {
 
         composeRule.onNodeWithText("No data for the selected sensor/channel").assertIsDisplayed()
         composeRule.onNodeWithText("Y Reset").assertIsDisplayed()
+    }
+
+    @Test
+    fun chartsFullscreen_opensAndClosesOverlay() {
+        setShellContent(
+            uiState = DeviceUiState(
+                showCaptureUi = true,
+                chart = ChartUiState(
+                    points = listOf(
+                        ChartPoint(timeMillis = 0L, value = 10f),
+                        ChartPoint(timeMillis = 1_000L, value = 20f),
+                    ),
+                    viewportStartMillis = 0L,
+                    viewportEndMillis = 1_000L,
+                    sessionStartMillis = 0L,
+                    latestPointMillis = 1_000L,
+                ),
+            ),
+        )
+
+        navTab("Charts").performClick()
+        composeRule.onNodeWithContentDescription("Open fullscreen chart").performClick()
+
+        composeRule.onNodeWithText("Fullscreen chart").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Close fullscreen chart").performClick()
+
+        composeRule.onNodeWithText("Fullscreen chart").assertDoesNotExist()
+    }
+
+    @Test
+    fun chartsFullscreen_supportsEmptyChartState() {
+        setShellContent(
+            uiState = DeviceUiState(showCaptureUi = true),
+        )
+
+        navTab("Charts").performClick()
+        composeRule.onNodeWithContentDescription("Open fullscreen chart").performClick()
+
+        composeRule.onNodeWithText("Fullscreen chart").assertIsDisplayed()
+        composeRule.onNode(
+            hasTestTag(CHART_FULLSCREEN_DIALOG_TEST_TAG) and
+                hasAnyDescendant(hasText("No data for the selected sensor/channel")),
+            useUnmergedTree = true,
+        )
+            .assertExists()
     }
 
     @Test

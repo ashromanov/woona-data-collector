@@ -17,6 +17,7 @@
     <string name="export_phase_preparing_snapshots">Подготовка снимков</string>
     <string name="export_phase_generating_csv">Генерация CSV</string>
     <string name="export_phase_opening_share_sheet">Открытие окна отправки</string>
+    <string name="export_phase_packaging_archive">Упаковка архива</string>
     <string name="export_all_files">Все файлы</string>
     <string name="export_all_files_desc">Отправить вместе все доступные артефакты сессии через один chooser.</string>
     <string name="export_compiled_binary">Собранный бинарный файл</string>
@@ -40,6 +41,34 @@
     <string name="settings_switch_to_english">Переключить на английский</string>
     <string name="language_english">Английский</string>
     <string name="language_russian">Русский</string>
+    <string name="drive_backup_title">Резервная копия Google Drive</string>
+    <string name="drive_backup_desc">Загружает ZIP-архив каждой завершенной сессии в ваш Google Drive.</string>
+    <string name="drive_backup_status_connected">Подключено</string>
+    <string name="drive_backup_status_not_connected">Не подключено</string>
+    <string name="drive_backup_connect">Подключить Google Drive</string>
+    <string name="drive_backup_reconnect">Переподключить Google Drive</string>
+    <string name="drive_backup_auto_upload">Автозагрузка после отключения</string>
+    <string name="drive_backup_wifi_only">Загружать только по Wi-Fi</string>
+    <string name="drive_backup_pending">Ожидают загрузки: %1$d</string>
+    <string name="drive_backup_failed">Не удалось загрузить: %1$d</string>
+    <string name="drive_backup_retry_pending">Повторить ожидающие загрузки</string>
+    <string name="drive_backup_authorized">Резервная копия Google Drive подключена</string>
+    <string name="drive_backup_authorization_failed">Не удалось авторизовать Google Drive</string>
+    <string name="drive_backup_authorization_failed_with_reason">Не удалось авторизовать Google Drive: %1$s</string>
+    <string name="drive_backup_setup_failed_with_reason">Не удалось настроить Google Drive: %1$s</string>
+    <string name="drive_backup_queued">Резервная копия Google Drive поставлена в очередь</string>
+    <string name="drive_backup_no_files">Нет файлов сессии для загрузки</string>
+    <string name="drive_backup_prepare_failed">Не удалось подготовить резервную копию Google Drive</string>
+    <string name="drive_backup_capture_not_ready">Резервная копия Google Drive пропущена: запись еще завершалась</string>
+    <string name="drive_backup_pending_limit_reached">Резервная копия Google Drive пропущена: слишком много загрузок в ожидании</string>
+    <string name="drive_backup_status_idle">Загрузка в Drive не выполняется</string>
+    <string name="drive_backup_status_ready">Google Drive готов</string>
+    <string name="drive_backup_status_connecting">Подключение к Google Drive</string>
+    <string name="drive_backup_status_preparing">Подготовка копии для Drive</string>
+    <string name="drive_backup_status_queued">Загрузка в Drive в очереди</string>
+    <string name="drive_backup_status_waiting">Ожидание загрузки</string>
+    <string name="drive_backup_status_uploading">Загрузка в Google Drive</string>
+    <string name="drive_backup_status_needs_attention">Google Drive требует внимания</string>
 
     <string name="ble_devices_title">BLE-устройства</string>
     <string name="ble_devices_desc">Запустите сканирование, выберите найденное устройство или воспроизведите сохраненный дамп.</string>
@@ -79,10 +108,13 @@
     <string name="chart_follow_live">Live</string>
     <string name="chart_follow_history">История</string>
     <string name="chart_y_reset">Сброс Y</string>
+    <string name="chart_enter_fullscreen">Открыть график на весь экран</string>
+    <string name="chart_exit_fullscreen">Закрыть полноэкранный график</string>
+    <string name="chart_fullscreen_title">График на весь экран</string>
     <string name="chart_status_line">%1$s | пакеты %2$d | потери %3$d | отклонено %4$d</string>
     <string name="chart_empty_state">Нет данных для выбранного датчика/канала</string>
     <string name="chart_empty_state_window">История сессии сохраняется, окно: %1$s</string>
-    <string name="chart_summary">%1$s | %2$s | Y x%3$d | T %4$s - %5$s</string>
+    <string name="chart_summary">%1$s | %2$s | Y x%3$d | %4$s - %5$s</string>
     <string name="relative_time_minutes_seconds">%1$dм %2$dс</string>
     <string name="relative_time_seconds">%1$dс</string>
 

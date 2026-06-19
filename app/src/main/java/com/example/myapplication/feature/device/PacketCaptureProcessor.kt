@@ -53,6 +53,11 @@ interface PacketCaptureController : AutoCloseable {
     fun submit(packetFragment: ByteArray): PacketSubmitResult
     fun recordDiagnosticEvent(type: PacketDiagnosticType, message: String)
     fun stopCapture()
+    fun finishCapture(timeoutMillis: Long): Boolean {
+        stopCapture()
+        flush()
+        return true
+    }
     fun updateSelection(sensorType: Int, channel: Int)
     fun resetSession()
     fun flush()
@@ -78,6 +83,7 @@ class PacketCaptureProcessor(
 ) : PacketCaptureController {
     private val processingLock = Any()
     private val rawCaptureLock = Any()
+    private val idleMonitor = Object()
     private val queue = ArrayBlockingQueue<QueuedFragment>(maxPendingFragments)
 
     @Volatile
@@ -109,6 +115,7 @@ class PacketCaptureProcessor(
     private var maxObservedQueueDepth = 0
     private var queueWarningLevel = -1
     private var lastSummaryWallClockMillis = wallClockMillisProvider()
+    private var inFlightFragments = 0
 
     private val workerThread = Thread(::runLoop, WORKER_THREAD_NAME).apply {
         priority = Thread.MAX_PRIORITY
@@ -117,57 +124,78 @@ class PacketCaptureProcessor(
 
     override fun submit(packetFragment: ByteArray): PacketSubmitResult {
         if (packetFragment.isEmpty()) return PacketSubmitResult.ACCEPTED
-        if (!isAcceptingFragments) return PacketSubmitResult.REJECTED
 
-        try {
-            synchronized(rawCaptureLock) {
-                rawFragmentFileStore.appendFragment(
-                    sequence = receivedFragmentCount,
-                    receivedAtMillis = System.currentTimeMillis(),
-                    fragmentBytes = packetFragment,
-                )
-                receivedFragmentCount++
-                receivedRawBytes += packetFragment.size.toLong()
+        var submitResult = PacketSubmitResult.REJECTED
+        var diagnosticUpdates = emptyList<PacketProcessingUpdate>()
+        synchronized(processingLock) {
+            if (!isAcceptingFragments) {
+                return@synchronized
             }
-        } catch (exception: Exception) {
-            onError(appTextResolver.getString(R.string.failed_persist_raw_fragment), exception)
-        }
 
-        val submitResult = if (queue.offer(
-            QueuedFragment(
-                sessionId = sessionId,
-                bytes = packetFragment,
-            ),
-        )
-        ) {
-            PacketSubmitResult.ACCEPTED
-        } else {
-            PacketSubmitResult.OVERFLOW
-        }
-        val diagnosticUpdates = synchronized(processingLock) {
+            try {
+                synchronized(rawCaptureLock) {
+                    rawFragmentFileStore.appendFragment(
+                        sequence = receivedFragmentCount,
+                        receivedAtMillis = System.currentTimeMillis(),
+                        fragmentBytes = packetFragment,
+                    )
+                    receivedFragmentCount++
+                    receivedRawBytes += packetFragment.size.toLong()
+                }
+            } catch (exception: Exception) {
+                onError(appTextResolver.getString(R.string.failed_persist_raw_fragment), exception)
+            }
+
+            submitResult = if (queue.offer(
+                QueuedFragment(
+                    sessionId = sessionId,
+                    bytes = packetFragment,
+                ),
+            )
+            ) {
+                PacketSubmitResult.ACCEPTED
+            } else {
+                PacketSubmitResult.OVERFLOW
+            }
             when (submitResult) {
-                PacketSubmitResult.ACCEPTED -> maybeBuildQueuePressureUpdatesLocked(fragmentSize = packetFragment.size)
-                PacketSubmitResult.OVERFLOW -> listOf(
-                    createStatsUpdateLocked(
-                        diagnosticEvents = listOf(
-                            createDiagnosticEvent(
-                                type = PacketDiagnosticType.INFO,
-                                message = appTextResolver.getString(
-                                    R.string.capture_queue_overflow,
-                                    queue.size,
-                                    maxPendingFragments,
-                                    packetFragment.size,
+                PacketSubmitResult.ACCEPTED -> {
+                    diagnosticUpdates = maybeBuildQueuePressureUpdatesLocked(fragmentSize = packetFragment.size)
+                }
+                PacketSubmitResult.OVERFLOW -> {
+                    diagnosticUpdates = listOf(
+                        createStatsUpdateLocked(
+                            diagnosticEvents = listOf(
+                                createDiagnosticEvent(
+                                    type = PacketDiagnosticType.INFO,
+                                    message = appTextResolver.getString(
+                                        R.string.capture_queue_overflow,
+                                        queue.size,
+                                        maxPendingFragments,
+                                        packetFragment.size,
+                                    ),
                                 ),
                             ),
                         ),
-                    ),
-                )
-                PacketSubmitResult.REJECTED -> emptyList()
+                    )
+                }
+                PacketSubmitResult.REJECTED -> Unit
             }
+        }
+        if (submitResult == PacketSubmitResult.REJECTED) {
+            return PacketSubmitResult.REJECTED
         }
         diagnosticUpdates.forEach(onPacketProcessed)
 
         return submitResult
+    }
+
+    override fun finishCapture(timeoutMillis: Long): Boolean {
+        synchronized(processingLock) {
+            isAcceptingFragments = false
+        }
+        val finished = awaitQueueIdle(timeoutMillis)
+        flush()
+        return finished
     }
 
     override fun recordDiagnosticEvent(
@@ -192,6 +220,7 @@ class PacketCaptureProcessor(
             sessionId++
             queue.clear()
         }
+        notifyQueueIdleWaiters()
     }
 
     override fun resetSession() {
@@ -216,6 +245,7 @@ class PacketCaptureProcessor(
                 rawFragmentFileStore.resetSession()
                 diagnosticLogFileStore.resetSession()
             }
+            notifyQueueIdleWaiters()
         } catch (exception: Exception) {
             onError(appTextResolver.getString(R.string.failed_reset_capture_session), exception)
         }
@@ -269,8 +299,12 @@ class PacketCaptureProcessor(
     private fun runLoop() {
         while (isRunning || !queue.isEmpty()) {
             try {
-                val chunk = queue.poll(QUEUE_POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS) ?: continue
-                processChunk(chunk)
+                val chunk = pollNextChunk() ?: continue
+                try {
+                    processChunk(chunk)
+                } finally {
+                    markFragmentComplete()
+                }
             } catch (exception: InterruptedException) {
                 if (!isRunning) {
                     continue
@@ -280,6 +314,48 @@ class PacketCaptureProcessor(
             } catch (exception: Exception) {
                 onError(appTextResolver.getString(R.string.background_packet_processing_failed), exception)
             }
+        }
+    }
+
+    private fun pollNextChunk(): QueuedFragment? {
+        synchronized(idleMonitor) {
+            val chunk = queue.poll(QUEUE_POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS) ?: return null
+            inFlightFragments++
+            return chunk
+        }
+    }
+
+    private fun awaitQueueIdle(timeoutMillis: Long): Boolean {
+        val timeoutNanos = TimeUnit.MILLISECONDS.toNanos(timeoutMillis.coerceAtLeast(0L))
+        val deadline = System.nanoTime() + timeoutNanos
+        synchronized(idleMonitor) {
+            while (!queue.isEmpty() || inFlightFragments > 0) {
+                val remainingNanos = deadline - System.nanoTime()
+                if (remainingNanos <= 0L) {
+                    return false
+                }
+                val waitMillis = TimeUnit.NANOSECONDS.toMillis(remainingNanos).coerceAtLeast(1L)
+                try {
+                    idleMonitor.wait(waitMillis)
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    return false
+                }
+            }
+        }
+        return true
+    }
+
+    private fun markFragmentComplete() {
+        synchronized(idleMonitor) {
+            inFlightFragments--
+            idleMonitor.notifyAll()
+        }
+    }
+
+    private fun notifyQueueIdleWaiters() {
+        synchronized(idleMonitor) {
+            idleMonitor.notifyAll()
         }
     }
 

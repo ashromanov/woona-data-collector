@@ -15,6 +15,9 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CloudDone
+import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.ShowChart
@@ -43,7 +46,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.myapplication.drive.DriveBackupStatus
 import com.example.myapplication.ble.BleTransportProfile
+import com.example.myapplication.drive.DriveBackupUiState
 import com.example.myapplication.feature.device.ChartWindowPreset
 import com.example.myapplication.feature.device.DeviceScreenEntryPoint
 import com.example.myapplication.feature.device.DeviceUiState
@@ -89,6 +94,11 @@ fun DeviceAppShell(
     onTransportProfileSelect: (BleTransportProfile) -> Unit,
     onLanguageSelect: (AppLanguage) -> Unit,
     onThemeModeSelect: (AppThemeMode) -> Unit,
+    driveBackupState: DriveBackupUiState = DriveBackupUiState(),
+    onDriveConnect: () -> Unit = {},
+    onDriveAutoUploadChange: (Boolean) -> Unit = {},
+    onDriveWifiOnlyChange: (Boolean) -> Unit = {},
+    onDriveRetryPending: () -> Unit = {},
     onDisconnect: () -> Unit,
     onSensorSelect: (Int) -> Unit,
     onChannelSelect: (Int) -> Unit,
@@ -101,6 +111,7 @@ fun DeviceAppShell(
     onChartZoomReset: () -> Unit,
     onChartPanGesture: (Float) -> Unit,
     onChartZoomGesture: (Float, Float) -> Unit,
+    onChartFullscreenChange: (Boolean) -> Unit = {},
     canShareAllFiles: Boolean,
     canSharePacketFile: Boolean,
     canShareCsvFile: Boolean,
@@ -135,6 +146,7 @@ fun DeviceAppShell(
                     },
                     actions = {
                         if (selectedDestination.supportsExport) {
+                            DriveBackupTopStatus(state = driveBackupState)
                             TextButton(
                                 onClick = { isExportSheetVisible = true },
                                 enabled = canExportAnyFile,
@@ -181,15 +193,21 @@ fun DeviceAppShell(
                         onChartZoomReset = onChartZoomReset,
                         onChartPanGesture = onChartPanGesture,
                         onChartZoomGesture = onChartZoomGesture,
+                        onChartFullscreenChange = onChartFullscreenChange,
                     )
 
                     AppDestination.SETTINGS -> DeviceScreenEntryPoint.Settings(
                         uiState = uiState,
                         selectedLanguage = selectedLanguage,
                         selectedThemeMode = selectedThemeMode,
+                        driveBackupState = driveBackupState,
                         onTransportProfileSelect = onTransportProfileSelect,
                         onLanguageSelect = onLanguageSelect,
                         onThemeModeSelect = onThemeModeSelect,
+                        onDriveConnect = onDriveConnect,
+                        onDriveAutoUploadChange = onDriveAutoUploadChange,
+                        onDriveWifiOnlyChange = onDriveWifiOnlyChange,
+                        onDriveRetryPending = onDriveRetryPending,
                     )
                 }
             }
@@ -240,6 +258,52 @@ fun DeviceAppShell(
 }
 
 @Composable
+private fun DriveBackupTopStatus(state: DriveBackupUiState) {
+    if (!state.status.isVisibleInTopBar) return
+
+    val colorScheme = MaterialTheme.colorScheme
+    val icon = when (state.status) {
+        DriveBackupStatus.READY -> Icons.Rounded.CloudDone
+        DriveBackupStatus.NEEDS_ATTENTION -> Icons.Rounded.CloudOff
+        else -> Icons.Rounded.CloudUpload
+    }
+    val contentColor = when (state.status) {
+        DriveBackupStatus.NEEDS_ATTENTION -> colorScheme.error
+        DriveBackupStatus.READY -> colorScheme.primary
+        else -> colorScheme.tertiary
+    }
+    val label = appStringResource(driveBackupStatusLabelRes(state.status))
+
+    Box(
+        modifier = Modifier
+            .padding(end = 4.dp)
+            .size(40.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (state.status.isInProgress) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(32.dp),
+                strokeWidth = 2.dp,
+                color = contentColor,
+            )
+        }
+        Surface(
+            shape = RoundedCornerShape(999.dp),
+            color = colorScheme.surfaceVariant,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = contentColor,
+                modifier = Modifier
+                    .padding(7.dp)
+                    .size(18.dp),
+            )
+        }
+    }
+}
+
+@Composable
 private fun ExportProgressOverlay(phase: ExportPhase) {
     Dialog(
         onDismissRequest = {},
@@ -283,6 +347,19 @@ private fun ExportProgressOverlay(phase: ExportPhase) {
                 }
             }
         }
+    }
+}
+
+private fun driveBackupStatusLabelRes(status: DriveBackupStatus): Int {
+    return when (status) {
+        DriveBackupStatus.IDLE -> R.string.drive_backup_status_idle
+        DriveBackupStatus.READY -> R.string.drive_backup_status_ready
+        DriveBackupStatus.CONNECTING -> R.string.drive_backup_status_connecting
+        DriveBackupStatus.PREPARING -> R.string.drive_backup_status_preparing
+        DriveBackupStatus.QUEUED -> R.string.drive_backup_status_queued
+        DriveBackupStatus.WAITING -> R.string.drive_backup_status_waiting
+        DriveBackupStatus.UPLOADING -> R.string.drive_backup_status_uploading
+        DriveBackupStatus.NEEDS_ATTENTION -> R.string.drive_backup_status_needs_attention
     }
 }
 
@@ -518,6 +595,11 @@ object AppShellEntryPoint {
         onTransportProfileSelect: (BleTransportProfile) -> Unit,
         onLanguageSelect: (AppLanguage) -> Unit,
         onThemeModeSelect: (AppThemeMode) -> Unit,
+        driveBackupState: DriveBackupUiState = DriveBackupUiState(),
+        onDriveConnect: () -> Unit = {},
+        onDriveAutoUploadChange: (Boolean) -> Unit = {},
+        onDriveWifiOnlyChange: (Boolean) -> Unit = {},
+        onDriveRetryPending: () -> Unit = {},
         onDisconnect: () -> Unit,
         onSensorSelect: (Int) -> Unit,
         onChannelSelect: (Int) -> Unit,
@@ -530,6 +612,7 @@ object AppShellEntryPoint {
         onChartZoomReset: () -> Unit,
         onChartPanGesture: (Float) -> Unit,
         onChartZoomGesture: (Float, Float) -> Unit,
+        onChartFullscreenChange: (Boolean) -> Unit = {},
         canShareAllFiles: Boolean,
         canSharePacketFile: Boolean,
         canShareCsvFile: Boolean,
@@ -547,11 +630,16 @@ object AppShellEntryPoint {
             uiState = uiState,
             selectedLanguage = selectedLanguage,
             selectedThemeMode = selectedThemeMode,
+            driveBackupState = driveBackupState,
             onStartScan = onStartScan,
             onConnect = onConnect,
             onTransportProfileSelect = onTransportProfileSelect,
             onLanguageSelect = onLanguageSelect,
             onThemeModeSelect = onThemeModeSelect,
+            onDriveConnect = onDriveConnect,
+            onDriveAutoUploadChange = onDriveAutoUploadChange,
+            onDriveWifiOnlyChange = onDriveWifiOnlyChange,
+            onDriveRetryPending = onDriveRetryPending,
             onDisconnect = onDisconnect,
             onSensorSelect = onSensorSelect,
             onChannelSelect = onChannelSelect,
@@ -564,6 +652,7 @@ object AppShellEntryPoint {
             onChartZoomReset = onChartZoomReset,
             onChartPanGesture = onChartPanGesture,
             onChartZoomGesture = onChartZoomGesture,
+            onChartFullscreenChange = onChartFullscreenChange,
             canShareAllFiles = canShareAllFiles,
             canSharePacketFile = canSharePacketFile,
             canShareCsvFile = canShareCsvFile,

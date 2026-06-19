@@ -140,6 +140,12 @@ class BatchingPacketCaptureController(
         batcher.clearPending()
     }
 
+    override fun finishCapture(timeoutMillis: Long): Boolean {
+        val finished = delegate.finishCapture(timeoutMillis)
+        batcher.flushNow()
+        return finished
+    }
+
     override fun updateSelection(sensorType: Int, channel: Int) {
         delegate.updateSelection(sensorType, channel)
     }

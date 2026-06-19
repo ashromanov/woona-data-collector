@@ -29,7 +29,7 @@ enum class ChartWindowPreset(
     val label: String,
     val durationMillis: Long,
 ) {
-    // These labels intentionally avoid wall-clock units because the chart now presents raw device timer spans.
+    // These labels intentionally avoid wall-clock units because the chart presents raw device timer spans.
     THIRTY_SECONDS(label = "30k", durationMillis = 30_000L),
     SIXTY_SECONDS(label = "60k", durationMillis = 60_000L),
     FIVE_MINUTES(label = "300k", durationMillis = 5 * 60_000L),
@@ -65,6 +65,7 @@ enum class ExportPhase(
     PREPARING_SNAPSHOTS(R.string.export_phase_preparing_snapshots),
     GENERATING_CSV(R.string.export_phase_generating_csv),
     OPENING_SHARE_SHEET(R.string.export_phase_opening_share_sheet),
+    PACKAGING_ARCHIVE(R.string.export_phase_packaging_archive),
 }
 
 data class DeviceUiState(

@@ -8,11 +8,13 @@ import com.example.myapplication.ble.BleSessionController
 import com.example.myapplication.ble.BleSessionState
 import com.example.myapplication.storage.BleSessionCsvExporter
 import com.example.myapplication.storage.FileShareIntentFactory
+import com.example.myapplication.storage.SessionArchiveExporter
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import java.util.zip.ZipFile
 
 class DeviceFeatureControllerTest {
     @Test
@@ -463,6 +465,68 @@ class DeviceFeatureControllerTest {
     }
 
     @Test
+    fun createSessionArchive_packagesAllAvailableSessionArtifacts() {
+        val packetFile = File("/tmp/archive-packet.bin").apply {
+            writeBytes(
+                packet(
+                    counter = 10,
+                    timerMillis = 50,
+                    blocks = listOf(
+                        sensorBlock(sensorType = 2, channelSamples = listOf(listOf(10, 20))),
+                    ),
+                ),
+            )
+        }
+        val rawFile = File("/tmp/archive-raw.binlog").apply { writeText("raw") }
+        val logFile = File("/tmp/archive-log.log").apply { writeText("log") }
+        val archiveDirectory = File("/tmp/woona-archive-test").apply { mkdirs() }
+        val controller = DeviceFeatureController(
+            bleSessionController = FakeBleSessionController(),
+            packetCaptureController = FakePacketCaptureController(
+                currentFile = packetFile,
+                currentPacketFile = packetFile,
+                currentRawFile = rawFile,
+                currentLogFile = logFile,
+            ),
+            fileShareIntentFactory = FakeFileShareIntentFactory(),
+            sessionCsvExporter = testSessionCsvExporter(),
+            sessionArchiveExporter = SessionArchiveExporter(
+                archiveTimestampFormatter = { "test-session" },
+            ),
+            wallClockMillisProvider = { 1_000L },
+        )
+
+        val archiveFile = controller.createSessionArchive(archiveDirectory)
+
+        assertNotNull(archiveFile)
+        ZipFile(requireNotNull(archiveFile)).use { archive ->
+            val entryNames = archive.entries().asSequence().map { it.name }.toList()
+            assertEquals(
+                listOf(
+                    "manifest.json",
+                    "archive-packet_snapshot_packet.bin",
+                    "archive-packet_snapshot_csv.csv",
+                    "archive-raw_snapshot_raw.binlog",
+                    "archive-log_snapshot_log.log",
+                ),
+                entryNames,
+            )
+            assertTrue(
+                archive.getInputStream(archive.getEntry("manifest.json"))
+                    .bufferedReader()
+                    .use { it.readText() }
+                    .contains("\"sessionStartMillis\": null"),
+            )
+        }
+
+        packetFile.delete()
+        rawFile.delete()
+        logFile.delete()
+        archiveDirectory.listFiles().orEmpty().forEach(File::delete)
+        archiveDirectory.delete()
+    }
+
+    @Test
     fun canShareFiles_remainAvailableAfterDisconnectForCompletedSession() {
         val packetFile = File("/tmp/share-disconnect-packet.bin").apply { writeText("packet") }
         val rawFile = File("/tmp/share-disconnect-raw.binlog").apply { writeText("raw") }
@@ -489,6 +553,34 @@ class DeviceFeatureControllerTest {
         packetFile.delete()
         rawFile.delete()
         logFile.delete()
+    }
+
+    @Test
+    fun disconnectRequested_stopsAndFlushesCapture() {
+        val ble = FakeBleSessionController()
+        val capture = FakePacketCaptureController()
+        val controller = createController(
+            bleSessionController = ble,
+            packetCaptureController = capture,
+        )
+
+        controller.onDisconnectRequested()
+
+        assertTrue(capture.stopCaptureCalled)
+        assertTrue(capture.flushCalled)
+        assertEquals(1, ble.disconnectCalls)
+    }
+
+    @Test
+    fun finishCaptureForExport_drainsCaptureWithoutResettingSession() {
+        val capture = FakePacketCaptureController()
+        val controller = createController(packetCaptureController = capture)
+
+        assertTrue(controller.finishCaptureForExport())
+
+        assertTrue(capture.finishCaptureCalled)
+        assertEquals(2_000L, capture.finishCaptureTimeoutMillis)
+        assertTrue(capture.flushCalled)
     }
 
     @Test
@@ -634,6 +726,7 @@ private fun sensorBlock(
 private class FakeBleSessionController : BleSessionController {
     var startScanningCalls = 0
     var stopScanningCalls = 0
+    var disconnectCalls = 0
     var connectedAddress: String? = null
     var closeCalls = 0
     var transportProfile = BleTransportProfile.COMPATIBILITY
@@ -658,7 +751,9 @@ private class FakeBleSessionController : BleSessionController {
         connectedAddress = address
     }
 
-    override fun disconnect() = Unit
+    override fun disconnect() {
+        disconnectCalls++
+    }
 
     override fun close() {
         closeCalls++
@@ -676,6 +771,9 @@ private class FakePacketCaptureController(
     var stopCaptureCalled = false
     var selectedSensorType: Int? = null
     var selectedChannel: Int? = null
+    var finishCaptureCalled = false
+    var finishCaptureTimeoutMillis: Long? = null
+    var finishCaptureResult = true
     var flushCalled = false
     var closeCalled = false
     val recordedDiagnostics = mutableListOf<PacketDiagnosticEvent>()
@@ -692,6 +790,13 @@ private class FakePacketCaptureController(
 
     override fun stopCapture() {
         stopCaptureCalled = true
+    }
+
+    override fun finishCapture(timeoutMillis: Long): Boolean {
+        finishCaptureCalled = true
+        finishCaptureTimeoutMillis = timeoutMillis
+        flush()
+        return finishCaptureResult
     }
 
     override fun updateSelection(sensorType: Int, channel: Int) {

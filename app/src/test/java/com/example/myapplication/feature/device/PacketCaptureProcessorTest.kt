@@ -413,6 +413,30 @@ class PacketCaptureProcessorTest {
         })
     }
 
+    @Test
+    fun finishCapture_drainsQueuedPacketsAndRejectsNewFragments() {
+        val directory = Files.createTempDirectory("packet-processor-finish").toFile()
+        val firstPacket = validPacket(counter = 10, timerMillis = 50)
+        val processor = PacketCaptureProcessor(
+            packetFileStore = BlePacketFileStore(directory = directory, timestampProvider = { 7L }),
+            rawFragmentFileStore = BleRawFragmentFileStore(directory = directory, timestampProvider = { 77L }),
+            diagnosticLogFileStore = BleDiagnosticLogFileStore(directory = directory, timestampProvider = { 777L }),
+            onPacketProcessed = {},
+            onError = { message, throwable -> throw AssertionError(message, throwable) },
+        )
+
+        assertEquals(PacketSubmitResult.ACCEPTED, processor.submit(firstPacket))
+        assertTrue(processor.finishCapture(timeoutMillis = 1_000L))
+        assertEquals(
+            PacketSubmitResult.REJECTED,
+            processor.submit(validPacket(counter = 11, timerMillis = 60)),
+        )
+        processor.close()
+
+        val file = requireNotNull(processor.currentPacketFile())
+        assertArrayEquals(firstPacket, file.readBytes())
+    }
+
     private fun validPacket(
         counter: Int,
         timerMillis: Int,
