@@ -288,12 +288,28 @@ class DeviceFeatureController(
     }
 
     fun startReplay(fileBytes: ByteArray) {
+        startReplay { fileBytes.inputStream() }
+    }
+
+    fun startReplay(source: ReplayInputSource) {
         if (packetReplayController == null) {
             uiStateHolder.showError(appTextResolver.getString(R.string.replay_unavailable))
             return
         }
 
-        packetReplayController.stop()
+        packetReplayController.startReplay(source)
+    }
+
+    fun onReplayPreparing() {
+        bleSessionController.stopScanning()
+        uiStateHolder.startReplayPreparation()
+    }
+
+    fun cancelReplayPreparation() {
+        packetReplayController?.stop()
+    }
+
+    fun onReplayStarted() {
         bleSessionController.close()
         pendingTransportDiagnostics.clear()
         awaitingCaptureReady = false
@@ -305,7 +321,6 @@ class DeviceFeatureController(
         }
         deleteSnapshotFiles(staleSnapshot)
         uiStateHolder.startReplaySession()
-        packetReplayController.startReplay(fileBytes)
     }
 
     fun onReplayCompleted() {
@@ -313,7 +328,11 @@ class DeviceFeatureController(
     }
 
     fun onReplayStopped() {
-        uiStateHolder.stopCaptureSession()
+        if (uiStateHolder.uiState.isReplayPreparing) {
+            uiStateHolder.cancelReplayPreparation()
+        } else {
+            uiStateHolder.stopCaptureSession()
+        }
     }
 
     private fun resetCaptureSession() {

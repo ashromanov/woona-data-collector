@@ -3,6 +3,7 @@ package com.example.myapplication.feature.device
 import com.example.myapplication.ble.BleDevice
 import com.example.myapplication.ble.BleSessionState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -358,6 +359,33 @@ class DeviceUiStateHolderTest {
 
         assertTrue(holder.uiState.showCaptureUi)
         assertTrue(holder.uiState.isReplayRunning)
+    }
+
+    @Test
+    fun replayPreparation_preservesCurrentSessionUntilReplayStarts() {
+        val holder = DeviceUiStateHolder()
+        holder.applyPacketUpdate(
+            PacketProcessingUpdate(
+                packetsReceived = 3,
+                packetsLost = 1,
+                packetsRejected = 0,
+                timerRegressionRejects = 0,
+                chartSamplesByStream = emptyMap(),
+            ),
+        )
+
+        holder.startReplayPreparation()
+        holder.onSessionStateChanged(BleSessionState.DISCONNECTED)
+
+        assertTrue(holder.uiState.isReplayPreparing)
+        assertEquals(3L, holder.uiState.packetsReceived)
+        assertEquals(1L, holder.uiState.packetsLost)
+
+        holder.cancelReplayPreparation()
+
+        assertFalse(holder.uiState.isReplayPreparing)
+        assertEquals(3L, holder.uiState.packetsReceived)
+        assertEquals(1L, holder.uiState.packetsLost)
     }
 
     @Test

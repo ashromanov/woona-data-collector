@@ -10,6 +10,7 @@ import com.example.myapplication.storage.BleSessionCsvExporter
 import com.example.myapplication.storage.FileShareIntentFactory
 import com.example.myapplication.storage.SessionArchiveExporter
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -184,7 +185,7 @@ class DeviceFeatureControllerTest {
     }
 
     @Test
-    fun startReplay_resetsCaptureAndShowsReplayUi() {
+    fun startReplay_resetsCaptureOnlyAfterReplayIsPrepared() {
         val ble = FakeBleSessionController()
         val packetCapture = FakePacketCaptureController()
         val replayController = FakePacketReplayController()
@@ -196,12 +197,44 @@ class DeviceFeatureControllerTest {
 
         controller.startReplay(byteArrayOf(0x01, 0x02))
 
-        assertTrue(packetCapture.resetCalled)
         assertTrue(replayController.started)
-        assertTrue(replayController.stopped)
+        assertFalse(replayController.stopped)
+        assertFalse(packetCapture.resetCalled)
+        assertEquals(0, ble.closeCalls)
+        assertFalse(controller.uiState.isReplayRunning)
+
+        controller.onReplayPreparing()
+
+        assertTrue(controller.uiState.isReplayPreparing)
+        assertFalse(packetCapture.resetCalled)
+        assertEquals(0, ble.closeCalls)
+        assertEquals(1, ble.stopScanningCalls)
+
+        controller.onReplayStarted()
+
+        assertTrue(packetCapture.resetCalled)
         assertEquals(1, ble.closeCalls)
         assertTrue(controller.uiState.showCaptureUi)
+        assertFalse(controller.uiState.isReplayPreparing)
         assertTrue(controller.uiState.isReplayRunning)
+    }
+
+    @Test
+    fun cancelReplayPreparation_stopsReplayWithoutResettingCapture() {
+        val packetCapture = FakePacketCaptureController()
+        val replayController = FakePacketReplayController()
+        val controller = createController(
+            packetCaptureController = packetCapture,
+            packetReplayController = replayController,
+        )
+        controller.onReplayPreparing()
+
+        controller.cancelReplayPreparation()
+        controller.onReplayStopped()
+
+        assertTrue(replayController.stopped)
+        assertFalse(packetCapture.resetCalled)
+        assertFalse(controller.uiState.isReplayPreparing)
     }
 
     @Test
@@ -556,7 +589,7 @@ class DeviceFeatureControllerTest {
     }
 
     @Test
-    fun disconnectRequested_stopsAndFlushesCapture() {
+    fun disconnectRequested_stopsCaptureWithoutFlushingOnCallingThread() {
         val ble = FakeBleSessionController()
         val capture = FakePacketCaptureController()
         val controller = createController(
@@ -567,7 +600,7 @@ class DeviceFeatureControllerTest {
         controller.onDisconnectRequested()
 
         assertTrue(capture.stopCaptureCalled)
-        assertTrue(capture.flushCalled)
+        assertFalse(capture.flushCalled)
         assertEquals(1, ble.disconnectCalls)
     }
 
@@ -829,8 +862,10 @@ private class FakePacketReplayController : PacketReplayController {
     var started = false
     var stopped = false
 
-    override fun startReplay(fileBytes: ByteArray) {
-        started = fileBytes.isNotEmpty()
+    override fun startReplay(source: ReplayInputSource) {
+        started = source.open(ReplayCancellationToken())?.use { inputStream ->
+            inputStream.read() != -1
+        } == true
     }
 
     override fun stop() {

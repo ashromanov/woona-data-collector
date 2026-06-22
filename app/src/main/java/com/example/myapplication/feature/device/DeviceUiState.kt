@@ -76,6 +76,7 @@ data class DeviceUiState(
     val selectedSensorType: Int = DEFAULT_SENSOR_TYPE_VALUE,
     val selectedChannel: Int = DEFAULT_CHANNEL_VALUE,
     val showCaptureUi: Boolean = false,
+    val isReplayPreparing: Boolean = false,
     val isReplayRunning: Boolean = false,
     val isScanning: Boolean = false,
     val isConnected: Boolean = false,
@@ -128,7 +129,7 @@ class DeviceUiStateHolder {
     }
 
     fun onSessionStateChanged(state: BleSessionState) {
-        if (uiState.isReplayRunning) return
+        if (uiState.isReplayPreparing || uiState.isReplayRunning) return
 
         val updatedState = uiState.copy(
             showCaptureUi = uiState.showCaptureUi || state == BleSessionState.CONNECTED,
@@ -188,10 +189,23 @@ class DeviceUiStateHolder {
         )
     }
 
+    fun startReplayPreparation() {
+        uiState = uiState.copy(
+            isReplayPreparing = true,
+            isScanning = false,
+            errorMessage = null,
+        )
+    }
+
+    fun cancelReplayPreparation() {
+        uiState = uiState.copy(isReplayPreparing = false)
+    }
+
     fun startReplaySession() {
         clearChartHistory()
         uiState = uiState.copy(
             showCaptureUi = true,
+            isReplayPreparing = false,
             isReplayRunning = true,
             isConnected = false,
             isScanning = false,
@@ -215,13 +229,17 @@ class DeviceUiStateHolder {
     }
 
     fun finishReplaySession() {
-        uiState = uiState.copy(isReplayRunning = false)
+        uiState = uiState.copy(
+            isReplayPreparing = false,
+            isReplayRunning = false,
+        )
     }
 
     fun stopCaptureSession() {
         clearChartHistory()
         uiState = uiState.copy(
             showCaptureUi = false,
+            isReplayPreparing = false,
             isReplayRunning = false,
             isConnected = false,
             isScanning = false,

@@ -7,6 +7,7 @@
     <string name="action_export">Export</string>
 
     <string name="status_replay">Replay</string>
+    <string name="status_replay_preparing">Preparing replay</string>
     <string name="status_connected">Connected</string>
     <string name="status_scanning">Scanning</string>
     <string name="status_idle">Idle</string>
@@ -75,6 +76,7 @@
     <string name="action_start_scan">START SCAN</string>
     <string name="action_scanning">SCANNING...</string>
     <string name="action_replay_bin_debug">Upload binary (debug)</string>
+    <string name="action_cancel_replay_preparation">Cancel replay preparation</string>
     <string name="ble_devices_scanning_empty">Scanning for nearby BLE devices...</string>
     <string name="ble_devices_empty">No discovered devices yet.</string>
 

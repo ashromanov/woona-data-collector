@@ -2,6 +2,7 @@ package com.example.myapplication
 
 import android.Manifest
 import android.os.Bundle
+import android.os.CancellationSignal
 import android.os.Looper
 import android.util.Log
 import android.widget.Toast
@@ -113,32 +114,16 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.GetContent(),
     ) { uri ->
         if (uri == null) return@registerForActivityResult
-
-        backgroundExecutor.execute {
+        deviceFeatureController.startReplay { cancellationToken ->
+            val cancellationSignal = CancellationSignal()
+            cancellationToken.invokeOnCancellation(cancellationSignal::cancel)
+            val descriptor = contentResolver.openAssetFileDescriptor(uri, "r", cancellationSignal)
+                ?: return@startReplay null
             try {
-                val fileBytes = contentResolver.openInputStream(uri)?.use { inputStream ->
-                    inputStream.readBytes()
-                }
-                runOnUiThread {
-                    if (fileBytes == null || fileBytes.isEmpty()) {
-                        Toast.makeText(
-                            this,
-                            appTextResolver.getString(R.string.unable_read_bin_file),
-                            Toast.LENGTH_SHORT,
-                        ).show()
-                        return@runOnUiThread
-                    }
-
-                    deviceFeatureController.startReplay(fileBytes)
-                }
+                descriptor.createInputStream()
             } catch (exception: Exception) {
-                runOnUiThread {
-                    Toast.makeText(
-                        this,
-                        appTextResolver.getString(R.string.unable_load_bin_file),
-                        Toast.LENGTH_SHORT,
-                    ).show()
-                }
+                descriptor.close()
+                throw exception
             }
         }
     }
@@ -292,7 +277,13 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                         showReplayAction = true,
-                        onReplayRequest = { replayFilePickerLauncher.launch("*/*") },
+                        onReplayRequest = {
+                            if (deviceFeatureController.uiState.isReplayPreparing) {
+                                deviceFeatureController.cancelReplayPreparation()
+                            } else {
+                                replayFilePickerLauncher.launch("*/*")
+                            }
+                        },
                     )
                 }
             }

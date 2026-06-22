@@ -7,6 +7,7 @@
     <string name="action_export">Экспорт</string>
 
     <string name="status_replay">Реплей</string>
+    <string name="status_replay_preparing">Подготовка реплея</string>
     <string name="status_connected">Подключено</string>
     <string name="status_scanning">Сканирование</string>
     <string name="status_idle">Ожидание</string>
@@ -75,6 +76,7 @@
     <string name="action_start_scan">НАЧАТЬ ПОИСК</string>
     <string name="action_scanning">ИДЕТ СКАНИРОВАНИЕ...</string>
     <string name="action_replay_bin_debug">Загрузить файл (debug)</string>
+    <string name="action_cancel_replay_preparation">Отменить подготовку реплея</string>
     <string name="ble_devices_scanning_empty">Идет поиск ближайших BLE-устройств...</string>
     <string name="ble_devices_empty">Устройства еще не найдены.</string>
 

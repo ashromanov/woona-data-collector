@@ -152,10 +152,11 @@ fun createDeviceFeatureController(
     uiStateHolder.onTransportProfileSelected(requireNotNull(bleSessionController).currentTransportProfile())
     val packetReplayController: PacketReplayController = DebugPacketReplayController(
         submitFragment = submitPacketFragment,
+        onReplayPreparing = {
+            deviceFeatureController?.onReplayPreparing()
+        },
         onReplayStarted = {
-            mainHandler.post {
-                uiStateHolder.startReplaySession()
-            }
+            deviceFeatureController?.onReplayStarted()
         },
         onReplayCompleted = {
             mainHandler.post {
@@ -174,6 +175,10 @@ fun createDeviceFeatureController(
             Log.e("BLE_REPLAY", message, throwable)
         },
         appTextResolver = appTextResolver,
+        callbackDispatcher = { callback -> mainHandler.post(callback) },
+        replayTempFileFactory = {
+            File.createTempFile("debug-replay-", ".bin", context.cacheDir)
+        },
     )
 
     deviceFeatureController = DeviceFeatureController(

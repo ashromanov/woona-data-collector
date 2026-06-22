@@ -405,7 +405,7 @@ private fun DeviceDiscoverySection(
             Spacer(Modifier.height(8.dp))
             Button(
                 onClick = onStartScan,
-                enabled = !uiState.isScanning,
+                enabled = !uiState.isScanning && !uiState.isReplayPreparing,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(scanButtonLabel)
@@ -416,8 +416,22 @@ private fun DeviceDiscoverySection(
                     onClick = onReplayRequest,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(appStringResource(R.string.action_replay_bin_debug))
+                    if (uiState.isReplayPreparing) {
+                        Icon(
+                            imageVector = Icons.Rounded.Close,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(appStringResource(R.string.action_cancel_replay_preparation))
+                    } else {
+                        Text(appStringResource(R.string.action_replay_bin_debug))
+                    }
                 }
+            }
+            if (uiState.isReplayPreparing) {
+                Spacer(Modifier.height(8.dp))
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
             Spacer(Modifier.height(8.dp))
             if (uiState.foundDevices.isEmpty()) {
@@ -802,7 +816,7 @@ private fun ScanSection(
         Spacer(Modifier.height(6.dp))
         Button(
             onClick = onStartScan,
-            enabled = !uiState.isScanning,
+            enabled = !uiState.isScanning && !uiState.isReplayPreparing,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(scanButtonLabel)
@@ -813,8 +827,22 @@ private fun ScanSection(
                 onClick = onReplayRequest,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(appStringResource(R.string.action_replay_bin_debug))
+                if (uiState.isReplayPreparing) {
+                    Icon(
+                        imageVector = Icons.Rounded.Close,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(appStringResource(R.string.action_cancel_replay_preparation))
+                } else {
+                    Text(appStringResource(R.string.action_replay_bin_debug))
+                }
             }
+        }
+        if (uiState.isReplayPreparing) {
+            Spacer(Modifier.height(8.dp))
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
         }
 
         LazyColumn(modifier = Modifier.fillMaxSize().padding(top = 6.dp)) {
@@ -1736,6 +1764,7 @@ private fun ChartStatusLine(
     modifier: Modifier = Modifier,
 ) {
     val connectionLabel = when {
+        uiState.isReplayPreparing -> appStringResource(R.string.status_replay_preparing)
         uiState.isReplayRunning -> appStringResource(R.string.status_replay)
         uiState.isConnected -> appStringResource(R.string.status_connected)
         uiState.isScanning -> appStringResource(R.string.status_scanning)

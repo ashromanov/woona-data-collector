@@ -367,6 +367,12 @@ private fun driveBackupStatusLabelRes(status: DriveBackupStatus): Int {
 private fun ConnectionStatusBadge(uiState: DeviceUiState) {
     val colorScheme = MaterialTheme.colorScheme
     val (label, containerColor, contentColor) = when {
+        uiState.isReplayPreparing -> Triple(
+            appStringResource(R.string.status_replay_preparing),
+            colorScheme.secondaryContainer,
+            colorScheme.onSecondaryContainer,
+        )
+
         uiState.isReplayRunning -> Triple(
             appStringResource(R.string.status_replay),
             colorScheme.tertiaryContainer,
