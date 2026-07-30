@@ -27,6 +27,8 @@ class GoogleDriveArchiveUploader(
             exception.toUploadResult()
         } catch (exception: IOException) {
             DriveUploadResult.RetryLater(exception)
+        } catch (exception: Exception) {
+            DriveUploadResult.PermanentFailure(exception)
         }
     }
 

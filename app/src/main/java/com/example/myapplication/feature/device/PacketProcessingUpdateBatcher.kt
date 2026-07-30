@@ -1,5 +1,7 @@
 package com.example.myapplication.feature.device
 
+import java.io.File
+
 class PacketProcessingUpdateBatcher(
     private val dispatchIntervalMillis: Long,
     private val schedule: (Runnable, Long) -> Unit,
@@ -148,6 +150,10 @@ class BatchingPacketCaptureController(
 
     override fun updateSelection(sensorType: Int, channel: Int) {
         delegate.updateSelection(sensorType, channel)
+    }
+
+    override fun useSessionDirectory(directory: File) {
+        delegate.useSessionDirectory(directory)
     }
 
     override fun resetSession() {

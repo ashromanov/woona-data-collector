@@ -95,6 +95,7 @@ fun DeviceOverviewScreen(
     onDisconnect: () -> Unit,
     showReplayAction: Boolean,
     onReplayRequest: () -> Unit,
+    profileContent: @Composable () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
@@ -102,6 +103,10 @@ fun DeviceOverviewScreen(
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        item {
+            profileContent()
+        }
+
         if (!uiState.errorMessage.isNullOrBlank()) {
             item {
                 ErrorCard(message = uiState.errorMessage)
@@ -673,7 +678,10 @@ private fun DriveBackupSettingsCard(
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.weight(1f),
                 )
-                OutlinedButton(onClick = onConnect) {
+                OutlinedButton(
+                    onClick = onConnect,
+                    enabled = state.status != DriveBackupStatus.CONNECTING,
+                ) {
                     Text(
                         appStringResource(
                             if (state.isAuthorized) {
@@ -2173,6 +2181,7 @@ object DeviceScreenEntryPoint {
         onDisconnect: () -> Unit,
         showReplayAction: Boolean,
         onReplayRequest: () -> Unit,
+        profileContent: @Composable () -> Unit = {},
         modifier: Modifier = Modifier,
     ) {
         DeviceOverviewScreen(
@@ -2182,6 +2191,7 @@ object DeviceScreenEntryPoint {
             onDisconnect = onDisconnect,
             showReplayAction = showReplayAction,
             onReplayRequest = onReplayRequest,
+            profileContent = profileContent,
             modifier = modifier,
         )
     }

@@ -11,6 +11,18 @@ import java.util.Locale
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
+data class SessionArchiveMetadata(
+    val profileId: String,
+    val profileName: String,
+    val recordingId: String,
+    val source: String,
+    val status: String,
+    val timezone: String,
+    val profileQuestionnaireJson: String?,
+    val questionnaireJson: String?,
+    val synchronizationJson: String?,
+)
+
 class SessionArchiveExporter(
     private val archiveTimestampFormatter: (Long) -> String = { millis ->
         ARCHIVE_TIME_FORMATTER.format(Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()))
@@ -21,6 +33,7 @@ class SessionArchiveExporter(
         targetDirectory: File,
         sessionStartMillis: Long?,
         createdAtMillis: Long,
+        metadata: SessionArchiveMetadata? = null,
     ): File {
         require(files.isNotEmpty()) { "At least one session file is required" }
         targetDirectory.mkdirs()
@@ -42,6 +55,7 @@ class SessionArchiveExporter(
                     files = files,
                     sessionStartMillis = sessionStartMillis,
                     createdAtMillis = createdAtMillis,
+                    metadata = metadata,
                 )
                 files.forEach { file ->
                     addFile(
@@ -68,6 +82,7 @@ class SessionArchiveExporter(
         files: List<File>,
         sessionStartMillis: Long?,
         createdAtMillis: Long,
+        metadata: SessionArchiveMetadata?,
     ) {
         val fileEntries = files.joinToString(separator = ",\n") { file ->
             "    {\"name\":\"${jsonEscape(file.name)}\",\"size\":${file.length()}}"
@@ -77,6 +92,26 @@ class SessionArchiveExporter(
             append("  \"createdAtMillis\": $createdAtMillis,\n")
             append("  \"sessionStartMillis\": ")
             append(sessionStartMillis?.toString() ?: "null")
+            append(",\n")
+            append("  \"profile\": ")
+            append(
+                metadata?.let {
+                    "{\"id\":\"${jsonEscape(it.profileId)}\",\"numberOrName\":\"${jsonEscape(it.profileName)}\"," +
+                        "\"questionnaire\":${it.profileQuestionnaireJson ?: "null"}}"
+                } ?: "null",
+            )
+            append(",\n")
+            append("  \"recording\": ")
+            append(
+                metadata?.let {
+                    "{\"id\":\"${jsonEscape(it.recordingId)}\",\"source\":\"${jsonEscape(it.source)}\"," +
+                        "\"status\":\"${jsonEscape(it.status)}\",\"timezone\":\"${jsonEscape(it.timezone)}\"," +
+                        "\"questionnaire\":${it.questionnaireJson ?: "null"}}"
+                } ?: "null",
+            )
+            append(",\n")
+            append("  \"synchronization\": ")
+            append(metadata?.synchronizationJson ?: "null")
             append(",\n")
             append("  \"files\": [\n")
             append(fileEntries)

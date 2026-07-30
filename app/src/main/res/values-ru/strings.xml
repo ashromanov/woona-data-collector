@@ -13,12 +13,14 @@
     <string name="status_idle">Ожидание</string>
 
     <string name="export_session_files">Экспорт файлов сессии</string>
-    <string name="export_choose_artifact">Выберите артефакт сессии для отправки.</string>
+    <string name="export_choose_artifact">Выберите способ экспорта этой сессии.</string>
     <string name="export_progress_title">Подготовка экспорта</string>
     <string name="export_phase_preparing_snapshots">Подготовка снимков</string>
     <string name="export_phase_generating_csv">Генерация CSV</string>
     <string name="export_phase_opening_share_sheet">Открытие окна отправки</string>
     <string name="export_phase_packaging_archive">Упаковка архива</string>
+    <string name="export_save_to_google_drive">Сохранить на Google Диск</string>
+    <string name="export_save_to_google_drive_desc">Упаковать все доступные файлы сессии в ZIP-архив и загрузить его с текущими настройками Google Диска.</string>
     <string name="export_all_files">Все файлы</string>
     <string name="export_all_files_desc">Отправить вместе все доступные артефакты сессии через один chooser.</string>
     <string name="export_compiled_binary">Собранный бинарный файл</string>
@@ -115,6 +117,8 @@
     <string name="chart_fullscreen_title">График на весь экран</string>
     <string name="chart_status_line">%1$s | пакеты %2$d | потери %3$d | отклонено %4$d</string>
     <string name="chart_empty_state">Нет данных для выбранного датчика/канала</string>
+    <string name="video_camera_permission_required">Для записи видео нужен доступ к камере</string>
+    <string name="video_recording_failed">Не удалось записать видео</string>
     <string name="chart_empty_state_window">История сессии сохраняется, окно: %1$s</string>
     <string name="chart_summary">%1$s | %2$s | Y x%3$d | %4$s - %5$s</string>
     <string name="relative_time_minutes_seconds">%1$dм %2$dс</string>

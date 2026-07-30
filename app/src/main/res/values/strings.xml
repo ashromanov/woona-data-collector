@@ -13,12 +13,14 @@
     <string name="status_idle">Idle</string>
 
     <string name="export_session_files">Export session files</string>
-    <string name="export_choose_artifact">Choose which session artifact to share.</string>
+    <string name="export_choose_artifact">Choose how to export this session.</string>
     <string name="export_progress_title">Preparing export</string>
     <string name="export_phase_preparing_snapshots">Preparing snapshots</string>
     <string name="export_phase_generating_csv">Generating CSV</string>
     <string name="export_phase_opening_share_sheet">Opening share sheet</string>
     <string name="export_phase_packaging_archive">Packaging archive</string>
+    <string name="export_save_to_google_drive">Save to Google Drive</string>
+    <string name="export_save_to_google_drive_desc">Package all available session files as a ZIP and upload it using your Drive backup settings.</string>
     <string name="export_all_files">All files</string>
     <string name="export_all_files_desc">Share every available session artifact together in one chooser.</string>
     <string name="export_compiled_binary">Compiled binary</string>
@@ -115,6 +117,8 @@
     <string name="chart_fullscreen_title">Fullscreen chart</string>
     <string name="chart_status_line">%1$s | packets %2$d | gap %3$d | rejected %4$d</string>
     <string name="chart_empty_state">No data for the selected sensor/channel</string>
+    <string name="video_camera_permission_required">Camera permission is required to record video</string>
+    <string name="video_recording_failed">Video recording failed</string>
     <string name="chart_empty_state_window">Session history is retained, window: %1$s</string>
     <string name="chart_summary">%1$s | %2$s | Y x%3$d | %4$s - %5$s</string>
     <string name="relative_time_minutes_seconds">%1$dm %2$ds</string>

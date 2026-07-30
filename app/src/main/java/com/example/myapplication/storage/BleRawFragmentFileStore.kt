@@ -6,7 +6,7 @@ import java.io.File
 import java.io.FileOutputStream
 
 class BleRawFragmentFileStore(
-    private val directory: File,
+    private var directory: File,
     private val filePrefix: String = DEFAULT_FILE_PREFIX,
     private val timestampProvider: () -> Long = { System.currentTimeMillis() },
 ) {
@@ -14,6 +14,7 @@ class BleRawFragmentFileStore(
     private var currentFile: File? = null
     private var outputStream: DataOutputStream? = null
     private var isClosed = false
+    private var sessionFileName: String? = null
 
     fun appendFragment(
         sequence: Long,
@@ -56,12 +57,24 @@ class BleRawFragmentFileStore(
         }
     }
 
+    fun useSessionDirectory(directory: File) {
+        synchronized(lock) {
+            check(!isClosed) { "Raw fragment file store is closed" }
+            outputStream?.close()
+            outputStream = null
+            currentFile = null
+            this.directory = directory
+            sessionFileName = "raw_fragments.binlog"
+        }
+    }
+
     fun currentFile(): File? = synchronized(lock) { currentFile }
 
     private fun ensureOpen(): DataOutputStream {
         check(!isClosed) { "Raw fragment file store is closed" }
         if (outputStream == null) {
-            val file = File(directory, "$filePrefix${timestampProvider()}.binlog")
+            directory.mkdirs()
+            val file = File(directory, sessionFileName ?: "$filePrefix${timestampProvider()}.binlog")
             val stream = DataOutputStream(
                 BufferedOutputStream(FileOutputStream(file, true), BUFFER_SIZE_BYTES),
             )

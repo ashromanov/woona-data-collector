@@ -2,18 +2,35 @@ package com.example.myapplication.feature.device
 
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import android.util.Log
 import com.example.myapplication.R
+import com.example.myapplication.ble.BleSessionState
 import com.example.myapplication.ble.BleTransportProfile
 import com.example.myapplication.ble.BleSessionController
+import com.example.myapplication.data.ArtifactType
+import com.example.myapplication.data.CaptureSyncMetadata
+import com.example.myapplication.data.Recording
+import com.example.myapplication.data.RecordingSource
+import com.example.myapplication.data.RecordingStatus
+import com.example.myapplication.data.SyncClockAnchor
+import com.example.myapplication.data.VideoSyncMetadata
+import com.example.myapplication.data.WoonaDatabase
+import com.example.myapplication.data.absoluteInstantForMonotonic
+import com.example.myapplication.data.monotonicOffsetNs
+import com.example.myapplication.data.toJson
 import com.example.myapplication.localization.EnglishTextResolver
 import com.example.myapplication.localization.TextResolver
 import com.example.myapplication.storage.BleSessionCsvExporter
 import com.example.myapplication.storage.FileShareIntentFactory
 import com.example.myapplication.storage.SessionArchiveExporter
+import com.example.myapplication.storage.SessionArchiveMetadata
+import com.example.myapplication.video.AndroidVideoRecorder
+import com.example.myapplication.video.AndroidVideoStartInfo
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.time.Instant
 
 class DeviceFeatureController(
     private val bleSessionController: BleSessionController,
@@ -26,6 +43,11 @@ class DeviceFeatureController(
     private val sessionArchiveExporter: SessionArchiveExporter = SessionArchiveExporter(),
     private val wallClockMillisProvider: () -> Long = System::currentTimeMillis,
     private val runOnUiThread: (() -> Unit) -> Unit = { action -> action() },
+    private val woonaDatabase: WoonaDatabase? = null,
+    private val snapshotDirectory: File? = null,
+    private val onRecordingChanged: () -> Unit = {},
+    private val videoRecorder: AndroidVideoRecorder? = null,
+    private val monotonicNanosProvider: () -> Long = SystemClock::elapsedRealtimeNanos,
 ) : AutoCloseable {
     private val exportLock = Any()
     private var pendingTransportDiagnostics = mutableListOf<String>()
@@ -33,6 +55,12 @@ class DeviceFeatureController(
     private var exportSnapshot: SessionExportSnapshot? = null
     private var exportSessionStartMillis: Long? = null
     private var exportEpoch = 0L
+    private var currentRecordingId: String? = null
+    private var currentRecording: Recording? = null
+    private var currentRecordingDirectory: File? = null
+    private var captureSyncMetadata: CaptureSyncMetadata? = null
+    @Volatile
+    private var recordingFinalized = true
 
     val uiState: DeviceUiState
         get() = uiStateHolder.uiState
@@ -70,12 +98,42 @@ class DeviceFeatureController(
         bleSessionController.connect(address)
     }
 
+    @Synchronized
+    fun beginRecordingSession(recording: Recording) {
+        finalizeRecording(RecordingStatus.INTERRUPTED)
+        currentRecordingId = recording.id
+        currentRecording = recording
+        recordingFinalized = false
+        packetCaptureController.stopCapture()
+        currentRecordingDirectory =
+            requireNotNull(woonaDatabase).recordingDirectory(recording.relativeDirectory)
+        packetCaptureController.useSessionDirectory(requireNotNull(currentRecordingDirectory))
+        captureSyncMetadata = CaptureSyncMetadata(
+            recordingId = recording.id,
+            profileId = recording.profileId,
+            source = recording.source.value,
+            timezone = recording.timezone,
+            selectedSessionStartUtc = recording.startedAtUtc,
+        )
+        persistSyncMetadata()
+        if (recording.source == RecordingSource.LIVE) {
+            uiStateHolder.prepareVideo()
+        }
+        val staleSnapshot = synchronized(exportLock) {
+            val snapshot = invalidateExportSnapshotLocked()
+            exportSessionStartMillis = Instant.parse(recording.startedAtUtc).toEpochMilli()
+            snapshot
+        }
+        deleteSnapshotFiles(staleSnapshot)
+        onRecordingChanged()
+    }
+
     fun onDisconnectRequested() {
         packetReplayController?.stop()
         pendingTransportDiagnostics.clear()
         awaitingCaptureReady = false
+        finalizeRecording(RecordingStatus.COMPLETED)
         packetCaptureController.stopCapture()
-        packetCaptureController.flush()
         val staleSnapshot = synchronized(exportLock) {
             invalidateExportSnapshotLocked()
         }
@@ -85,6 +143,7 @@ class DeviceFeatureController(
     }
 
     fun finishCaptureForExport(): Boolean {
+        stopVideo()
         packetReplayController?.stop()
         val finished = packetCaptureController.finishCapture(CAPTURE_FINISH_TIMEOUT_MILLIS)
         if (!finished) {
@@ -166,7 +225,18 @@ class DeviceFeatureController(
     }
 
     fun onPause() {
-        packetCaptureController.flush()
+        packetReplayController?.stop()
+        finalizeRecording(RecordingStatus.INTERRUPTED)
+        bleSessionController.disconnect()
+    }
+
+    fun onBleStateChanged(state: BleSessionState) {
+        when (state) {
+            BleSessionState.FAILED -> finalizeRecording(RecordingStatus.FAILED)
+            BleSessionState.DISCONNECTED -> finalizeRecording(RecordingStatus.INTERRUPTED)
+            else -> Unit
+        }
+        uiStateHolder.onSessionStateChanged(state)
     }
 
     fun createPacketShareIntent(context: Context): Intent? = createShareIntent(
@@ -200,6 +270,7 @@ class DeviceFeatureController(
 
     fun createAllFilesShareIntent(context: Context): Intent? {
         return try {
+            stopVideo()
             showExportPhaseOnMainThread(ExportPhase.PREPARING_SNAPSHOTS)
             val snapshot = ensureExportSnapshot() ?: return null
             val files = buildAvailableExportFiles(snapshot)
@@ -213,8 +284,16 @@ class DeviceFeatureController(
         }
     }
 
+    fun createRecordingShareIntent(context: Context, recordingId: String): Intent? {
+        val files = woonaDatabase?.artifactFiles(recordingId).orEmpty()
+        return files.takeIf { it.isNotEmpty() }?.let {
+            fileShareIntentFactory.createChooserIntent(context, it)
+        }
+    }
+
     fun createSessionArchive(targetDirectory: File): File? {
         return try {
+            stopVideo()
             showExportPhaseOnMainThread(ExportPhase.PREPARING_SNAPSHOTS)
             val snapshot = ensureExportSnapshot() ?: return null
             val files = buildAvailableExportFiles(snapshot)
@@ -226,6 +305,23 @@ class DeviceFeatureController(
                 targetDirectory = targetDirectory,
                 sessionStartMillis = snapshot.sessionStartMillis,
                 createdAtMillis = wallClockMillisProvider(),
+                metadata = currentRecordingId
+                    ?.let { recordingId -> woonaDatabase?.recordingSummary(recordingId) }
+                    ?.let { summary ->
+                        SessionArchiveMetadata(
+                            profileId = summary.recording.profileId,
+                            profileName = summary.profileName,
+                            recordingId = summary.recording.id,
+                            source = summary.recording.source.value,
+                            status = summary.recording.status.value,
+                            timezone = summary.recording.timezone,
+                            profileQuestionnaireJson = summary.profileQuestionnaire.toJson(),
+                            questionnaireJson = summary.recording.questionnaire?.toJson(),
+                            synchronizationJson = currentSessionFile("sync.json")
+                                ?.takeIf(File::exists)
+                                ?.readText(Charsets.UTF_8),
+                        )
+                    },
             )
         } catch (exception: Exception) {
             showErrorOnMainThread(appTextResolver.getString(R.string.drive_backup_prepare_failed))
@@ -243,7 +339,9 @@ class DeviceFeatureController(
     fun canShareCsvFile(): Boolean = packetCaptureController.currentPacketFile()?.exists() == true
 
     fun canShareAllFiles(): Boolean =
-        canSharePacketFile() || canShareCsvFile() || canShareRawFile() || canShareLogFile()
+        canSharePacketFile() || canShareCsvFile() || canShareRawFile() || canShareLogFile() ||
+            currentSessionFile("video.mp4")?.exists() == true ||
+            currentSessionFile("sync.json")?.exists() == true
 
     fun clearExportProgress() {
         runOnUiThread {
@@ -253,6 +351,7 @@ class DeviceFeatureController(
 
     override fun close() {
         packetReplayController?.close()
+        finalizeRecording(RecordingStatus.INTERRUPTED)
         val staleSnapshot = synchronized(exportLock) {
             val snapshot = invalidateExportSnapshotLocked()
             exportSessionStartMillis = null
@@ -261,10 +360,26 @@ class DeviceFeatureController(
         deleteSnapshotFiles(staleSnapshot)
         bleSessionController.close()
         packetCaptureController.close()
+        videoRecorder?.close()
     }
 
     fun onCaptureReady() {
+        if (woonaDatabase != null && recordingFinalized) {
+            awaitingCaptureReady = false
+            return
+        }
         resetCaptureSession()
+        if (!recordingFinalized) {
+            currentRecordingId?.let { woonaDatabase?.markRecording(it) }
+            captureSyncMetadata = captureSyncMetadata?.copy(
+                sensor = captureClockAnchor("ble_capture_ready"),
+            )
+            persistSyncMetadata()
+            if (currentRecording?.source == RecordingSource.LIVE) {
+                uiStateHolder.videoReady()
+            }
+        }
+        onRecordingChanged()
         flushPendingTransportDiagnostics()
         awaitingCaptureReady = false
     }
@@ -285,6 +400,7 @@ class DeviceFeatureController(
         flushPendingTransportDiagnostics()
         awaitingCaptureReady = false
         uiStateHolder.showError(message)
+        finalizeRecording(RecordingStatus.FAILED)
     }
 
     fun startReplay(fileBytes: ByteArray) {
@@ -310,6 +426,7 @@ class DeviceFeatureController(
     }
 
     fun onReplayStarted() {
+        if (woonaDatabase != null && recordingFinalized) return
         bleSessionController.close()
         pendingTransportDiagnostics.clear()
         awaitingCaptureReady = false
@@ -321,18 +438,34 @@ class DeviceFeatureController(
         }
         deleteSnapshotFiles(staleSnapshot)
         uiStateHolder.startReplaySession()
+        if (!recordingFinalized) {
+            currentRecordingId?.let { woonaDatabase?.markRecording(it) }
+            captureSyncMetadata = captureSyncMetadata?.copy(
+                sensor = captureClockAnchor("replay_started"),
+            )
+            persistSyncMetadata()
+        }
+        onRecordingChanged()
     }
 
     fun onReplayCompleted() {
+        finalizeRecording(RecordingStatus.COMPLETED)
         uiStateHolder.finishReplaySession()
     }
 
     fun onReplayStopped() {
         if (uiStateHolder.uiState.isReplayPreparing) {
+            finalizeRecording(RecordingStatus.INTERRUPTED)
             uiStateHolder.cancelReplayPreparation()
         } else {
+            finalizeRecording(RecordingStatus.COMPLETED)
             uiStateHolder.stopCaptureSession()
         }
+    }
+
+    fun onReplayError(message: String) {
+        uiStateHolder.showError(message)
+        finalizeRecording(RecordingStatus.FAILED)
     }
 
     private fun resetCaptureSession() {
@@ -405,7 +538,13 @@ class DeviceFeatureController(
                 it.matches(currentPacketFile, currentRawFile, currentLogFile, sessionStartMillis)
             }?.let { return it }
 
-            if (currentPacketFile == null && currentRawFile == null && currentLogFile == null) {
+            if (
+                currentPacketFile == null &&
+                currentRawFile == null &&
+                currentLogFile == null &&
+                currentSessionFile("video.mp4")?.exists() != true &&
+                currentSessionFile("sync.json")?.exists() != true
+            ) {
                 return null
             }
 
@@ -452,6 +591,8 @@ class DeviceFeatureController(
             csvSnapshot,
             snapshot.rawSnapshot,
             snapshot.logSnapshot,
+            currentSessionFile("video.mp4")?.takeIf(File::exists),
+            currentSessionFile("sync.json")?.takeIf(File::exists),
         )
     }
 
@@ -497,8 +638,10 @@ class DeviceFeatureController(
         source: File,
         suffix: String,
     ): File {
+        val targetDirectory = snapshotDirectory ?: source.parentFile
+        targetDirectory.mkdirs()
         val target = File(
-            source.parentFile,
+            targetDirectory,
             "${source.nameWithoutExtension}_snapshot_$suffix.${source.extension.ifBlank { "bin" }}",
         )
         Files.copy(
@@ -514,16 +657,196 @@ class DeviceFeatureController(
         source: File,
         sessionStartMillis: Long,
     ): File {
-        val sessionBaseName = source.nameWithoutExtension.removeSuffix("_snapshot_packet")
-        val target = File(
-            source.parentFile,
-            "${sessionBaseName}_snapshot_csv.csv",
-        )
-        return sessionCsvExporter.export(
-            packetFile = source,
+        val packetFile = packetCaptureController.currentPacketFile()?.takeIf(File::exists) ?: source
+        val canonicalTarget = File(packetFile.parentFile, "channel.csv")
+        sessionCsvExporter.export(
+            packetFile = packetFile,
             sessionStartMillis = sessionStartMillis,
-            targetFile = target,
+            targetFile = canonicalTarget,
         )
+        currentRecordingId?.let { woonaDatabase?.registerCsv(it, canonicalTarget) }
+        onRecordingChanged()
+        val targetDirectory = snapshotDirectory ?: source.parentFile
+        targetDirectory.mkdirs()
+        val sessionBaseName = source.nameWithoutExtension.removeSuffix("_snapshot_packet")
+        val snapshot = File(targetDirectory, "${sessionBaseName}_snapshot_csv.csv")
+        Files.copy(
+            canonicalTarget.toPath(),
+            snapshot.toPath(),
+            StandardCopyOption.REPLACE_EXISTING,
+            StandardCopyOption.COPY_ATTRIBUTES,
+        )
+        return snapshot
+    }
+
+    @Synchronized
+    private fun finalizeRecording(status: RecordingStatus) {
+        val recordingId = currentRecordingId ?: return
+        if (recordingFinalized) return
+        stopVideo()
+        packetCaptureController.finishCapture(CAPTURE_FINISH_TIMEOUT_MILLIS)
+        try {
+            woonaDatabase?.finishRecording(recordingId, status)
+            recordingFinalized = true
+        } catch (exception: Exception) {
+            Log.e("WOONA_DATABASE", "Failed to finalize recording $recordingId", exception)
+        }
+        onRecordingChanged()
+    }
+
+    @Synchronized
+    fun startVideo() {
+        val recorder = videoRecorder
+        val recording = currentRecording
+        val metadata = captureSyncMetadata
+        if (
+            recorder == null ||
+            recording == null ||
+            recording.source != RecordingSource.LIVE ||
+            recordingFinalized ||
+            metadata?.sensor == null ||
+            uiState.videoState !in setOf(VideoCaptureState.READY, VideoCaptureState.FAILED)
+        ) {
+            return
+        }
+
+        val requestedAt = captureClockAnchor("video_requested")
+        captureSyncMetadata = metadata.copy(
+            video = VideoSyncMetadata(
+                requestedAtUtc = requestedAt.absoluteUtc,
+                requestedMonotonicNs = requestedAt.monotonicTimeNs,
+            ),
+        )
+        persistSyncMetadata()
+        uiStateHolder.videoStarting()
+        val started = recorder.start(
+            file = File(requireNotNull(currentRecordingDirectory), "video.mp4"),
+            onStarted = { info ->
+                runOnUiThread {
+                    handleVideoStarted(info)
+                }
+            },
+            onError = { message, throwable ->
+                Log.e("WOONA_VIDEO", message, throwable)
+                runOnUiThread {
+                    handleVideoFailure()
+                }
+            },
+        )
+        if (!started) handleVideoFailure()
+    }
+
+    @Synchronized
+    fun stopVideo() {
+        val recorder = videoRecorder ?: return
+        if (!recorder.isActive()) return
+        runOnUiThread { uiStateHolder.videoStopping() }
+        val result = recorder.stop()
+        val metadata = captureSyncMetadata
+        val video = metadata?.video
+        if (metadata != null && video != null) {
+            val stoppedAt = result?.stoppedMonotonicNs ?: monotonicNanosProvider()
+            captureSyncMetadata = metadata.copy(
+                video = video.copy(
+                    stoppedAtUtc = instantForMonotonic(stoppedAt).toString(),
+                    stoppedMonotonicNs = stoppedAt,
+                    durationNs = result?.durationNs,
+                ),
+            )
+            persistSyncMetadata()
+        }
+        currentSessionFile("video.mp4")
+            ?.takeIf { it.exists() && it.length() > 0L }
+            ?.let { file ->
+                currentRecordingId?.let { recordingId ->
+                    woonaDatabase?.registerArtifact(recordingId, ArtifactType.VIDEO, file)
+                }
+            }
+        runOnUiThread {
+            if (result == null) {
+                uiStateHolder.videoFailed(appTextResolver.getString(R.string.video_recording_failed))
+            } else {
+                uiStateHolder.videoFinished()
+            }
+        }
+        onRecordingChanged()
+    }
+
+    fun onVideoPermissionDenied() {
+        uiStateHolder.videoFailed(appTextResolver.getString(R.string.video_camera_permission_required))
+    }
+
+    @Synchronized
+    private fun handleVideoStarted(info: AndroidVideoStartInfo) {
+        if (recordingFinalized) {
+            stopVideo()
+            return
+        }
+        val metadata = captureSyncMetadata ?: return
+        val sensor = metadata.sensor ?: return
+        val video = metadata.video ?: return
+        val offsetNs = monotonicOffsetNs(sensor, info.firstFrameMonotonicNs)
+        captureSyncMetadata = metadata.copy(
+            video = video.copy(
+                firstFrameAtUtc = instantForMonotonic(info.firstFrameMonotonicNs).toString(),
+                firstFrameEpochMillis = sensor.wallClockEpochMillis + offsetNs / 1_000_000.0,
+                firstFrameMonotonicNs = info.firstFrameMonotonicNs,
+                firstFrameCameraTimestampNs = info.firstFrameCameraTimestampNs,
+                offsetFromSensorNs = offsetNs,
+                cameraTimestampSource = info.cameraTimestampSource,
+                synchronizationQuality = info.synchronizationQuality,
+                cameraId = info.cameraId,
+                lensFacing = info.lensFacing,
+                width = info.width,
+                height = info.height,
+                frameRate = info.frameRate,
+                rotationDegrees = info.rotationDegrees,
+            ),
+        )
+        persistSyncMetadata()
+        uiStateHolder.videoStarted(offsetNs / 1_000_000.0)
+        onRecordingChanged()
+    }
+
+    @Synchronized
+    private fun handleVideoFailure() {
+        if (recordingFinalized) return
+        uiStateHolder.videoFailed(appTextResolver.getString(R.string.video_recording_failed))
+        persistSyncMetadata()
+        onRecordingChanged()
+    }
+
+    private fun captureClockAnchor(event: String): SyncClockAnchor {
+        val before = monotonicNanosProvider()
+        val wallClock = wallClockMillisProvider()
+        val after = monotonicNanosProvider()
+        return SyncClockAnchor(
+            event = event,
+            absoluteUtc = Instant.ofEpochMilli(wallClock).toString(),
+            wallClockEpochMillis = wallClock,
+            monotonicTimeNs = before + (after - before) / 2,
+            monotonicClock = "android.elapsedRealtimeNanos",
+            samplingUncertaintyNs = (after - before).coerceAtLeast(0L) / 2,
+        )
+    }
+
+    private fun instantForMonotonic(monotonicNs: Long): Instant {
+        val sensor = requireNotNull(captureSyncMetadata?.sensor)
+        return absoluteInstantForMonotonic(sensor, monotonicNs)
+    }
+
+    private fun persistSyncMetadata() {
+        val recordingId = currentRecordingId ?: return
+        val metadata = captureSyncMetadata ?: return
+        try {
+            woonaDatabase?.writeSyncMetadata(recordingId, metadata)
+        } catch (exception: Exception) {
+            Log.e("WOONA_DATABASE", "Failed to write synchronization metadata", exception)
+        }
+    }
+
+    private fun currentSessionFile(name: String): File? {
+        return currentRecordingDirectory?.let { File(it, name) }
     }
 
     private fun syncProcessorSelection() {

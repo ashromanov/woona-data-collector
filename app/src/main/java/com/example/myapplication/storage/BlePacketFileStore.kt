@@ -5,7 +5,7 @@ import java.io.File
 import java.io.FileOutputStream
 
 class BlePacketFileStore(
-    private val directory: File,
+    private var directory: File,
     private val filePrefix: String = DEFAULT_FILE_PREFIX,
     private val timestampProvider: () -> Long = { System.currentTimeMillis() },
 ) {
@@ -13,6 +13,7 @@ class BlePacketFileStore(
     private var currentFile: File? = null
     private var outputStream: BufferedOutputStream? = null
     private var isClosed = false
+    private var sessionFileName: String? = null
 
     fun open(): File {
         synchronized(lock) {
@@ -21,7 +22,8 @@ class BlePacketFileStore(
                 return currentFile!!
             }
 
-            val file = File(directory, "$filePrefix${timestampProvider()}.bin")
+            directory.mkdirs()
+            val file = File(directory, sessionFileName ?: "$filePrefix${timestampProvider()}.bin")
             val stream = BufferedOutputStream(FileOutputStream(file, true), BUFFER_SIZE_BYTES)
             currentFile = file
             outputStream = stream
@@ -59,6 +61,17 @@ class BlePacketFileStore(
             outputStream?.close()
             outputStream = null
             currentFile = null
+        }
+    }
+
+    fun useSessionDirectory(directory: File) {
+        synchronized(lock) {
+            check(!isClosed) { "Packet file store is closed" }
+            outputStream?.close()
+            outputStream = null
+            currentFile = null
+            this.directory = directory
+            sessionFileName = "packets.bin"
         }
     }
 

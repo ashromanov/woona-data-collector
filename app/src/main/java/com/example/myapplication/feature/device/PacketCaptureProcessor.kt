@@ -59,6 +59,7 @@ interface PacketCaptureController : AutoCloseable {
         return true
     }
     fun updateSelection(sensorType: Int, channel: Int)
+    fun useSessionDirectory(directory: File) = Unit
     fun resetSession()
     fun flush()
     fun currentFile(): File?
@@ -212,6 +213,14 @@ class PacketCaptureProcessor(
 
     override fun updateSelection(sensorType: Int, channel: Int) {
         // Chart history now keeps all streams, so selection is handled entirely in UI state.
+    }
+
+    override fun useSessionDirectory(directory: File) {
+        synchronized(processingLock) {
+            packetFileStore.useSessionDirectory(directory)
+            rawFragmentFileStore.useSessionDirectory(directory)
+            diagnosticLogFileStore.useSessionDirectory(directory)
+        }
     }
 
     override fun stopCapture() {

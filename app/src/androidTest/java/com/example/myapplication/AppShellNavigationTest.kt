@@ -11,6 +11,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.hasText
@@ -23,9 +24,12 @@ import com.example.myapplication.feature.device.ChartPoint
 import com.example.myapplication.feature.device.ChartUiState
 import com.example.myapplication.feature.device.DeviceUiState
 import com.example.myapplication.feature.device.ExportPhase
+import com.example.myapplication.drive.DriveBackupStatus
+import com.example.myapplication.drive.DriveBackupUiState
 import com.example.myapplication.localization.AppLanguage
 import com.example.myapplication.localization.AppLocalizationProvider
 import com.example.myapplication.localization.AppTextResolver
+import com.example.myapplication.profile.DogQuestionnaireDialog
 import com.example.myapplication.ui.theme.AppThemeMode
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -94,11 +98,46 @@ class AppShellNavigationTest {
 
         composeRule.onNodeWithText("Export").assertIsEnabled().performClick()
 
+        composeRule.onNode(
+            hasScrollAction() and hasAnyDescendant(hasText("Save to Google Drive")),
+            useUnmergedTree = true,
+        ).assertExists()
+        composeRule.onNodeWithText("Save to Google Drive").assertIsEnabled()
         composeRule.onNodeWithText("All files").assertIsEnabled()
         composeRule.onNodeWithText("Compiled binary").assertIsEnabled()
         composeRule.onNodeWithText("Channel CSV").assertIsEnabled()
         composeRule.onNodeWithText("Raw data stream").assertIsNotEnabled()
         composeRule.onNodeWithText("Session log").assertIsEnabled()
+    }
+
+    @Test
+    fun saveToGoogleDrive_dismissesExportSheetAndEmitsAction() {
+        var saveToDriveClicks = 0
+        setShellContent(
+            canShareAllFiles = true,
+            onSaveToGoogleDrive = { saveToDriveClicks++ },
+        )
+
+        composeRule.onNodeWithText("Export").assertIsEnabled().performClick()
+        composeRule.onNodeWithText("Save to Google Drive").assertIsEnabled().performClick()
+
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Save to Google Drive").assertDoesNotExist()
+        composeRule.runOnIdle {
+            assertEquals(1, saveToDriveClicks)
+        }
+    }
+
+    @Test
+    fun saveToGoogleDrive_isDisabledWhileDriveSetupIsInProgress() {
+        setShellContent(
+            canShareAllFiles = true,
+            driveBackupState = DriveBackupUiState(status = DriveBackupStatus.CONNECTING),
+        )
+
+        composeRule.onNodeWithText("Export").assertIsEnabled().performClick()
+
+        composeRule.onNodeWithText("Save to Google Drive").assertIsNotEnabled()
     }
 
     @Test
@@ -208,6 +247,36 @@ class AppShellNavigationTest {
         }
     }
 
+    @Test
+    fun driveConnect_isDisabledWhileAuthorizationIsInProgress() {
+        setShellContent(
+            driveBackupState = DriveBackupUiState(status = DriveBackupStatus.CONNECTING),
+        )
+
+        navTab("Settings").performClick()
+
+        composeRule.onNodeWithText("Connect").assertIsNotEnabled()
+    }
+
+    @Test
+    fun requiredDogProfile_cannotBeSkipped() {
+        composeRule.setContent {
+            MaterialTheme {
+                DogQuestionnaireDialog(
+                    initial = null,
+                    required = true,
+                    language = AppLanguage.ENGLISH,
+                    onDismiss = {},
+                    onSave = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Dog profile").assertIsDisplayed()
+        composeRule.onNodeWithText("Cancel").assertDoesNotExist()
+        composeRule.onNodeWithText("Save").assertIsNotEnabled()
+    }
+
     private fun setShellContent(
         uiState: DeviceUiState = DeviceUiState(),
         canShareAllFiles: Boolean = false,
@@ -216,6 +285,8 @@ class AppShellNavigationTest {
         canShareRawFile: Boolean = false,
         canShareLogFile: Boolean = false,
         selectedThemeMode: AppThemeMode = AppThemeMode.SYSTEM,
+        driveBackupState: DriveBackupUiState = DriveBackupUiState(),
+        onSaveToGoogleDrive: () -> Unit = {},
         onShareAllFiles: () -> Unit = {},
         onSharePacketFile: () -> Unit = {},
         onShareCsvFile: () -> Unit = {},
@@ -234,6 +305,7 @@ class AppShellNavigationTest {
                             uiState = uiState,
                             selectedLanguage = AppLanguage.ENGLISH,
                             selectedThemeMode = selectedThemeMode,
+                            driveBackupState = driveBackupState,
                             onStartScan = {},
                             onConnect = {},
                             onTransportProfileSelect = {},
@@ -256,6 +328,7 @@ class AppShellNavigationTest {
                             canShareCsvFile = canShareCsvFile,
                             canShareRawFile = canShareRawFile,
                             canShareLogFile = canShareLogFile,
+                            onSaveToGoogleDrive = onSaveToGoogleDrive,
                             onShareAllFiles = onShareAllFiles,
                             onSharePacketFile = onSharePacketFile,
                             onShareCsvFile = onShareCsvFile,

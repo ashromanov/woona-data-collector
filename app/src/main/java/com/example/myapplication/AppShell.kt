@@ -2,6 +2,8 @@ package com.example.myapplication
 
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -117,6 +119,7 @@ fun DeviceAppShell(
     canShareCsvFile: Boolean,
     canShareRawFile: Boolean,
     canShareLogFile: Boolean,
+    onSaveToGoogleDrive: () -> Unit = {},
     onShareAllFiles: () -> Unit,
     onSharePacketFile: () -> Unit,
     onShareCsvFile: () -> Unit,
@@ -124,6 +127,7 @@ fun DeviceAppShell(
     onShareLogFile: () -> Unit,
     showReplayAction: Boolean,
     onReplayRequest: () -> Unit,
+    overviewProfileContent: @Composable () -> Unit = {},
 ) {
     var selectedDestinationName by rememberSaveable {
         mutableStateOf(AppDestination.OVERVIEW.name)
@@ -178,6 +182,7 @@ fun DeviceAppShell(
                         onDisconnect = onDisconnect,
                         showReplayAction = showReplayAction,
                         onReplayRequest = onReplayRequest,
+                        profileContent = overviewProfileContent,
                     )
 
                     AppDestination.CHARTS -> DeviceScreenEntryPoint.Charts(
@@ -227,10 +232,17 @@ fun DeviceAppShell(
             ) {
                 ExportSheet(
                     canShareAllFiles = canShareAllFiles,
+                    canSaveToGoogleDrive = canShareAllFiles &&
+                        driveBackupState.status != DriveBackupStatus.CONNECTING &&
+                        driveBackupState.status != DriveBackupStatus.PREPARING,
                     canSharePacketFile = canSharePacketFile,
                     canShareCsvFile = canShareCsvFile,
                     canShareRawFile = canShareRawFile,
                     canShareLogFile = canShareLogFile,
+                    onSaveToGoogleDrive = {
+                        isExportSheetVisible = false
+                        onSaveToGoogleDrive()
+                    },
                     onShareAllFiles = {
                         isExportSheetVisible = false
                         onShareAllFiles()
@@ -495,10 +507,12 @@ private fun ShellNavItem(
 @Composable
 private fun ExportSheet(
     canShareAllFiles: Boolean,
+    canSaveToGoogleDrive: Boolean,
     canSharePacketFile: Boolean,
     canShareCsvFile: Boolean,
     canShareRawFile: Boolean,
     canShareLogFile: Boolean,
+    onSaveToGoogleDrive: () -> Unit,
     onShareAllFiles: () -> Unit,
     onSharePacketFile: () -> Unit,
     onShareCsvFile: () -> Unit,
@@ -506,7 +520,10 @@ private fun ExportSheet(
     onShareLogFile: () -> Unit,
 ) {
     Column(
-        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Text(
@@ -518,6 +535,12 @@ private fun ExportSheet(
             text = appStringResource(R.string.export_choose_artifact),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        ExportActionButton(
+            title = appStringResource(R.string.export_save_to_google_drive),
+            description = appStringResource(R.string.export_save_to_google_drive_desc),
+            enabled = canSaveToGoogleDrive,
+            onClick = onSaveToGoogleDrive,
         )
         ExportActionButton(
             title = appStringResource(R.string.export_all_files),
@@ -624,6 +647,7 @@ object AppShellEntryPoint {
         canShareCsvFile: Boolean,
         canShareRawFile: Boolean,
         canShareLogFile: Boolean,
+        onSaveToGoogleDrive: () -> Unit = {},
         onShareAllFiles: () -> Unit,
         onSharePacketFile: () -> Unit,
         onShareCsvFile: () -> Unit,
@@ -631,6 +655,7 @@ object AppShellEntryPoint {
         onShareLogFile: () -> Unit,
         showReplayAction: Boolean,
         onReplayRequest: () -> Unit,
+        overviewProfileContent: @Composable () -> Unit = {},
     ) {
         DeviceAppShell(
             uiState = uiState,
@@ -664,6 +689,7 @@ object AppShellEntryPoint {
             canShareCsvFile = canShareCsvFile,
             canShareRawFile = canShareRawFile,
             canShareLogFile = canShareLogFile,
+            onSaveToGoogleDrive = onSaveToGoogleDrive,
             onShareAllFiles = onShareAllFiles,
             onSharePacketFile = onSharePacketFile,
             onShareCsvFile = onShareCsvFile,
@@ -671,6 +697,7 @@ object AppShellEntryPoint {
             onShareLogFile = onShareLogFile,
             showReplayAction = showReplayAction,
             onReplayRequest = onReplayRequest,
+            overviewProfileContent = overviewProfileContent,
         )
     }
 }

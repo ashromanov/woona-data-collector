@@ -6,6 +6,7 @@ import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.Operation
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import java.io.File
@@ -19,7 +20,7 @@ class DriveBackupScheduler(
     fun enqueueArchive(
         archiveFile: File,
         wifiOnly: Boolean,
-    ) {
+    ): Operation {
         val networkType = if (wifiOnly) {
             NetworkType.UNMETERED
         } else {
@@ -40,7 +41,7 @@ class DriveBackupScheduler(
             .addTag(WORK_TAG)
             .build()
 
-        WorkManager.getInstance(context.applicationContext)
+        return WorkManager.getInstance(context.applicationContext)
             .beginUniqueWork(WORK_NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
             .enqueue()
     }

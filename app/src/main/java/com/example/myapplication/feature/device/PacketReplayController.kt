@@ -170,18 +170,27 @@ class DebugPacketReplayController(
     ) {
         try {
             cancellationDispatcher {
-                try {
-                    run.cancellationToken.cancel()
-                } finally {
-                    try {
-                        inputStream?.close()
-                    } catch (_: Exception) {
-                        // Cancellation is best-effort for provider-backed streams.
-                    }
-                }
+                cancelRunInput(run, inputStream)
             }
         } catch (_: Exception) {
-            // The replay worker has still received an interruption signal.
+            cancelRunInput(run, inputStream)
+        }
+    }
+
+    private fun cancelRunInput(
+        run: ReplayRun,
+        inputStream: InputStream?,
+    ) {
+        try {
+            run.cancellationToken.cancel()
+        } catch (_: Exception) {
+            // Closing the stream remains the fallback cancellation mechanism.
+        } finally {
+            try {
+                inputStream?.close()
+            } catch (_: Exception) {
+                // Cancellation is best-effort for provider-backed streams.
+            }
         }
     }
 
@@ -418,9 +427,7 @@ private class ReplayRun(
     fun requestStop(): InputStream? {
         stopRequested.set(true)
         return synchronized(inputStreamLock) {
-            activeInputStream.also {
-                activeInputStream = null
-            }
+            activeInputStream
         }
     }
 

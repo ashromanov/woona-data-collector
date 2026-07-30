@@ -44,6 +44,22 @@ class GoogleDriveArchiveUploaderTest {
     }
 
     @Test
+    fun prepareBackupFolder_reportsPermanentFailureForUnexpectedExceptions() {
+        val failure = IllegalStateException("unexpected response")
+        val fakeUploader = FakeDriveUploader(
+            findFolderBehavior = { throw failure },
+        )
+
+        val result = GoogleDriveArchiveUploader(fakeUploader).prepareBackupFolder(
+            accessToken = "token",
+            saveFolderId = {},
+        )
+
+        assertTrue(result is DriveUploadResult.PermanentFailure)
+        assertEquals(failure, (result as DriveUploadResult.PermanentFailure).exception)
+    }
+
+    @Test
     fun upload_reusesExistingBackupFolderBeforeCreatingANewOne() {
         val archiveFile = tempArchive()
         val fakeUploader = FakeDriveUploader(existingFolderId = "existing-folder")

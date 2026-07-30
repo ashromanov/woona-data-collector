@@ -68,6 +68,17 @@ enum class ExportPhase(
     PACKAGING_ARCHIVE(R.string.export_phase_packaging_archive),
 }
 
+enum class VideoCaptureState {
+    IDLE,
+    WAITING_FOR_SENSOR,
+    READY,
+    STARTING,
+    RECORDING,
+    STOPPING,
+    FINISHED,
+    FAILED,
+}
+
 data class DeviceUiState(
     val chart: ChartUiState = ChartUiState(),
     val selectedTab: DeviceCaptureTab = DeviceCaptureTab.OVERVIEW,
@@ -91,6 +102,8 @@ data class DeviceUiState(
     val diagnosticEvents: List<PacketDiagnosticEvent> = emptyList(),
     val errorMessage: String? = null,
     val exportPhase: ExportPhase? = null,
+    val videoState: VideoCaptureState = VideoCaptureState.IDLE,
+    val videoOffsetMillis: Double? = null,
 )
 
 class DeviceUiStateHolder {
@@ -164,6 +177,8 @@ class DeviceUiStateHolder {
                 diagnosticEvents = emptyList(),
                 errorMessage = null,
                 exportPhase = null,
+                videoState = VideoCaptureState.IDLE,
+                videoOffsetMillis = null,
             )
         } else {
             updatedState
@@ -225,6 +240,8 @@ class DeviceUiStateHolder {
             diagnosticEvents = emptyList(),
             errorMessage = null,
             exportPhase = null,
+            videoState = VideoCaptureState.IDLE,
+            videoOffsetMillis = null,
         )
     }
 
@@ -436,6 +453,43 @@ class DeviceUiStateHolder {
             rejectionBreakdown = null,
             diagnosticEvents = emptyList(),
             exportPhase = null,
+        )
+    }
+
+    fun prepareVideo() {
+        uiState = uiState.copy(
+            videoState = VideoCaptureState.WAITING_FOR_SENSOR,
+            videoOffsetMillis = null,
+        )
+    }
+
+    fun videoReady() {
+        uiState = uiState.copy(videoState = VideoCaptureState.READY)
+    }
+
+    fun videoStarting() {
+        uiState = uiState.copy(videoState = VideoCaptureState.STARTING)
+    }
+
+    fun videoStarted(offsetMillis: Double) {
+        uiState = uiState.copy(
+            videoState = VideoCaptureState.RECORDING,
+            videoOffsetMillis = offsetMillis,
+        )
+    }
+
+    fun videoStopping() {
+        uiState = uiState.copy(videoState = VideoCaptureState.STOPPING)
+    }
+
+    fun videoFinished() {
+        uiState = uiState.copy(videoState = VideoCaptureState.FINISHED)
+    }
+
+    fun videoFailed(message: String) {
+        uiState = uiState.copy(
+            videoState = VideoCaptureState.FAILED,
+            errorMessage = message,
         )
     }
 

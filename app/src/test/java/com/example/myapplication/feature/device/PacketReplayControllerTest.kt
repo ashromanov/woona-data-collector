@@ -137,6 +137,25 @@ class PacketReplayControllerTest {
     }
 
     @Test
+    fun stop_fallsBackToSynchronousCancellationWhenDispatchFails() {
+        val inputStream = CloseAwareBlockingInputStream()
+        val tokenCancelled = CountDownLatch(1)
+        val controller = createController(
+            cancellationDispatcher = { throw IllegalStateException("dispatcher unavailable") },
+        )
+        controller.startReplay { cancellationToken ->
+            cancellationToken.invokeOnCancellation { tokenCancelled.countDown() }
+            inputStream
+        }
+        assertTrue(inputStream.readStarted.await(1, TimeUnit.SECONDS))
+
+        controller.stop()
+
+        assertTrue(tokenCancelled.await(1, TimeUnit.SECONDS))
+        assertTrue(inputStream.closed.await(1, TimeUnit.SECONDS))
+    }
+
+    @Test
     fun startReplay_opensPreparedStreamBeforeStartedCallback() {
         val errorLatch = CountDownLatch(1)
         val stoppedLatch = CountDownLatch(1)
@@ -270,6 +289,12 @@ class PacketReplayControllerTest {
             callback()
             true
         },
+        cancellationDispatcher: ((() -> Unit) -> Unit) = { action ->
+            Thread(action, "test-replay-cancel").apply {
+                isDaemon = true
+                start()
+            }
+        },
         replayTempFileFactory: () -> java.io.File = {
             Files.createTempFile("replay-controller", ".bin").toFile()
         },
@@ -285,6 +310,7 @@ class PacketReplayControllerTest {
             packetFileParser = RecordedPacketFileParser(),
             packetIntervalMs = 1L,
             callbackDispatcher = callbackDispatcher,
+            cancellationDispatcher = cancellationDispatcher,
             replayTempFileFactory = replayTempFileFactory,
             preparedInputStreamFactory = preparedInputStreamFactory,
         )
@@ -309,6 +335,27 @@ class PacketReplayControllerTest {
             this[5] = ((length shr 8) and 0xFF).toByte()
             this[6] = 1
         }
+    }
+}
+
+private class CloseAwareBlockingInputStream : InputStream() {
+    val readStarted = CountDownLatch(1)
+    val closed = CountDownLatch(1)
+
+    override fun read(): Int {
+        readStarted.countDown()
+        while (closed.count > 0) {
+            try {
+                closed.await()
+            } catch (_: InterruptedException) {
+                // Stream closure, rather than interruption, releases this source.
+            }
+        }
+        return -1
+    }
+
+    override fun close() {
+        closed.countDown()
     }
 }
 

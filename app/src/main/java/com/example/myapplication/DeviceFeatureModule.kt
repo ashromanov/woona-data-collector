@@ -11,6 +11,7 @@ import com.example.myapplication.ble.BleSessionListener
 import com.example.myapplication.ble.BleSessionManager
 import com.example.myapplication.ble.BleSessionState
 import com.example.myapplication.ble.BleTransportProfile
+import com.example.myapplication.data.WoonaDatabase
 import com.example.myapplication.feature.device.DeviceFeatureController
 import com.example.myapplication.feature.device.DebugPacketReplayController
 import com.example.myapplication.feature.device.DeviceUiStateHolder
@@ -27,6 +28,7 @@ import com.example.myapplication.storage.BlePacketFileStore
 import com.example.myapplication.storage.BleRawFragmentFileStore
 import com.example.myapplication.localization.AppLanguage
 import com.example.myapplication.localization.AppTextResolver
+import com.example.myapplication.video.AndroidVideoRecorder
 import java.io.File
 import java.util.UUID
 
@@ -41,6 +43,9 @@ fun createDeviceFeatureController(
     packetCaptureControllerFactory: ((DeviceUiStateHolder, Handler) -> PacketCaptureController)? = null,
     bleSessionControllerFactory: ((BleSessionListener) -> BleSessionController)? = null,
     fileShareIntentFactory: FileShareIntentFactory? = null,
+    woonaDatabase: WoonaDatabase? = null,
+    snapshotDirectory: File? = null,
+    onRecordingChanged: () -> Unit = {},
     appTextResolver: AppTextResolver = AppTextResolver(context.applicationContext) {
         AppLanguage.defaultFrom()
     },
@@ -130,7 +135,8 @@ fun createDeviceFeatureController(
 
             override fun onStateChanged(state: BleSessionState) {
                 mainHandler.post {
-                    uiStateHolder.onSessionStateChanged(state)
+                    deviceFeatureController?.onBleStateChanged(state)
+                        ?: uiStateHolder.onSessionStateChanged(state)
                 }
             }
 
@@ -170,7 +176,7 @@ fun createDeviceFeatureController(
         },
         onError = { message, throwable ->
             mainHandler.post {
-                uiStateHolder.showError(message)
+                deviceFeatureController?.onReplayError(message) ?: uiStateHolder.showError(message)
             }
             Log.e("BLE_REPLAY", message, throwable)
         },
@@ -193,10 +199,16 @@ fun createDeviceFeatureController(
         packetReplayController = packetReplayController,
         uiStateHolder = uiStateHolder,
         runOnUiThread = { action ->
-            mainHandler.post {
+            if (Looper.myLooper() == Looper.getMainLooper()) {
                 action()
+            } else {
+                mainHandler.post(action)
             }
         },
+        woonaDatabase = woonaDatabase,
+        snapshotDirectory = snapshotDirectory,
+        onRecordingChanged = onRecordingChanged,
+        videoRecorder = AndroidVideoRecorder(context),
     )
 
     initialTransportProfile?.let { profile ->
@@ -217,6 +229,9 @@ object DeviceFeatureModuleEntryPoint {
         packetCaptureControllerFactory: ((DeviceUiStateHolder, Handler) -> PacketCaptureController)? = null,
         bleSessionControllerFactory: ((BleSessionListener) -> BleSessionController)? = null,
         fileShareIntentFactory: FileShareIntentFactory? = null,
+        woonaDatabase: WoonaDatabase? = null,
+        snapshotDirectory: File? = null,
+        onRecordingChanged: () -> Unit = {},
         appTextResolver: AppTextResolver = AppTextResolver(context.applicationContext) {
             AppLanguage.defaultFrom()
         },
@@ -232,6 +247,9 @@ object DeviceFeatureModuleEntryPoint {
             packetCaptureControllerFactory = packetCaptureControllerFactory,
             bleSessionControllerFactory = bleSessionControllerFactory,
             fileShareIntentFactory = fileShareIntentFactory,
+            woonaDatabase = woonaDatabase,
+            snapshotDirectory = snapshotDirectory,
+            onRecordingChanged = onRecordingChanged,
             appTextResolver = appTextResolver,
         )
     }

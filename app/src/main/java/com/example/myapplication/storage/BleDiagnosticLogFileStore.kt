@@ -5,7 +5,7 @@ import java.io.File
 import java.io.FileWriter
 
 class BleDiagnosticLogFileStore(
-    private val directory: File,
+    private var directory: File,
     private val filePrefix: String = DEFAULT_FILE_PREFIX,
     private val timestampProvider: () -> Long = { System.currentTimeMillis() },
 ) {
@@ -13,6 +13,7 @@ class BleDiagnosticLogFileStore(
     private var currentFile: File? = null
     private var writer: BufferedWriter? = null
     private var isClosed = false
+    private var sessionFileName: String? = null
 
     fun appendEvent(
         eventId: Long,
@@ -60,12 +61,24 @@ class BleDiagnosticLogFileStore(
         }
     }
 
+    fun useSessionDirectory(directory: File) {
+        synchronized(lock) {
+            check(!isClosed) { "Diagnostic log file store is closed" }
+            writer?.close()
+            writer = null
+            currentFile = null
+            this.directory = directory
+            sessionFileName = "diagnostics.log"
+        }
+    }
+
     fun currentFile(): File? = synchronized(lock) { currentFile }
 
     private fun ensureOpen(): BufferedWriter {
         check(!isClosed) { "Diagnostic log file store is closed" }
         if (writer == null) {
-            val file = File(directory, "$filePrefix${timestampProvider()}.log")
+            directory.mkdirs()
+            val file = File(directory, sessionFileName ?: "$filePrefix${timestampProvider()}.log")
             currentFile = file
             writer = BufferedWriter(FileWriter(file, true), BUFFER_SIZE_BYTES)
         }
