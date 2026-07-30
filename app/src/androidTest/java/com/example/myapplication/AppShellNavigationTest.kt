@@ -18,6 +18,8 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.myapplication.feature.device.ChartPoint
@@ -47,7 +49,6 @@ class AppShellNavigationTest {
     fun overview_isDefaultDestination() {
         setShellContent()
 
-        composeRule.onNodeWithText("Overview").assertExists()
         composeRule.onNodeWithText("BLE devices").assertIsDisplayed()
         navTab("Overview").assertIsSelected()
         navTab("Charts").assertIsNotSelected()
@@ -240,7 +241,7 @@ class AppShellNavigationTest {
         )
 
         navTab("Settings").performClick()
-        composeRule.onNodeWithText("Dark").assertIsDisplayed().performClick()
+        composeRule.onNodeWithText("Dark").performScrollTo().assertIsDisplayed().performClick()
 
         composeRule.runOnIdle {
             assertEquals(AppThemeMode.DARK, selectedThemeMode)
@@ -255,11 +256,13 @@ class AppShellNavigationTest {
 
         navTab("Settings").performClick()
 
-        composeRule.onNodeWithText("Connect").assertIsNotEnabled()
+        composeRule.onNode(hasScrollAction()).performScrollToIndex(3)
+        composeRule.onNodeWithText("Connect Google Drive").assertIsNotEnabled()
     }
 
     @Test
     fun requiredDogProfile_cannotBeSkipped() {
+        var savedProfiles = 0
         composeRule.setContent {
             MaterialTheme {
                 DogQuestionnaireDialog(
@@ -267,14 +270,18 @@ class AppShellNavigationTest {
                     required = true,
                     language = AppLanguage.ENGLISH,
                     onDismiss = {},
-                    onSave = {},
+                    onSave = { savedProfiles++ },
                 )
             }
         }
 
         composeRule.onNodeWithText("Dog profile").assertIsDisplayed()
         composeRule.onNodeWithText("Cancel").assertDoesNotExist()
-        composeRule.onNodeWithText("Save").assertIsNotEnabled()
+        composeRule.onNodeWithText("Save").performClick()
+        composeRule.runOnIdle {
+            assertEquals(0, savedProfiles)
+        }
+        composeRule.onNodeWithText("Dog profile").assertIsDisplayed()
     }
 
     private fun setShellContent(

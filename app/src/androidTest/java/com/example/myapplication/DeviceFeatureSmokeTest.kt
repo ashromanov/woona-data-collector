@@ -210,7 +210,7 @@ class DeviceFeatureSmokeTest {
         assertTrue(csvSnapshot.name.contains("_snapshot_csv"))
         assertTrue(
             csvSnapshot.readLines().first() ==
-                "derived_time,device_timer_millis,sample_timer_millis,axl_sensor_2_ch_1",
+                "estimated_time,device_timer_millis,sample_timer_millis,axl_sensor_2_ch_1",
         )
 
         assertNotNull(controller.createAllFilesShareIntent(context))

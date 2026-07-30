@@ -1,281 +1,97 @@
 # Architecture
 
-## Purpose
-
-This project is a BLE data capture app. It scans for a device, opens a GATT session, subscribes to notifications, reconstructs packets from BLE fragments, writes raw packets to disk, and exposes session state to the UI.
-
-The current implementation concentrates nearly all logic in `MainActivity`. That is the main structural problem. The goal of this document is to define the target architecture and the rules for refactoring so the codebase remains stable while multiple agents work on it.
-
-## Platform Baseline
-
-- `minSdk = 31` (Android 12+ only)
-- Android 12 compatibility paths are allowed only at platform API boundaries
-- One BLE permission model only:
-  - `BLUETOOTH_SCAN`
-  - `BLUETOOTH_CONNECT`
-- Prefer modern Android 13+ GATT forms, with API 31-32 fallbacks where required
-
-This is intentional. Android 12 is the compatibility floor for the modern Nearby Devices Bluetooth permission model, while older Android versions still require additional permission branching and lifecycle edge cases that do not help the current project goals.
-
-## Design Principles
-
-- No business logic in `Activity`.
-- No protocol parsing inside Android framework callbacks.
-- BLE stack access must be isolated behind a small interface.
-- Packet parsing and statistics must be plain Kotlin and unit-testable.
-- File writing and file sharing are separate responsibilities.
-- UI reads state and emits intents; it does not own BLE operations directly.
-- Every long-lived resource must have explicit lifecycle ownership and shutdown.
-- Every bug fix in BLE/session/parsing code must include a test when technically possible.
-
-## Target Module Structure
-
-This project is currently a single `app` module. Refactoring should move toward smaller modules with explicit responsibilities.
-
-### `app`
-
-Android entry point and composition root only.
-
-Responsibilities:
-- `Application` / `Activity`
-- dependency wiring
-- navigation
-- permission entry flow
-
-Must not contain:
-- packet parsing
-- BLE session orchestration details
-- file I/O logic
-- long-running thread management
-
-### `core:ble`
-
-BLE transport and session management.
-
-Responsibilities:
-- scanning
-- connect/disconnect
-- service discovery
-- notification subscription
-- translating GATT callbacks into app-level events/state
-
-Rules:
-- no parsing of device payloads
-- no file writes
-- no direct UI state mutation
-- one callback instance per scanner/session where identity matters
-- all GATT statuses must be checked and surfaced
-
-### `core:protocol`
-
-Pure Kotlin packet framing and parsing.
-
-Responsibilities:
-- header detection
-- fragment accumulation
-- packet boundary detection
-- length decoding
-- counter extraction
-- packet loss/statistics calculation
-- sensor payload parsing for charting or downstream use
-
-Rules:
-- no Android imports
-- deterministic input/output
-- heavily unit-tested
-
-### `core:storage`
-
-Binary persistence and export support.
-
-Responsibilities:
-- open/close output file
-- buffered writes
-- flush policy
-- exported file lookup
-- shareable URI creation support
-
-Rules:
-- no BLE APIs
-- no parsing logic
-- explicit close/flush semantics
-
-### `feature:device`
-
-Device flow UI and presentation logic.
-
-Responsibilities:
-- screen state
-- user intents
-- view model / presenter
-- rendering scan results, connection state, counters, actions
-
-Rules:
-- depends on abstractions, not concrete Android BLE calls
-- no direct `BluetoothGatt` / `BluetoothAdapter` access
-
-## App Shell And Navigation
-
-The app shell belongs to the `app` layer and must provide stable top-level navigation around the existing device feature set.
-
-Top-level destinations:
-- `Overview`
-- `Charts`
-- `Settings`
-
-Rules:
-- `Overview` is the default destination.
-- `Charts` stays accessible even when no capture data exists.
-- `Settings` owns preferences and future app-level options.
-- top-level navigation must not appear or disappear based on BLE connection state.
-- session state changes destination content, not the navigation structure.
-
-Destination responsibilities:
-
-`Overview`
-- scan for devices
-- connect / disconnect
-- replay captured dumps
-- show session summary
-- show diagnostic/event log
-
-`Charts`
-- show compact capture health
-- sensor and channel selection
-- chart window, follow-live, pan, and zoom controls
-- render chart data or a stable empty state
-
-`Settings`
-- BLE transport profile selection
-- theme placeholder
-- language placeholder
-
-Export rules:
-- export is a session-level action, not a destination
-- export is available from the top app bar on `Overview` and `Charts`
-- export opens a bottom sheet with all-files, packet, channel-csv, raw-fragment, and diagnostic-log actions
-- export does not own file generation logic; it only invokes existing feature/storage flows
-
-## State Boundaries
-
-The app should converge on these boundaries:
-
-- UI state:
-  - scanning / idle
-  - found devices
-  - connecting
-  - connected / disconnected
-  - packet counters
-  - export availability
-  - export progress phase
-  - visible errors
-
-- BLE session state:
-  - idle
-  - scanning
-  - connecting
-  - connected
-  - services discovered
-  - notifications enabled
-  - disconnected
-  - failed
-
-- protocol state:
-  - incomplete fragment buffer
-  - completed packet stream
-  - counter continuity
-
-No single class should own all three.
-
-## Concurrency Rules
-
-- No unmanaged threads started from `Activity`.
-- Use a lifecycle-owned scope for app orchestration.
-- If a queue or worker is required, it must have:
-  - explicit owner
-  - explicit startup point
-  - explicit shutdown path
-  - tests or at least deterministic behavior boundaries
-- Shared mutable buffers must be owned by a small component with a narrow API.
-- Background work must not update Compose state directly from random code paths.
-
-## Android-Specific Rules
-
-- Permission requests must go through one code path only.
-- BLE operations must not run unless required permissions are granted.
-- GATT callbacks must validate `status` before continuing.
-- Null characteristics and descriptors must be handled explicitly.
-- `startScan()` and `stopScan()` must use the same callback instance.
-- File sharing must stay behind `FileProvider`; no relaxed StrictMode workarounds.
-- Internal app storage is preferred unless there is a strong product reason otherwise.
-
-## Testing Policy
-
-### Required Unit Tests
-
-`core:protocol` must have unit tests for:
-- header detection
-- fragmented packet reassembly
-- handling garbage before header
-- packet length validation
-- counter extraction
-- gap/loss calculation
-- malformed/incomplete packet handling
-
-BLE session logic must have unit tests for:
-- scan start/stop transitions
-- connect/disconnect transitions
-- service discovery failure
-- notification subscription failure
-- duplicate/disordered callback handling where relevant
-
-### Required Smoke Coverage
-
-The project should have at least one smoke path covering:
-
-1. permission granted
-2. scan starts
-3. device selected
-4. GATT connects
-5. services discovered
-6. notifications enabled
-7. packet received
-8. file written
-9. file share action available
-
-This can begin as a lightweight fake-driven integration test before full instrumentation coverage exists.
-
-## Refactor Rules For Agents
-
-- Do not expand `MainActivity`.
-- Do not introduce new logic that increases Android version branching.
-- Prefer extracting pure Kotlin classes before changing behavior.
-- Keep write ownership narrow:
-  - protocol changes belong in protocol files
-  - BLE changes belong in BLE files
-  - UI changes belong in feature files
-- Avoid cross-cutting edits unless necessary for the current step.
-- If behavior changes, add or update tests in the same change.
-- If a temporary adapter layer is needed during migration, keep it thin and mark it for deletion.
-
-## Migration Plan
-
-Refactoring should happen in this order:
-
-1. Keep platform support at Android 12+ and isolate Android 12 BLE compatibility code at API boundaries.
-2. Extract packet framing, parsing, and counters from `MainActivity` into plain Kotlin classes.
-3. Extract BLE scan/connect/subscribe logic into a session component behind an interface.
-4. Extract file persistence into a storage component.
-5. Introduce a view model or presenter for UI state.
-6. Add smoke coverage for the happy path.
-7. Remove leftover monolith code from `MainActivity`.
-
-## Definition Of Done
-
-A refactor step is only complete when:
-
-- responsibilities are narrower than before
-- behavior is unchanged or intentionally documented
-- new boundaries are easier to test than the old ones
-- tests cover the moved logic
-- `MainActivity` becomes thinner, not thicker
+## Scope
+
+Woona is a single-module Android 12+ application for dog profiles, BLE sensor
+recordings, replay, optional video capture, local export, and Google Drive
+backup. The project intentionally stays in one `app` module; package boundaries
+provide enough separation for the current size.
+
+## Application flow
+
+`MainActivity` is the Android composition and lifecycle owner. It:
+
+- restores language, theme, BLE, profile, and Drive preferences;
+- requires a dog profile before scanning or recording;
+- collects a session questionnaire before live capture and optionally before
+  replay;
+- creates the recording row, then delegates capture to
+  `DeviceFeatureController`;
+- renders the Compose app shell and profile dialogs;
+- prepares local sharing and Drive backup after capture.
+
+`DeviceFeatureModule` wires the BLE session, packet processor, UI state holder,
+replay controller, file stores, database, and video recorder. Production code
+and fake-driven tests use the same controller boundaries.
+
+## Boundaries
+
+- `ble/`: Android BLE scan, GATT connection, notification subscription,
+  transport profiles, and session state. It emits fragments and state; it does
+  not parse packets or render UI.
+- `protocol/`: deterministic packet assembly, validation, sensor parsing, and
+  loss statistics. Keep it plain Kotlin and Android-free.
+- `feature/device/`: capture/replay orchestration and observable UI state. It
+  coordinates the other boundaries but does not implement GATT or file formats.
+- `storage/`: packet, raw-fragment, diagnostic, CSV, ZIP, and `FileProvider`
+  handling. It must not own BLE behavior.
+- `data/`: dog profiles, recording lifecycle, artifacts, SQLite migrations,
+  questionnaire JSON, and synchronization metadata.
+- `profile/`, `AppShell.kt`, and `DeviceScreen.kt`: Compose UI. UI emits actions
+  and renders state; persistence and hardware work stay outside composables.
+- `video/`: Camera2/MediaRecorder ownership for optional `video.mp4`.
+- `drive/`: authorization, queued WorkManager uploads, and manual Drive saves.
+
+## Data model and files
+
+`WoonaDatabase` stores `filesDir/Woona/woona.sqlite`, enables foreign keys, and
+uses schema version 2:
+
+- `dog_profiles`: reusable dog questionnaire;
+- `recordings`: profile link, `live`/`replay` source, lifecycle status,
+  timestamps, timezone, session questionnaire, and relative directory;
+- `artifacts`: typed files belonging to a recording.
+
+Recording files live under:
+
+```text
+filesDir/Woona/recordings/<profile-id>/<local-date>/<recording-id>/
+```
+
+Possible artifacts are `packets.bin`, `raw_fragments.binlog`,
+`diagnostics.log`, `channel.csv`, `video.mp4`, and `sync.json`. Exports use
+snapshots so capture files are not read while they are still being written.
+ZIP manifests include profile, session, recording, and synchronization
+metadata.
+
+## Recording lifecycle
+
+1. The selected profile and session questionnaire create a `preparing` row.
+2. Live BLE readiness or replay start marks the row `recording`.
+3. The packet processor writes artifacts and publishes batched UI updates.
+4. Optional video records into the same directory.
+5. Disconnect, replay completion, error, pause, or shutdown finalizes the row
+   as `completed`, `failed`, or `interrupted` and registers existing artifacts.
+6. On application start, unfinished rows are marked `interrupted`.
+
+## Video synchronization
+
+At BLE capture readiness or replay start, the controller samples wall-clock time
+around `SystemClock.elapsedRealtimeNanos()` and stores a sensor clock anchor.
+For live recordings, the video recorder reports first-frame monotonic and camera
+timestamps. `sync.json` stores their offset, timing uncertainty, timestamp
+source, camera properties, and stop metadata. Writes are atomic where the
+filesystem supports atomic moves.
+
+This aligns artifacts on one monotonic timeline; it is not proof of physical
+sensor/camera synchronization quality.
+
+## Testing
+
+- JVM tests cover protocol, state, storage/export, Drive, path, and timing logic.
+- Instrumentation tests cover Compose navigation/insets, SQLite, preferences,
+  and a fake-driven BLE capture path.
+- `woonaApi31DebugAndroidTest` runs instrumentation tests on the Gradle-managed
+  Pixel 2 / API 31 Google image.
+- Real BLE transport, camera behavior, `video.mp4` quality, and hardware timing
+  still require a physical Android device.

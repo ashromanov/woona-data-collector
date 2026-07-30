@@ -62,6 +62,18 @@ android {
     lint {
         baseline = file("lint-baseline.xml")
     }
+    testOptions {
+        managedDevices {
+            localDevices {
+                create("woonaApi31") {
+                    device = "Pixel 2"
+                    apiLevel = 31
+                    systemImageSource = "google"
+                    testedAbi = "x86_64"
+                }
+            }
+        }
+    }
     buildFeatures {
         compose = true
     }

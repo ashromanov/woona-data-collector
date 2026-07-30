@@ -7,12 +7,14 @@ import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CaptureRequest
+import android.hardware.display.DisplayManager
 import android.media.MediaRecorder
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.SystemClock
 import android.util.Range
 import android.util.Size
+import android.view.Display
 import android.view.Surface
 import java.io.File
 import java.util.concurrent.CountDownLatch
@@ -41,7 +43,8 @@ class AndroidVideoRecorder(
     context: Context,
     private val monotonicNanos: () -> Long = SystemClock::elapsedRealtimeNanos,
 ) : AutoCloseable {
-    private val display = context.display
+    private val display = context.getSystemService(DisplayManager::class.java)
+        ?.getDisplay(Display.DEFAULT_DISPLAY)
     private val appContext = context.applicationContext
     private val cameraManager = appContext.getSystemService(CameraManager::class.java)
     private val cameraThread = HandlerThread("woona-video").apply { start() }
