@@ -36,6 +36,8 @@ See [the iOS guide](ios/README.md) for device signing and feature details. iOS c
 ```bash
 cd shared
 cp .env.example .env
+mkdir -p ../var/storage
+sudo chown -R 10001 ../var/storage # API container runs as UID 10001
 docker compose config -q
 docker compose up -d --build --wait
 curl http://127.0.0.1:8080/health/ready
