@@ -1,0 +1,6 @@
+services:
+  api:
+    ports: !override
+      - "127.0.0.1:18080:8080"
+    volumes: !override
+      - ../test-run/clean-room-storage:/srv/woona

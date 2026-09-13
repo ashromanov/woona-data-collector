@@ -1,0 +1,35 @@
+sequenceDiagram
+    actor Operator
+    participant UI
+    participant BLE
+    participant Camera
+    participant Capture
+    participant DB as Local SQLite
+    participant Files
+    participant Sync as WorkManager
+
+    Operator->>UI: Заполняет обязательную анкету
+    UI->>BLE: Подключить и подготовить
+    UI->>Camera: Открыть preview
+    BLE-->>UI: ready
+    Camera-->>UI: preview ready
+    Operator->>UI: Начать запись
+    UI->>DB: INSERT recording(starting)
+    UI->>Capture: arm(sessionZeroNs)
+    par Sensor
+        Capture->>BLE: принимать уведомления
+        BLE-->>Capture: fragment(receivedMonotonicNs)
+        Capture->>Files: BLERAW2 + packets
+    and Video
+        Capture->>Camera: start MediaRecorder
+        Camera-->>Capture: first frame timestamp
+        Capture->>Files: video.mp4
+    end
+    Capture->>DB: recording + sync anchors
+    Operator->>UI: Завершить запись
+    UI->>Capture: stop once
+    Capture->>BLE: stop/disconnect
+    Capture->>Camera: stop/finalize
+    Capture->>Files: close + fsync + hashes
+    Capture->>DB: completed + artifacts
+    Capture->>Sync: enqueue unique recording upload

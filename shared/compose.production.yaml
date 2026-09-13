@@ -1,0 +1,108 @@
+services:
+  postgres:
+    restart: unless-stopped
+    volumes: !override
+      - ${WOONA_POSTGRES_ROOT:?set WOONA_POSTGRES_ROOT}:/var/lib/postgresql
+    logging:
+      options:
+        max-size: 20m
+        max-file: "5"
+
+  api:
+    restart: unless-stopped
+    environment:
+      WOONA_ALLOW_LEGACY_MIGRATION: "false"
+    logging:
+      options:
+        max-size: 20m
+        max-file: "5"
+
+  filebrowser:
+    image: gtstef/filebrowser:stable@sha256:b59783c48b315a615b899124d36a47c48e034e10ae8588289869383010783144
+    restart: unless-stopped
+    user: "0:0"
+    env_file: .env.team
+    environment:
+      FILEBROWSER_CONFIG: /home/filebrowser/config.yaml
+      FILEBROWSER_DATABASE: /home/filebrowser/data/database.db
+      FILEBROWSER_DISABLE_AUTOMATIC_BACKUP: "true"
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    cap_drop:
+      - ALL
+    cap_add:
+      - DAC_OVERRIDE
+      - DAC_READ_SEARCH
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - filebrowser_data:/home/filebrowser/data
+      - ./server/filebrowser.yaml:/home/filebrowser/config.yaml:ro
+      - ${WOONA_STORAGE_ROOT_HOST:?set WOONA_STORAGE_ROOT_HOST}:/data/recordings:ro
+      - ${WOONA_BACKUP_ROOT_HOST:-/srv/woona/backups}:/data/backups:ro
+    mem_limit: 768m
+    pids_limit: 256
+    logging:
+      options:
+        max-size: 20m
+        max-file: "5"
+
+  cloudbeaver:
+    image: dbeaver/cloudbeaver:26.1.4
+    restart: unless-stopped
+    env_file: .env.team
+    environment:
+      CLOUDBEAVER_ROOT_URI: /db/
+      CLOUDBEAVER_APP_ANONYMOUS_ACCESS_ENABLED: "false"
+      CLOUDBEAVER_APP_SUPPORTS_CUSTOM_CONNECTIONS: "false"
+      CLOUDBEAVER_APP_PUBLIC_CREDENTIALS_SAVE_ENABLED: "true"
+      CLOUDBEAVER_BRUTE_FORCE_PROTECTION_ENABLED: "true"
+      CLOUDBEAVER_POLICY_MIN_LENGTH: "12"
+      JAVA_OPTS: -Xms128m -Xmx768m
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - cloudbeaver_workspace:/opt/cloudbeaver/workspace
+    mem_limit: 1g
+    pids_limit: 512
+    logging:
+      options:
+        max-size: 20m
+        max-file: "5"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+      filebrowser:
+        condition: service_healthy
+      cloudbeaver:
+        condition: service_started
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./server/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    logging:
+      options:
+        max-size: 20m
+        max-file: "5"
+
+volumes:
+  caddy_data:
+  caddy_config:
+  cloudbeaver_workspace:
+  filebrowser_data:

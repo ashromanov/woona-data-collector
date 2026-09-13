@@ -1,0 +1,51 @@
+erDiagram
+    DOGS ||--o{ DOG_PROFILE_VERSIONS : versions
+    DOGS ||--o{ RECORDINGS : owns
+    DOG_PROFILE_VERSIONS ||--o{ RECORDINGS : captured_with
+    RECORDINGS ||--o| RECORDING_SYNC : aligns
+    RECORDINGS ||--o{ ARTIFACTS : contains
+    RECORDINGS ||--|| SERVER_SYNC_STATE : uploads
+    ARTIFACTS o|--o| SERVER_SYNC_STATE : current_progress
+
+    DOGS {
+        text id PK
+        text number_or_name
+        integer server_revision
+    }
+    DOG_PROFILE_VERSIONS {
+        text id PK
+        text dog_id FK
+        text questionnaire_json
+        text content_sha256
+        text server_sync_state
+    }
+    RECORDINGS {
+        text id PK
+        text dog_id FK
+        text dog_profile_version_id FK
+        text session_questionnaire_json
+        text capture_status
+        text relative_directory
+    }
+    RECORDING_SYNC {
+        text recording_id PK,FK
+        integer session_zero_monotonic_ns
+        integer first_sensor_packet_monotonic_ns
+        integer video_first_frame_monotonic_ns
+        text overall_sync_quality
+    }
+    ARTIFACTS {
+        text id PK
+        text recording_id FK
+        text relative_path
+        text sha256
+        text local_presence
+        text upload_state
+    }
+    SERVER_SYNC_STATE {
+        text recording_id PK,FK
+        text state
+        integer attempt_count
+        text current_artifact_id FK
+        text server_receipt_sha256
+    }

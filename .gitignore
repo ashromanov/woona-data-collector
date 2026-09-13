@@ -2,7 +2,7 @@
 .idea/
 .kotlin/
 .gradle
-/local.properties
+/android/local.properties
 /.idea/caches
 /.idea/libraries
 /.idea/modules.xml
@@ -16,5 +16,14 @@
 .cxx
 local.properties
 **/build/
-app/release/
+android/app/release/
+android/dist/
 project.zip
+.env
+var/
+test-run/
+__pycache__/
+*.py[cod]
+**/xcuserdata/
+*.xcuserstate
+DerivedData/

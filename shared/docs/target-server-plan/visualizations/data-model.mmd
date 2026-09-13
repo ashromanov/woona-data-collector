@@ -1,0 +1,56 @@
+erDiagram
+    CLIENT_DEVICES ||--o{ DOG_PROFILE_VERSIONS : creates
+    CLIENT_DEVICES ||--o{ RECORDINGS : captures
+    DOGS ||--o{ DOG_PROFILE_VERSIONS : has
+    DOGS ||--o{ RECORDINGS : owns
+    DOG_PROFILE_VERSIONS ||--o{ RECORDINGS : snapshots
+    RECORDINGS ||--o| RECORDING_SYNC : aligns
+    RECORDINGS ||--o{ ARTIFACTS : contains
+
+    CLIENT_DEVICES {
+        uuid id PK
+        text label
+        text token_hash
+        timestamptz revoked_at
+    }
+    DOGS {
+        uuid id PK
+        text number_or_name
+        bigint revision
+        timestamptz archived_at
+    }
+    DOG_PROFILE_VERSIONS {
+        uuid id PK
+        uuid dog_id FK
+        jsonb questionnaire
+        text validation_state
+        timestamptz superseded_at
+    }
+    RECORDINGS {
+        uuid id PK
+        uuid dog_id FK
+        uuid dog_profile_version_id FK
+        uuid capture_device_id FK
+        jsonb session_questionnaire
+        text capture_status
+        text ingest_status
+        boolean video_requested
+    }
+    RECORDING_SYNC {
+        uuid recording_id PK,FK
+        bigint session_zero_monotonic_ns
+        bigint first_sensor_packet_monotonic_ns
+        bigint video_first_frame_monotonic_ns
+        bigint video_offset_from_sensor_ns
+        text overall_sync_quality
+    }
+    ARTIFACTS {
+        uuid id PK
+        uuid recording_id FK
+        text artifact_type
+        text server_relative_path
+        bigint expected_size_bytes
+        bigint stored_size_bytes
+        text sha256
+        text storage_status
+    }

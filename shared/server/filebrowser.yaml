@@ -1,0 +1,53 @@
+server:
+  port: 80
+  baseURL: "/files/"
+  externalUrl: "https://cool-trams.digital/files/"
+  disableUpdateCheck: true
+  disableWebDAV: true
+  cacheDir: "/home/filebrowser/data/tmp"
+  database: "/home/filebrowser/data/database.db"
+  sources:
+    - path: "/data/recordings"
+      name: "Recordings"
+      config:
+        defaultEnabled: true
+        private: true
+        readOnly: true
+    - path: "/data/backups"
+      name: "PostgreSQL backups"
+      config:
+        defaultEnabled: true
+        private: true
+        readOnly: true
+
+auth:
+  tokenExpirationHours: 8
+  methods:
+    password:
+      enabled: true
+      minLength: 12
+      signup: false
+  adminUsername: "admin"
+
+frontend:
+  name: "Woona Data"
+  description: "Read-only recordings and database backups"
+
+userDefaults:
+  preview:
+    image: true
+    video: true
+    audio: true
+    office: true
+    popup: true
+    highQuality: true
+  account:
+    permissions:
+      api: false
+      admin: false
+      modify: false
+      share: false
+      realtime: false
+      delete: false
+      create: false
+      download: true

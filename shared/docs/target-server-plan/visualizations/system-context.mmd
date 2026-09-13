@@ -1,0 +1,23 @@
+flowchart LR
+    U[Оператор] --> A[Woona Android]
+    S[BLE-датчик] -->|уведомления + device timer| A
+    C[Камера Android] -->|preview + MP4 + frame timestamp| A
+    A -->|HTTPS JSON + chunks| API[Woona API]
+    API --> PG[(PostgreSQL)]
+    API --> FS[(Файловая система сервера)]
+    A --> L[(Локальная SQLite)]
+    A --> LF[(Локальные файлы)]
+    WM[WorkManager] --> A
+
+    subgraph Телефон
+        A
+        L
+        LF
+        WM
+    end
+
+    subgraph Сервер
+        API
+        PG
+        FS
+    end

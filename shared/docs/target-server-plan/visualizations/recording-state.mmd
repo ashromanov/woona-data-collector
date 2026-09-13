@@ -1,0 +1,17 @@
+stateDiagram-v2
+    [*] --> Draft: анкета редактируется
+    Draft --> Armed: анкета валидна, датчик готов,\nкамера ready если videoRequested
+    Armed --> Starting: одна кнопка «Начать»
+    Starting --> Recording: получен первый пакет\nи первый frame при видео
+    Starting --> Failed: timeout / камера / BLE
+    Recording --> Finalizing: одна кнопка «Завершить»
+    Recording --> Interrupted: background / crash / disconnect
+    Finalizing --> Completed: writers closed,\nMP4 валиден, hashes рассчитаны
+    Finalizing --> Failed: обязательный artifact повреждён
+    Completed --> UploadPending
+    Interrupted --> UploadPending
+    Failed --> UploadPending
+    UploadPending --> Uploading
+    Uploading --> UploadPending: retryable error
+    Uploading --> Synced: server complete подтвердил\nразмеры и SHA-256
+    Uploading --> UploadFailed: permanent auth/data error

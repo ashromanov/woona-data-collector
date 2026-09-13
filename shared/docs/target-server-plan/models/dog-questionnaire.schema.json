@@ -1,0 +1,544 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://woona.local/schemas/dog-questionnaire-v1.json",
+  "title": "DogQuestionnaireV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "numberOrName",
+    "shelterOrPlace",
+    "breedStatus",
+    "breedName",
+    "resembles",
+    "size",
+    "ageStatus",
+    "ageYears",
+    "ageMonths",
+    "ageSource",
+    "sex",
+    "sterilizationStatus",
+    "weightStatus",
+    "weightKg",
+    "bodyConditionStatus",
+    "bodyConditionScore",
+    "muscleMass",
+    "neckCircumferenceStatus",
+    "neckCircumferenceCm",
+    "coatLength",
+    "undercoat",
+    "shavedAreasStatus",
+    "shavedAreasDetails",
+    "observedSigns",
+    "diagnosesStatus",
+    "diagnosesDetails",
+    "housing",
+    "housingDetails",
+    "walksStatus",
+    "walksDescription",
+    "cohabitants",
+    "shelterPermission",
+    "notesStatus",
+    "notes"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "numberOrName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "shelterOrPlace": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "breedStatus": {
+      "enum": ["purebred", "mixed", "unknown"]
+    },
+    "breedName": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "resembles": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "size": {
+      "enum": ["small", "medium", "large", "giant", "unknown"]
+    },
+    "ageStatus": {
+      "enum": ["known", "estimated", "unknown"]
+    },
+    "ageYears": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "maximum": 40
+    },
+    "ageMonths": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "maximum": 11
+    },
+    "ageSource": {
+      "enum": [
+        "documents",
+        "shelter_report",
+        "dental_estimate",
+        "operator_estimate",
+        "unknown"
+      ]
+    },
+    "sex": {
+      "enum": ["male", "female", "unknown"]
+    },
+    "sterilizationStatus": {
+      "enum": ["yes", "no", "unknown"]
+    },
+    "weightStatus": {
+      "enum": ["measured", "estimated", "unknown"]
+    },
+    "weightKg": {
+      "type": ["number", "null"],
+      "exclusiveMinimum": 0,
+      "maximum": 150
+    },
+    "bodyConditionStatus": {
+      "enum": ["assessed", "unable"]
+    },
+    "bodyConditionScore": {
+      "type": ["integer", "null"],
+      "minimum": 1,
+      "maximum": 9
+    },
+    "muscleMass": {
+      "enum": [
+        "normal",
+        "mild_loss",
+        "moderate_loss",
+        "severe_loss",
+        "unable"
+      ]
+    },
+    "neckCircumferenceStatus": {
+      "enum": ["measured", "not_measured"]
+    },
+    "neckCircumferenceCm": {
+      "type": ["number", "null"],
+      "exclusiveMinimum": 0,
+      "maximum": 150
+    },
+    "coatLength": {
+      "enum": ["short", "medium", "long", "unknown"]
+    },
+    "undercoat": {
+      "enum": ["none", "moderate", "dense", "unknown"]
+    },
+    "shavedAreasStatus": {
+      "enum": ["none", "present", "unknown"]
+    },
+    "shavedAreasDetails": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "observedSigns": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "none",
+          "unknown",
+          "labored_breathing",
+          "fainting",
+          "seizures",
+          "cannot_urinate",
+          "limb_weakness",
+          "jaundice",
+          "vomiting_or_no_appetite",
+          "stool_changes",
+          "cough",
+          "pain_or_lameness",
+          "thirst_changes",
+          "distress"
+        ]
+      }
+    },
+    "diagnosesStatus": {
+      "enum": ["yes", "no", "unknown"]
+    },
+    "diagnosesDetails": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "housing": {
+      "enum": ["enclosure", "room", "home", "free_range", "other", "unknown"]
+    },
+    "housingDetails": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "walksStatus": {
+      "enum": ["known", "none", "unknown"]
+    },
+    "walksDescription": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "cohabitants": {
+      "enum": ["alone", "other_animals", "people_only", "unknown"]
+    },
+    "shelterPermission": {
+      "enum": ["yes", "no", "not_required", "unknown"]
+    },
+    "notesStatus": {
+      "enum": ["none", "provided"]
+    },
+    "notes": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 2000
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "breedStatus": {
+            "const": "purebred"
+          }
+        },
+        "required": ["breedStatus"]
+      },
+      "then": {
+        "properties": {
+          "breedName": {
+            "type": "string",
+            "minLength": 1
+          },
+          "resembles": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "breedStatus": {
+            "const": "mixed"
+          }
+        },
+        "required": ["breedStatus"]
+      },
+      "then": {
+        "properties": {
+          "breedName": {
+            "type": "string",
+            "minLength": 1
+          },
+          "resembles": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "breedStatus": {
+            "const": "unknown"
+          }
+        },
+        "required": ["breedStatus"]
+      },
+      "then": {
+        "properties": {
+          "breedName": {
+            "type": "null"
+          },
+          "resembles": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ageStatus": {
+            "enum": ["known", "estimated"]
+          }
+        },
+        "required": ["ageStatus"]
+      },
+      "then": {
+        "properties": {
+          "ageSource": {
+            "enum": [
+              "documents",
+              "shelter_report",
+              "dental_estimate",
+              "operator_estimate"
+            ]
+          }
+        },
+        "anyOf": [
+          {
+            "properties": {
+              "ageYears": {
+                "type": "integer"
+              }
+            }
+          },
+          {
+            "properties": {
+              "ageMonths": {
+                "type": "integer"
+              }
+            }
+          }
+        ]
+      },
+      "else": {
+        "properties": {
+          "ageYears": {
+            "type": "null"
+          },
+          "ageMonths": {
+            "type": "null"
+          },
+          "ageSource": {
+            "const": "unknown"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "weightStatus": {
+            "enum": ["measured", "estimated"]
+          }
+        },
+        "required": ["weightStatus"]
+      },
+      "then": {
+        "properties": {
+          "weightKg": {
+            "type": "number"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "weightKg": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "bodyConditionStatus": {
+            "const": "assessed"
+          }
+        },
+        "required": ["bodyConditionStatus"]
+      },
+      "then": {
+        "properties": {
+          "bodyConditionScore": {
+            "type": "integer"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "bodyConditionScore": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "neckCircumferenceStatus": {
+            "const": "measured"
+          }
+        },
+        "required": ["neckCircumferenceStatus"]
+      },
+      "then": {
+        "properties": {
+          "neckCircumferenceCm": {
+            "type": "number"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "neckCircumferenceCm": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "shavedAreasStatus": {
+            "const": "present"
+          }
+        },
+        "required": ["shavedAreasStatus"]
+      },
+      "then": {
+        "properties": {
+          "shavedAreasDetails": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "shavedAreasDetails": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "observedSigns": {
+            "contains": {
+              "enum": ["none", "unknown"]
+            },
+            "minContains": 1
+          }
+        },
+        "required": ["observedSigns"]
+      },
+      "then": {
+        "properties": {
+          "observedSigns": {
+            "maxItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "diagnosesStatus": {
+            "const": "yes"
+          }
+        },
+        "required": ["diagnosesStatus"]
+      },
+      "then": {
+        "properties": {
+          "diagnosesDetails": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "diagnosesDetails": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "housing": {
+            "const": "other"
+          }
+        },
+        "required": ["housing"]
+      },
+      "then": {
+        "properties": {
+          "housingDetails": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "housingDetails": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "walksStatus": {
+            "const": "known"
+          }
+        },
+        "required": ["walksStatus"]
+      },
+      "then": {
+        "properties": {
+          "walksDescription": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "walksDescription": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "notesStatus": {
+            "const": "provided"
+          }
+        },
+        "required": ["notesStatus"]
+      },
+      "then": {
+        "properties": {
+          "notes": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "notes": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ]
+}

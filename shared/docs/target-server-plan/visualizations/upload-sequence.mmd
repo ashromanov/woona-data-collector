@@ -1,0 +1,26 @@
+sequenceDiagram
+    participant W as Android SyncWorker
+    participant API
+    participant PG as PostgreSQL
+    participant FS as Server filesystem
+
+    W->>API: PUT /v1/recordings/{id} manifest
+    API->>PG: idempotent metadata transaction
+    API-->>W: artifacts + stored offsets
+    loop Each incomplete artifact
+        W->>API: HEAD /v1/artifacts/{id}/content
+        API-->>W: Upload-Offset
+        loop Chunks
+            W->>API: PATCH content + Upload-Offset
+            API->>FS: append to .part
+            API->>PG: stored_size_bytes
+            API-->>W: next Upload-Offset
+        end
+        W->>API: POST /v1/artifacts/{id}/complete
+        API->>FS: verify SHA-256 + atomic rename
+        API->>PG: storage_status=available
+    end
+    W->>API: POST /v1/recordings/{id}/complete
+    API->>PG: verify expected artifacts, ingest_status=complete
+    API-->>W: server receipt
+    W->>W: local sync_status=synced

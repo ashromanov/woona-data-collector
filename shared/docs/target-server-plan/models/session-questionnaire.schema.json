@@ -1,0 +1,540 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://woona.local/schemas/session-questionnaire-v1.json",
+  "title": "SessionQuestionnaireV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "sessionLabel",
+    "operatorName",
+    "activityGroup",
+    "activityType",
+    "activityDetails",
+    "location",
+    "surface",
+    "surfaceDetails",
+    "airTemperatureStatus",
+    "airTemperatureC",
+    "sensorPosition",
+    "sensorPositionDetails",
+    "collarTightness",
+    "preMeasurementState",
+    "preMeasurementStateDetails",
+    "pulseStatus",
+    "pulseBpm",
+    "respirationStatus",
+    "respirationPerMinute",
+    "bodyTemperatureStatus",
+    "bodyTemperatureC",
+    "measurementAtUtc",
+    "videoRequested"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "sessionLabel": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "operatorName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 150
+    },
+    "activityGroup": {
+      "enum": ["locomotion", "stationary", "daily_living", "other"]
+    },
+    "activityType": {
+      "enum": [
+        "walk",
+        "trot",
+        "gallop",
+        "run",
+        "stairs_up",
+        "stairs_down",
+        "jump",
+        "mixed",
+        "stand",
+        "sit",
+        "lie",
+        "rest",
+        "sleep",
+        "play",
+        "eat",
+        "drink",
+        "scratch",
+        "groom",
+        "other"
+      ]
+    },
+    "activityDetails": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 1000
+    },
+    "location": {
+      "enum": ["indoors", "outdoors"]
+    },
+    "surface": {
+      "enum": [
+        "tile",
+        "concrete",
+        "wood",
+        "laminate",
+        "carpet",
+        "bed",
+        "kennel_mat",
+        "asphalt",
+        "grass",
+        "soil",
+        "gravel",
+        "snow",
+        "other"
+      ]
+    },
+    "surfaceDetails": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 300
+    },
+    "airTemperatureStatus": {
+      "enum": ["measured", "not_measured"]
+    },
+    "airTemperatureC": {
+      "type": ["number", "null"],
+      "minimum": -60,
+      "maximum": 70
+    },
+    "sensorPosition": {
+      "enum": [
+        "dorsal_neck",
+        "left_neck",
+        "right_neck",
+        "chest",
+        "back",
+        "other"
+      ]
+    },
+    "sensorPositionDetails": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 300
+    },
+    "collarTightness": {
+      "enum": ["loose", "snug", "tight"]
+    },
+    "preMeasurementState": {
+      "enum": ["rest", "walk", "run", "play", "stress", "other", "unknown"]
+    },
+    "preMeasurementStateDetails": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "pulseStatus": {
+      "enum": ["measured", "not_measured"]
+    },
+    "pulseBpm": {
+      "type": ["integer", "null"],
+      "minimum": 20,
+      "maximum": 300
+    },
+    "respirationStatus": {
+      "enum": ["measured", "not_measured"]
+    },
+    "respirationPerMinute": {
+      "type": ["integer", "null"],
+      "minimum": 1,
+      "maximum": 200
+    },
+    "bodyTemperatureStatus": {
+      "enum": ["measured", "not_measured"]
+    },
+    "bodyTemperatureC": {
+      "type": ["number", "null"],
+      "minimum": 30,
+      "maximum": 45
+    },
+    "measurementAtUtc": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "videoRequested": {
+      "type": "boolean"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "activityGroup": {
+            "const": "locomotion"
+          }
+        },
+        "required": ["activityGroup"]
+      },
+      "then": {
+        "properties": {
+          "activityType": {
+            "enum": [
+              "walk",
+              "trot",
+              "gallop",
+              "run",
+              "stairs_up",
+              "stairs_down",
+              "jump",
+              "mixed"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "activityGroup": {
+            "const": "stationary"
+          }
+        },
+        "required": ["activityGroup"]
+      },
+      "then": {
+        "properties": {
+          "activityType": {
+            "enum": ["stand", "sit", "lie", "rest", "sleep"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "activityGroup": {
+            "const": "daily_living"
+          }
+        },
+        "required": ["activityGroup"]
+      },
+      "then": {
+        "properties": {
+          "activityType": {
+            "enum": ["play", "eat", "drink", "scratch", "groom", "other"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "activityGroup": {
+            "const": "other"
+          }
+        },
+        "required": ["activityGroup"]
+      },
+      "then": {
+        "properties": {
+          "activityType": {
+            "const": "other"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "activityType": {
+            "enum": ["other", "mixed"]
+          }
+        },
+        "required": ["activityType"]
+      },
+      "then": {
+        "properties": {
+          "activityDetails": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "activityDetails": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "location": {
+            "const": "indoors"
+          }
+        },
+        "required": ["location"]
+      },
+      "then": {
+        "properties": {
+          "surface": {
+            "enum": [
+              "tile",
+              "concrete",
+              "wood",
+              "laminate",
+              "carpet",
+              "bed",
+              "kennel_mat",
+              "other"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "location": {
+            "const": "outdoors"
+          }
+        },
+        "required": ["location"]
+      },
+      "then": {
+        "properties": {
+          "surface": {
+            "enum": [
+              "asphalt",
+              "concrete",
+              "grass",
+              "soil",
+              "gravel",
+              "snow",
+              "other"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "surface": {
+            "const": "other"
+          }
+        },
+        "required": ["surface"]
+      },
+      "then": {
+        "properties": {
+          "surfaceDetails": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "surfaceDetails": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "airTemperatureStatus": {
+            "const": "measured"
+          }
+        },
+        "required": ["airTemperatureStatus"]
+      },
+      "then": {
+        "properties": {
+          "airTemperatureC": {
+            "type": "number"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "airTemperatureC": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "sensorPosition": {
+            "const": "other"
+          }
+        },
+        "required": ["sensorPosition"]
+      },
+      "then": {
+        "properties": {
+          "sensorPositionDetails": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "sensorPositionDetails": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "preMeasurementState": {
+            "const": "other"
+          }
+        },
+        "required": ["preMeasurementState"]
+      },
+      "then": {
+        "properties": {
+          "preMeasurementStateDetails": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "preMeasurementStateDetails": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "pulseStatus": {
+            "const": "measured"
+          }
+        },
+        "required": ["pulseStatus"]
+      },
+      "then": {
+        "properties": {
+          "pulseBpm": {
+            "type": "integer"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "pulseBpm": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "respirationStatus": {
+            "const": "measured"
+          }
+        },
+        "required": ["respirationStatus"]
+      },
+      "then": {
+        "properties": {
+          "respirationPerMinute": {
+            "type": "integer"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "respirationPerMinute": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "bodyTemperatureStatus": {
+            "const": "measured"
+          }
+        },
+        "required": ["bodyTemperatureStatus"]
+      },
+      "then": {
+        "properties": {
+          "bodyTemperatureC": {
+            "type": "number"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "bodyTemperatureC": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "anyOf": [
+          {
+            "properties": {
+              "pulseStatus": {
+                "const": "measured"
+              }
+            },
+            "required": ["pulseStatus"]
+          },
+          {
+            "properties": {
+              "respirationStatus": {
+                "const": "measured"
+              }
+            },
+            "required": ["respirationStatus"]
+          },
+          {
+            "properties": {
+              "bodyTemperatureStatus": {
+                "const": "measured"
+              }
+            },
+            "required": ["bodyTemperatureStatus"]
+          }
+        ]
+      },
+      "then": {
+        "properties": {
+          "measurementAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "measurementAtUtc": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ]
+}

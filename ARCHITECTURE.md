@@ -1,97 +1,98 @@
 # Architecture
 
-## Scope
+## Структура репозитория
 
-Woona is a single-module Android 12+ application for dog profiles, BLE sensor
-recordings, replay, optional video capture, local export, and Google Drive
-backup. The project intentionally stays in one `app` module; package boundaries
-provide enough separation for the current size.
+- `android/` — нативный Android-клиент и его инструменты сборки;
+- `ios/` — нативный SwiftUI/CoreBluetooth/AVFoundation iOS-клиент;
+- `shared/` — FastAPI-сервер, Docker Compose, общие схемы данных и документация.
 
-## Application flow
+## Общая схема
 
-`MainActivity` is the Android composition and lifecycle owner. It:
-
-- restores language, theme, BLE, profile, and Drive preferences;
-- requires a dog profile before scanning or recording;
-- collects a session questionnaire before live capture and optionally before
-  replay;
-- creates the recording row, then delegates capture to
-  `DeviceFeatureController`;
-- renders the Compose app shell and profile dialogs;
-- prepares local sharing and Drive backup after capture.
-
-`DeviceFeatureModule` wires the BLE session, packet processor, UI state holder,
-replay controller, file stores, database, and video recorder. Production code
-and fake-driven tests use the same controller boundaries.
-
-## Boundaries
-
-- `ble/`: Android BLE scan, GATT connection, notification subscription,
-  transport profiles, and session state. It emits fragments and state; it does
-  not parse packets or render UI.
-- `protocol/`: deterministic packet assembly, validation, sensor parsing, and
-  loss statistics. Keep it plain Kotlin and Android-free.
-- `feature/device/`: capture/replay orchestration and observable UI state. It
-  coordinates the other boundaries but does not implement GATT or file formats.
-- `storage/`: packet, raw-fragment, diagnostic, CSV, ZIP, and `FileProvider`
-  handling. It must not own BLE behavior.
-- `data/`: dog profiles, recording lifecycle, artifacts, SQLite migrations,
-  questionnaire JSON, and synchronization metadata.
-- `profile/`, `AppShell.kt`, and `DeviceScreen.kt`: Compose UI. UI emits actions
-  and renders state; persistence and hardware work stay outside composables.
-- `video/`: Camera2/MediaRecorder ownership for optional `video.mp4`.
-- `drive/`: authorization, queued WorkManager uploads, and manual Drive saves.
-
-## Data model and files
-
-`WoonaDatabase` stores `filesDir/Woona/woona.sqlite`, enables foreign keys, and
-uses schema version 2:
-
-- `dog_profiles`: reusable dog questionnaire;
-- `recordings`: profile link, `live`/`replay` source, lifecycle status,
-  timestamps, timezone, session questionnaire, and relative directory;
-- `artifacts`: typed files belonging to a recording.
-
-Recording files live under:
+Woona состоит из Android/iOS приложений, одного FastAPI-сервиса, PostgreSQL 18 и
+серверной файловой системы. Клиенты не подключаются к БД напрямую.
 
 ```text
-filesDir/Woona/recordings/<profile-id>/<local-date>/<recording-id>/
+Android (SQLite + WorkManager) --+
+iOS (SQLite + BGProcessingTask) -+-- HTTPS/Bearer -- FastAPI -- PostgreSQL
+                                                       |
+                                                       +-- server filesystem
 ```
 
-Possible artifacts are `packets.bin`, `raw_fragments.binlog`,
-`diagnostics.log`, `channel.csv`, `video.mp4`, and `sync.json`. Exports use
-snapshots so capture files are not read while they are still being written.
-ZIP manifests include profile, session, recording, and synchronization
-metadata.
+SQLite остаётся offline-first источником незавершённой локальной работы.
+PostgreSQL хранит анкеты, версии, связи, состояния выгрузки и контрольные
+суммы; бинарные артефакты хранятся файлами. Google Drive из итогового потока
+удалён, ручной Android Share сохранён.
 
-## Recording lifecycle
+## Клиентские boundaries
 
-1. The selected profile and session questionnaire create a `preparing` row.
-2. Live BLE readiness or replay start marks the row `recording`.
-3. The packet processor writes artifacts and publishes batched UI updates.
-4. Optional video records into the same directory.
-5. Disconnect, replay completion, error, pause, or shutdown finalizes the row
-   as `completed`, `failed`, or `interrupted` and registers existing artifacts.
-6. On application start, unfinished rows are marked `interrupted`.
+- `ble/` — scan, GATT, notification и время получения фрагмента.
+- `protocol/` — сборка и валидация пакетов.
+- `feature/device/` — единый lifecycle датчика, камеры, replay и экспорта.
+- `storage/` — packet/raw/timeline/diagnostic/CSV/ZIP форматы.
+- `video/` — Camera2 preview и MediaRecorder.
+- `data/` — SQLite v5, анкеты, immutable profile versions, записи, sync и
+  artifacts.
+- `sync/` — настройки сервера, Keystore-токен, HTTP upload/download и
+  WorkManager.
+- `profile/` и `AppShell.kt` — Compose UI без аппаратной и сетевой логики.
+- iOS повторяет те же границы в `BLE/`, `Protocol/`, `Capture/`, `Storage/` и
+  `AppShell/`; camera использует AVCaptureSession/AVAssetWriter.
 
-## Video synchronization
+## Локальная модель
 
-At BLE capture readiness or replay start, the controller samples wall-clock time
-around `SystemClock.elapsedRealtimeNanos()` and stores a sensor clock anchor.
-For live recordings, the video recorder reports first-frame monotonic and camera
-timestamps. `sync.json` stores their offset, timing uncertainty, timestamp
-source, camera properties, and stop metadata. Writes are atomic where the
-filesystem supports atomic moves.
+`filesDir/Woona/woona.sqlite` на Android и Application Support
+`Woona/woona.sqlite` на iOS используют schema version 5:
 
-This aligns artifacts on one monotonic timeline; it is not proof of physical
-sensor/camera synchronization quality.
+- `dogs`;
+- `dog_profile_versions`;
+- `recordings`;
+- `recording_sync`;
+- `artifacts`;
+- `server_sync_state`.
 
-## Testing
+Запись ссылается на конкретную неизменяемую версию анкеты. Артефакты находятся
+под:
 
-- JVM tests cover protocol, state, storage/export, Drive, path, and timing logic.
-- Instrumentation tests cover Compose navigation/insets, SQLite, preferences,
-  and a fake-driven BLE capture path.
-- `woonaApi31DebugAndroidTest` runs instrumentation tests on the Gradle-managed
-  Pixel 2 / API 31 Google image.
-- Real BLE transport, camera behavior, `video.mp4` quality, and hardware timing
-  still require a physical Android device.
+```text
+<Android filesDir | iOS Application Support>/Woona/
+  recordings/<dog-id>/<local-date>/<recording-id>/
+```
+
+Финальные типы: `packets.bin`, `packet_timeline.bin`,
+`raw_fragments.binlog`, `diagnostics.log`, `channel.csv`, `video.mp4`,
+`sync.json` и импортированный исходник replay. SHA-256 считается потоково.
+
+## Capture lifecycle
+
+1. Полностью валидные dog/session анкеты создают `preparing`.
+2. BLE readiness переводит UI в готовность и показывает Camera2/AVFoundation preview.
+3. Одна кнопка запускает датчик и, если выбрано, MediaRecorder/AVAssetWriter.
+4. Валидированный первый пакет и первый кадр получают timestamps одной
+   платформенной monotonic шкалы (`elapsedRealtimeNanos`/`CMClock.hostTime`);
+   сохраняются также UTC anchor, device timer,
+   camera timestamp, callback timestamp и первый video sample PTS.
+5. Одна кнопка останавливает оба источника, дожидается очереди, атомарно
+   обновляет sync, регистрирует файлы и ставит серверную выгрузку.
+6. Если камера падает после старта датчика, запись остаётся останавливаемой,
+   помечается `camera_failed` и выгружается без выдуманного видео.
+
+## Server synchronization
+
+Профили и записи имеют клиентские UUID. Метаданные PUT идемпотентны, версии
+профилей и manifests после создания неизменяемы. Файлы передаются частями через
+`HEAD` + `PATCH Upload-Offset`, завершаются проверкой размера/SHA-256 и
+атомарным rename. Запись получает receipt только после проверки всех файлов.
+
+Download поддерживает `Range`, ETag, продолжение `.part`, проверку размера и
+SHA-256. Restore возвращает текущие и исторические profile versions, recordings,
+sync и список артефактов; совпадающие локальные данные объединяются, конфликт
+контрольной суммы не перезаписывается.
+
+Bearer-токен хранится на сервере только как SHA-256, локально — в Android
+Keystore или iOS Keychain. Все активные device tokens одного развёртывания
+видят общих собак, профили, завершённые записи и downloads. Изменять
+незавершённую artifact upload может только создавший recording
+`capture_device_id`. Readiness отдельно проверяет БД и файловую систему.
+
+Полные DDL, JSON Schema, API и визуализации:
+[`shared/docs/target-server-plan`](shared/docs/target-server-plan/README.md).

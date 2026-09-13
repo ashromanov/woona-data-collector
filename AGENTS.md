@@ -1,18 +1,41 @@
 # Agent rules
 
-- This workspace is Android-only. Do not add iOS, cross-platform scaffolding,
+- This workspace contains native Android and iOS clients plus the shared
+  server/contracts in `shared/`. Do not add cross-platform UI scaffolding,
   remotes, or CI unless explicitly requested.
 - Inspect `git status` first. Preserve unrelated dirty-worktree changes and keep
   diffs minimal.
-- Keep the current single `app` module. Reuse existing code and dependencies
-  before adding abstractions or libraries.
+- Keep the current single Android `app` module under `android/`. Reuse existing
+  code and dependencies before adding abstractions or libraries.
 - Respect boundaries: `ble` owns transport/GATT, `protocol` owns pure packet
   logic, `storage` owns files/exports, `data` owns SQLite and recording metadata,
   and Compose UI only renders state and emits actions.
 - Every behavior change needs the smallest relevant runnable test. Run
-  `./tools/check.sh fast`; run `full` for SQLite, Compose, preferences, or
-  fake-BLE instrumentation changes.
+  `./android/tools/check.sh fast`; run `full` for SQLite, Compose, preferences,
+  or fake-BLE instrumentation changes.
+- For shared server or Compose changes, validate from `shared/` with
+  `docker compose config` and the relevant server tests.
+- Keep iOS native and dependency-free: reuse SwiftUI, CoreBluetooth,
+  AVFoundation, URLSession, CryptoKit, Keychain and system SQLite3. An iOS
+  build/test result requires macOS with Xcode; Linux static checks are not a
+  substitute.
 - Preserve explicit shutdown/finalization for BLE, replay, packet writers,
   video, and recording state. Do not trade data safety for a smaller diff.
 - Emulator tests never prove real BLE behavior, camera behavior, `video.mp4`
   quality, or hardware synchronization. Report those as physical-device checks.
+
+## Agent workflow
+
+1. Read `README.md` and `ARCHITECTURE.md`, then inspect the relevant client or
+   server code and its callers before editing. Keep Android, iOS, and server
+   contracts in sync when a shared format changes.
+2. Do not commit `.env`, credentials, signing keys, `android/dist/`, local
+   databases, recordings, or generated build outputs. Do not put a server
+   bearer token in a release APK.
+3. Use `./android/tools/check.sh fast` for Android work; use `full` for the
+   instrumentation areas above. For server/Compose work, run `docker compose
+   config -q` and the relevant tests from `shared/`. iOS tests run only on
+   macOS/Xcode. State the exact checks and limitations in the final report.
+4. The single `.github/workflows/mobile.yml` workflow owns CI and tagged
+   releases. Keep GitHub Actions permissions minimal and release artifacts
+   clearly labeled as debug, signed Android release, or iOS simulator build.

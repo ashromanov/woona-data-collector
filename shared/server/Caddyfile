@@ -1,0 +1,24 @@
+cool-trams.digital {
+	encode zstd gzip
+
+	redir /files /files/ 308
+	redir /db /db/ 308
+
+	handle /files/* {
+		reverse_proxy filebrowser:80 {
+			header_down Set-Cookie "^(.*)$" "$1; Secure; HttpOnly"
+		}
+	}
+
+	handle /db/* {
+		reverse_proxy cloudbeaver:8978
+	}
+
+	handle {
+		reverse_proxy api:8080
+	}
+}
+
+www.cool-trams.digital {
+	redir https://cool-trams.digital{uri} permanent
+}

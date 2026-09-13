@@ -1,0 +1,729 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		8A1A000B2B00000100000001 /* WoonaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A000A2B00000100000001 /* WoonaApp.swift */; };
+		8A1A000D2B00000100000001 /* AppViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A000C2B00000100000001 /* AppViewModel.swift */; };
+		8A1A000F2B00000100000001 /* AppRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A000E2B00000100000001 /* AppRootView.swift */; };
+		8A1A00112B00000100000001 /* OverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00102B00000100000001 /* OverviewView.swift */; };
+		8A1A00132B00000100000001 /* ChartsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00122B00000100000001 /* ChartsView.swift */; };
+		8A1A00152B00000100000001 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00142B00000100000001 /* SettingsView.swift */; };
+		8A1A00172B00000100000001 /* AppShellTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00162B00000100000001 /* AppShellTests.swift */; };
+		8A1A00292B00000200000001 /* SensorBlockParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00282B00000200000001 /* SensorBlockParser.swift */; };
+		8A1A002B2B00000200000001 /* PacketValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A002A2B00000200000001 /* PacketValidator.swift */; };
+		8A1A002D2B00000200000001 /* PacketStatsTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A002C2B00000200000001 /* PacketStatsTracker.swift */; };
+		8A1A002F2B00000200000001 /* PacketAssembler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A002E2B00000200000001 /* PacketAssembler.swift */; };
+		8A1A00312B00000200000001 /* RecordedPacketFileParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00302B00000200000001 /* RecordedPacketFileParser.swift */; };
+		8A1A00342B00000200000001 /* ProtocolTestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00332B00000200000001 /* ProtocolTestSupport.swift */; };
+		8A1A00362B00000200000001 /* SensorBlockParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00352B00000200000001 /* SensorBlockParserTests.swift */; };
+		8A1A00382B00000200000001 /* PacketValidatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00372B00000200000001 /* PacketValidatorTests.swift */; };
+		8A1A003A2B00000200000001 /* PacketStatsTrackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00392B00000200000001 /* PacketStatsTrackerTests.swift */; };
+		8A1A003C2B00000200000001 /* PacketAssemblerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A003B2B00000200000001 /* PacketAssemblerTests.swift */; };
+		8A1A003E2B00000200000001 /* RecordedPacketFileParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A003D2B00000200000001 /* RecordedPacketFileParserTests.swift */; };
+		8A1A00412B00000300000001 /* PacketFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00402B00000300000001 /* PacketFileStore.swift */; };
+		8A1A00432B00000300000001 /* RawFragmentFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00422B00000300000001 /* RawFragmentFileStore.swift */; };
+		8A1A00452B00000300000001 /* DiagnosticLogFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00442B00000300000001 /* DiagnosticLogFileStore.swift */; };
+		8A1A00472B00000300000001 /* CsvExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00462B00000300000001 /* CsvExporter.swift */; };
+		8A1A004A2B00000300000001 /* PacketFileStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00492B00000300000001 /* PacketFileStoreTests.swift */; };
+		8A1A004C2B00000300000001 /* RawFragmentFileStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A004B2B00000300000001 /* RawFragmentFileStoreTests.swift */; };
+		8A1A004E2B00000300000001 /* DiagnosticLogFileStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A004D2B00000300000001 /* DiagnosticLogFileStoreTests.swift */; };
+		8A1A00502B00000300000001 /* CsvExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A004F2B00000300000001 /* CsvExporterTests.swift */; };
+		8A1A00542B00000400000001 /* CaptureModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00532B00000400000001 /* CaptureModels.swift */; };
+		8A1A00562B00000400000001 /* PacketCaptureProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00552B00000400000001 /* PacketCaptureProcessor.swift */; };
+		8A1A00582B00000400000001 /* PacketProcessingUpdateBatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00572B00000400000001 /* PacketProcessingUpdateBatcher.swift */; };
+		8A1A005B2B00000400000001 /* PacketCaptureProcessorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A005A2B00000400000001 /* PacketCaptureProcessorTests.swift */; };
+		8A1A005D2B00000500000001 /* PacketReplayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A005C2B00000500000001 /* PacketReplayController.swift */; };
+		8A1A005F2B00000500000001 /* PacketReplayControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A005E2B00000500000001 /* PacketReplayControllerTests.swift */; };
+		8A1A00622B00000600000001 /* BleModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00612B00000600000001 /* BleModels.swift */; };
+		8A1A00642B00000600000001 /* BleCentralClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00632B00000600000001 /* BleCentralClient.swift */; };
+		8A1A00662B00000600000001 /* CoreBluetoothBleCentralClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00652B00000600000001 /* CoreBluetoothBleCentralClient.swift */; };
+		8A1A00682B00000600000001 /* BleSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00672B00000600000001 /* BleSessionManager.swift */; };
+		8A1A006B2B00000600000001 /* BleSessionManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A006A2B00000600000001 /* BleSessionManagerTests.swift */; };
+		8A1A00702B00000700000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 8A1A006F2B00000700000001 /* Assets.xcassets */; };
+		8A1A00722B00000800000001 /* RawFragmentFileParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00712B00000800000001 /* RawFragmentFileParser.swift */; };
+		8A1A00742B00000800000001 /* RawFragmentFileParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00732B00000800000001 /* RawFragmentFileParserTests.swift */; };
+		8A1A00902B00000900000001 /* QuestionnaireViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00802B00000900000001 /* QuestionnaireViews.swift */; };
+		8A1A00912B00000900000001 /* CameraRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00812B00000900000001 /* CameraRecorder.swift */; };
+		8A1A00922B00000900000001 /* WoonaData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00822B00000900000001 /* WoonaData.swift */; };
+		8A1A00932B00000900000001 /* ServerSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00832B00000900000001 /* ServerSync.swift */; };
+		8A1A00942B00000900000001 /* PacketTimelineFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00842B00000900000001 /* PacketTimelineFileStore.swift */; };
+		8A1A00952B00000900000001 /* WoonaDataTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00852B00000900000001 /* WoonaDataTests.swift */; };
+		8A1A00962B00000900000001 /* PacketTimelineFileStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1A00862B00000900000001 /* PacketTimelineFileStoreTests.swift */; };
+		8A1A00972B00000900000001 /* libsqlite3.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 8A1A00872B00000900000001 /* libsqlite3.tbd */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		8A1A001D2B00000100000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8A1A00002B00000100000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8A1A00052B00000100000001;
+			remoteInfo = Woona;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		8A1A00062B00000100000001 /* Woona.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Woona.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		8A1A00082B00000100000001 /* WoonaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WoonaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		8A1A000A2B00000100000001 /* WoonaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WoonaApp.swift; sourceTree = "<group>"; };
+		8A1A000C2B00000100000001 /* AppViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppViewModel.swift; sourceTree = "<group>"; };
+		8A1A000E2B00000100000001 /* AppRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRootView.swift; sourceTree = "<group>"; };
+		8A1A00102B00000100000001 /* OverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewView.swift; sourceTree = "<group>"; };
+		8A1A00122B00000100000001 /* ChartsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChartsView.swift; sourceTree = "<group>"; };
+		8A1A00142B00000100000001 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		8A1A00162B00000100000001 /* AppShellTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellTests.swift; sourceTree = "<group>"; };
+		8A1A00282B00000200000001 /* SensorBlockParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensorBlockParser.swift; sourceTree = "<group>"; };
+		8A1A002A2B00000200000001 /* PacketValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketValidator.swift; sourceTree = "<group>"; };
+		8A1A002C2B00000200000001 /* PacketStatsTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketStatsTracker.swift; sourceTree = "<group>"; };
+		8A1A002E2B00000200000001 /* PacketAssembler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketAssembler.swift; sourceTree = "<group>"; };
+		8A1A00302B00000200000001 /* RecordedPacketFileParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordedPacketFileParser.swift; sourceTree = "<group>"; };
+		8A1A00332B00000200000001 /* ProtocolTestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProtocolTestSupport.swift; sourceTree = "<group>"; };
+		8A1A00352B00000200000001 /* SensorBlockParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensorBlockParserTests.swift; sourceTree = "<group>"; };
+		8A1A00372B00000200000001 /* PacketValidatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketValidatorTests.swift; sourceTree = "<group>"; };
+		8A1A00392B00000200000001 /* PacketStatsTrackerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketStatsTrackerTests.swift; sourceTree = "<group>"; };
+		8A1A003B2B00000200000001 /* PacketAssemblerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketAssemblerTests.swift; sourceTree = "<group>"; };
+		8A1A003D2B00000200000001 /* RecordedPacketFileParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordedPacketFileParserTests.swift; sourceTree = "<group>"; };
+		8A1A00402B00000300000001 /* PacketFileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketFileStore.swift; sourceTree = "<group>"; };
+		8A1A00422B00000300000001 /* RawFragmentFileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RawFragmentFileStore.swift; sourceTree = "<group>"; };
+		8A1A00442B00000300000001 /* DiagnosticLogFileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticLogFileStore.swift; sourceTree = "<group>"; };
+		8A1A00462B00000300000001 /* CsvExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CsvExporter.swift; sourceTree = "<group>"; };
+		8A1A00492B00000300000001 /* PacketFileStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketFileStoreTests.swift; sourceTree = "<group>"; };
+		8A1A004B2B00000300000001 /* RawFragmentFileStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RawFragmentFileStoreTests.swift; sourceTree = "<group>"; };
+		8A1A004D2B00000300000001 /* DiagnosticLogFileStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticLogFileStoreTests.swift; sourceTree = "<group>"; };
+		8A1A004F2B00000300000001 /* CsvExporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CsvExporterTests.swift; sourceTree = "<group>"; };
+		8A1A00532B00000400000001 /* CaptureModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureModels.swift; sourceTree = "<group>"; };
+		8A1A00552B00000400000001 /* PacketCaptureProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketCaptureProcessor.swift; sourceTree = "<group>"; };
+		8A1A00572B00000400000001 /* PacketProcessingUpdateBatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketProcessingUpdateBatcher.swift; sourceTree = "<group>"; };
+		8A1A005A2B00000400000001 /* PacketCaptureProcessorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketCaptureProcessorTests.swift; sourceTree = "<group>"; };
+		8A1A005C2B00000500000001 /* PacketReplayController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketReplayController.swift; sourceTree = "<group>"; };
+		8A1A005E2B00000500000001 /* PacketReplayControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketReplayControllerTests.swift; sourceTree = "<group>"; };
+		8A1A00612B00000600000001 /* BleModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BleModels.swift; sourceTree = "<group>"; };
+		8A1A00632B00000600000001 /* BleCentralClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BleCentralClient.swift; sourceTree = "<group>"; };
+		8A1A00652B00000600000001 /* CoreBluetoothBleCentralClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreBluetoothBleCentralClient.swift; sourceTree = "<group>"; };
+		8A1A00672B00000600000001 /* BleSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BleSessionManager.swift; sourceTree = "<group>"; };
+		8A1A006A2B00000600000001 /* BleSessionManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BleSessionManagerTests.swift; sourceTree = "<group>"; };
+		8A1A006F2B00000700000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		8A1A00712B00000800000001 /* RawFragmentFileParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RawFragmentFileParser.swift; sourceTree = "<group>"; };
+		8A1A00732B00000800000001 /* RawFragmentFileParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RawFragmentFileParserTests.swift; sourceTree = "<group>"; };
+		8A1A00802B00000900000001 /* QuestionnaireViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestionnaireViews.swift; sourceTree = "<group>"; };
+		8A1A00812B00000900000001 /* CameraRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraRecorder.swift; sourceTree = "<group>"; };
+		8A1A00822B00000900000001 /* WoonaData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WoonaData.swift; sourceTree = "<group>"; };
+		8A1A00832B00000900000001 /* ServerSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerSync.swift; sourceTree = "<group>"; };
+		8A1A00842B00000900000001 /* PacketTimelineFileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketTimelineFileStore.swift; sourceTree = "<group>"; };
+		8A1A00852B00000900000001 /* WoonaDataTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WoonaDataTests.swift; sourceTree = "<group>"; };
+		8A1A00862B00000900000001 /* PacketTimelineFileStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketTimelineFileStoreTests.swift; sourceTree = "<group>"; };
+		8A1A00872B00000900000001 /* libsqlite3.tbd */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.text-based-dylib-definition; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		8A1A00032B00000100000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8A1A00972B00000900000001 /* libsqlite3.tbd in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8A1A001A2B00000100000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		8A1A00012B00000100000001 = {
+			isa = PBXGroup;
+			children = (
+				8A1A00092B00000100000001 /* Woona */,
+				8A1A00182B00000100000001 /* WoonaTests */,
+				8A1A00872B00000900000001 /* libsqlite3.tbd */,
+				8A1A00072B00000100000001 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		8A1A00072B00000100000001 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				8A1A00062B00000100000001 /* Woona.app */,
+				8A1A00082B00000100000001 /* WoonaTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		8A1A00092B00000100000001 /* Woona */ = {
+			isa = PBXGroup;
+			children = (
+				8A1A000A2B00000100000001 /* WoonaApp.swift */,
+				8A1A006F2B00000700000001 /* Assets.xcassets */,
+				8A1A00192B00000100000001 /* AppShell */,
+				8A1A00602B00000600000001 /* BLE */,
+				8A1A00522B00000400000001 /* Capture */,
+				8A1A00322B00000200000001 /* Protocol */,
+				8A1A00482B00000300000001 /* Storage */,
+			);
+			path = Woona;
+			sourceTree = "<group>";
+		};
+		8A1A00182B00000100000001 /* WoonaTests */ = {
+			isa = PBXGroup;
+			children = (
+				8A1A00162B00000100000001 /* AppShellTests.swift */,
+				8A1A00692B00000600000001 /* BLETests */,
+				8A1A00592B00000400000001 /* CaptureTests */,
+				8A1A003F2B00000200000001 /* ProtocolTests */,
+				8A1A00512B00000300000001 /* StorageTests */,
+			);
+			path = WoonaTests;
+			sourceTree = "<group>";
+		};
+		8A1A00192B00000100000001 /* AppShell */ = {
+			isa = PBXGroup;
+			children = (
+				8A1A000C2B00000100000001 /* AppViewModel.swift */,
+				8A1A000E2B00000100000001 /* AppRootView.swift */,
+				8A1A00102B00000100000001 /* OverviewView.swift */,
+				8A1A00122B00000100000001 /* ChartsView.swift */,
+				8A1A00142B00000100000001 /* SettingsView.swift */,
+				8A1A00802B00000900000001 /* QuestionnaireViews.swift */,
+			);
+			path = AppShell;
+			sourceTree = "<group>";
+		};
+		8A1A00322B00000200000001 /* Protocol */ = {
+			isa = PBXGroup;
+			children = (
+				8A1A002E2B00000200000001 /* PacketAssembler.swift */,
+				8A1A002C2B00000200000001 /* PacketStatsTracker.swift */,
+				8A1A002A2B00000200000001 /* PacketValidator.swift */,
+				8A1A00302B00000200000001 /* RecordedPacketFileParser.swift */,
+				8A1A00282B00000200000001 /* SensorBlockParser.swift */,
+			);
+			path = Protocol;
+			sourceTree = "<group>";
+		};
+		8A1A003F2B00000200000001 /* ProtocolTests */ = {
+			isa = PBXGroup;
+			children = (
+				8A1A003B2B00000200000001 /* PacketAssemblerTests.swift */,
+				8A1A00392B00000200000001 /* PacketStatsTrackerTests.swift */,
+				8A1A00372B00000200000001 /* PacketValidatorTests.swift */,
+				8A1A00332B00000200000001 /* ProtocolTestSupport.swift */,
+				8A1A003D2B00000200000001 /* RecordedPacketFileParserTests.swift */,
+				8A1A00352B00000200000001 /* SensorBlockParserTests.swift */,
+			);
+			path = ProtocolTests;
+			sourceTree = "<group>";
+		};
+		8A1A00482B00000300000001 /* Storage */ = {
+			isa = PBXGroup;
+			children = (
+				8A1A00462B00000300000001 /* CsvExporter.swift */,
+				8A1A00442B00000300000001 /* DiagnosticLogFileStore.swift */,
+				8A1A00402B00000300000001 /* PacketFileStore.swift */,
+				8A1A00712B00000800000001 /* RawFragmentFileParser.swift */,
+				8A1A00422B00000300000001 /* RawFragmentFileStore.swift */,
+				8A1A00842B00000900000001 /* PacketTimelineFileStore.swift */,
+				8A1A00832B00000900000001 /* ServerSync.swift */,
+				8A1A00822B00000900000001 /* WoonaData.swift */,
+			);
+			path = Storage;
+			sourceTree = "<group>";
+		};
+		8A1A00512B00000300000001 /* StorageTests */ = {
+			isa = PBXGroup;
+			children = (
+				8A1A004F2B00000300000001 /* CsvExporterTests.swift */,
+				8A1A004D2B00000300000001 /* DiagnosticLogFileStoreTests.swift */,
+				8A1A00492B00000300000001 /* PacketFileStoreTests.swift */,
+				8A1A00732B00000800000001 /* RawFragmentFileParserTests.swift */,
+				8A1A004B2B00000300000001 /* RawFragmentFileStoreTests.swift */,
+				8A1A00862B00000900000001 /* PacketTimelineFileStoreTests.swift */,
+				8A1A00852B00000900000001 /* WoonaDataTests.swift */,
+			);
+			path = StorageTests;
+			sourceTree = "<group>";
+		};
+		8A1A00522B00000400000001 /* Capture */ = {
+			isa = PBXGroup;
+			children = (
+				8A1A00532B00000400000001 /* CaptureModels.swift */,
+				8A1A00552B00000400000001 /* PacketCaptureProcessor.swift */,
+				8A1A00572B00000400000001 /* PacketProcessingUpdateBatcher.swift */,
+				8A1A005C2B00000500000001 /* PacketReplayController.swift */,
+				8A1A00812B00000900000001 /* CameraRecorder.swift */,
+			);
+			path = Capture;
+			sourceTree = "<group>";
+		};
+		8A1A00592B00000400000001 /* CaptureTests */ = {
+			isa = PBXGroup;
+			children = (
+				8A1A005A2B00000400000001 /* PacketCaptureProcessorTests.swift */,
+				8A1A005E2B00000500000001 /* PacketReplayControllerTests.swift */,
+			);
+			path = CaptureTests;
+			sourceTree = "<group>";
+		};
+		8A1A00602B00000600000001 /* BLE */ = {
+			isa = PBXGroup;
+			children = (
+				8A1A00632B00000600000001 /* BleCentralClient.swift */,
+				8A1A00612B00000600000001 /* BleModels.swift */,
+				8A1A00672B00000600000001 /* BleSessionManager.swift */,
+				8A1A00652B00000600000001 /* CoreBluetoothBleCentralClient.swift */,
+			);
+			path = BLE;
+			sourceTree = "<group>";
+		};
+		8A1A00692B00000600000001 /* BLETests */ = {
+			isa = PBXGroup;
+			children = (
+				8A1A006A2B00000600000001 /* BleSessionManagerTests.swift */,
+			);
+			path = BLETests;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		8A1A00052B00000100000001 /* Woona */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8A1A00202B00000100000001 /* Build configuration list for PBXNativeTarget "Woona" */;
+			buildPhases = (
+				8A1A00022B00000100000001 /* Sources */,
+				8A1A00032B00000100000001 /* Frameworks */,
+				8A1A00042B00000100000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Woona;
+			productName = Woona;
+			productReference = 8A1A00062B00000100000001 /* Woona.app */;
+			productType = "com.apple.product-type.application";
+		};
+		8A1A001B2B00000100000001 /* WoonaTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8A1A00232B00000100000001 /* Build configuration list for PBXNativeTarget "WoonaTests" */;
+			buildPhases = (
+				8A1A00192B00000100000002 /* Sources */,
+				8A1A001A2B00000100000001 /* Frameworks */,
+				8A1A001C2B00000100000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				8A1A001E2B00000100000001 /* PBXTargetDependency */,
+			);
+			name = WoonaTests;
+			productName = WoonaTests;
+			productReference = 8A1A00082B00000100000001 /* WoonaTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		8A1A00002B00000100000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1630;
+				LastUpgradeCheck = 2640;
+				TargetAttributes = {
+					8A1A00052B00000100000001 = {
+						CreatedOnToolsVersion = 16.3;
+					};
+					8A1A001B2B00000100000001 = {
+						CreatedOnToolsVersion = 16.3;
+						TestTargetID = 8A1A00052B00000100000001;
+					};
+				};
+			};
+			buildConfigurationList = 8A1A001F2B00000100000001 /* Build configuration list for PBXProject "Woona" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 8A1A00012B00000100000001;
+			productRefGroup = 8A1A00072B00000100000001 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				8A1A00052B00000100000001 /* Woona */,
+				8A1A001B2B00000100000001 /* WoonaTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		8A1A00042B00000100000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8A1A00702B00000700000001 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8A1A001C2B00000100000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		8A1A00022B00000100000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8A1A000B2B00000100000001 /* WoonaApp.swift in Sources */,
+				8A1A000D2B00000100000001 /* AppViewModel.swift in Sources */,
+				8A1A000F2B00000100000001 /* AppRootView.swift in Sources */,
+				8A1A00112B00000100000001 /* OverviewView.swift in Sources */,
+				8A1A00132B00000100000001 /* ChartsView.swift in Sources */,
+				8A1A00152B00000100000001 /* SettingsView.swift in Sources */,
+				8A1A00292B00000200000001 /* SensorBlockParser.swift in Sources */,
+				8A1A002B2B00000200000001 /* PacketValidator.swift in Sources */,
+				8A1A002D2B00000200000001 /* PacketStatsTracker.swift in Sources */,
+				8A1A002F2B00000200000001 /* PacketAssembler.swift in Sources */,
+				8A1A00312B00000200000001 /* RecordedPacketFileParser.swift in Sources */,
+				8A1A00412B00000300000001 /* PacketFileStore.swift in Sources */,
+				8A1A00722B00000800000001 /* RawFragmentFileParser.swift in Sources */,
+				8A1A00432B00000300000001 /* RawFragmentFileStore.swift in Sources */,
+				8A1A00452B00000300000001 /* DiagnosticLogFileStore.swift in Sources */,
+				8A1A00472B00000300000001 /* CsvExporter.swift in Sources */,
+				8A1A00542B00000400000001 /* CaptureModels.swift in Sources */,
+				8A1A00562B00000400000001 /* PacketCaptureProcessor.swift in Sources */,
+				8A1A00582B00000400000001 /* PacketProcessingUpdateBatcher.swift in Sources */,
+				8A1A005D2B00000500000001 /* PacketReplayController.swift in Sources */,
+				8A1A00622B00000600000001 /* BleModels.swift in Sources */,
+				8A1A00642B00000600000001 /* BleCentralClient.swift in Sources */,
+				8A1A00662B00000600000001 /* CoreBluetoothBleCentralClient.swift in Sources */,
+				8A1A00682B00000600000001 /* BleSessionManager.swift in Sources */,
+				8A1A00902B00000900000001 /* QuestionnaireViews.swift in Sources */,
+				8A1A00912B00000900000001 /* CameraRecorder.swift in Sources */,
+				8A1A00922B00000900000001 /* WoonaData.swift in Sources */,
+				8A1A00932B00000900000001 /* ServerSync.swift in Sources */,
+				8A1A00942B00000900000001 /* PacketTimelineFileStore.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8A1A00192B00000100000002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8A1A00172B00000100000001 /* AppShellTests.swift in Sources */,
+				8A1A00342B00000200000001 /* ProtocolTestSupport.swift in Sources */,
+				8A1A00362B00000200000001 /* SensorBlockParserTests.swift in Sources */,
+				8A1A00382B00000200000001 /* PacketValidatorTests.swift in Sources */,
+				8A1A003A2B00000200000001 /* PacketStatsTrackerTests.swift in Sources */,
+				8A1A003C2B00000200000001 /* PacketAssemblerTests.swift in Sources */,
+				8A1A003E2B00000200000001 /* RecordedPacketFileParserTests.swift in Sources */,
+				8A1A004A2B00000300000001 /* PacketFileStoreTests.swift in Sources */,
+				8A1A00742B00000800000001 /* RawFragmentFileParserTests.swift in Sources */,
+				8A1A004C2B00000300000001 /* RawFragmentFileStoreTests.swift in Sources */,
+				8A1A004E2B00000300000001 /* DiagnosticLogFileStoreTests.swift in Sources */,
+				8A1A00502B00000300000001 /* CsvExporterTests.swift in Sources */,
+				8A1A005B2B00000400000001 /* PacketCaptureProcessorTests.swift in Sources */,
+				8A1A005F2B00000500000001 /* PacketReplayControllerTests.swift in Sources */,
+				8A1A006B2B00000600000001 /* BleSessionManagerTests.swift in Sources */,
+				8A1A00952B00000900000001 /* WoonaDataTests.swift in Sources */,
+				8A1A00962B00000900000001 /* PacketTimelineFileStoreTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		8A1A001E2B00000100000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 8A1A00052B00000100000001 /* Woona */;
+			targetProxy = 8A1A001D2B00000100000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		8A1A00212B00000100000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		8A1A00222B00000100000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		8A1A00242B00000100000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 5;
+				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = NBM28T989D;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Woona;
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Woona uses Bluetooth to connect to the sensor and capture packet notifications.";
+				INFOPLIST_KEY_NSBluetoothPeripheralUsageDescription = "Woona uses Bluetooth to connect to the sensor and capture packet notifications.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Woona records synchronized rear-camera video with sensor sessions.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Woona connects to your configured local Woona server.";
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking = YES;
+				INFOPLIST_KEY_BGTaskSchedulerPermittedIdentifiers = (
+					"com.woona.apps.sync",
+				);
+				INFOPLIST_KEY_UIBackgroundModes = (
+					processing,
+				);
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.woona.apps;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		8A1A00252B00000100000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 5;
+				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = NBM28T989D;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Woona;
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Woona uses Bluetooth to connect to the sensor and capture packet notifications.";
+				INFOPLIST_KEY_NSBluetoothPeripheralUsageDescription = "Woona uses Bluetooth to connect to the sensor and capture packet notifications.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Woona records synchronized rear-camera video with sensor sessions.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Woona connects to your configured local Woona server.";
+				INFOPLIST_KEY_BGTaskSchedulerPermittedIdentifiers = (
+					"com.woona.apps.sync",
+				);
+				INFOPLIST_KEY_UIBackgroundModes = (
+					processing,
+				);
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.woona.apps;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		8A1A00262B00000100000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.woona.app.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Woona.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Woona";
+			};
+			name = Debug;
+		};
+		8A1A00272B00000100000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.woona.app.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Woona.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Woona";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		8A1A001F2B00000100000001 /* Build configuration list for PBXProject "Woona" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8A1A00212B00000100000001 /* Debug */,
+				8A1A00222B00000100000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8A1A00202B00000100000001 /* Build configuration list for PBXNativeTarget "Woona" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8A1A00242B00000100000001 /* Debug */,
+				8A1A00252B00000100000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8A1A00232B00000100000001 /* Build configuration list for PBXNativeTarget "WoonaTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8A1A00262B00000100000001 /* Debug */,
+				8A1A00272B00000100000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 8A1A00002B00000100000001 /* Project object */;
+}
