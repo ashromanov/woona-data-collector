@@ -27,7 +27,8 @@ jobs:
         run: ./android/tools/setup-android-sdk.sh
       - name: Test, lint, and build Android
         run: ./android/tools/check.sh fast
-      - name: Prepare Android APK
+      - name: Prepare Android APK for release tag
+        if: startsWith(github.ref, 'refs/tags/v')
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
@@ -35,7 +36,7 @@ jobs:
           ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
         run: |
           mkdir -p release-assets
-          if [[ "$GITHUB_REF_TYPE" == tag && -n "$KEYSTORE_BASE64" && -n "$ANDROID_SIGNING_STORE_PASSWORD" && -n "$ANDROID_SIGNING_KEY_ALIAS" && -n "$ANDROID_SIGNING_KEY_PASSWORD" ]]; then
+          if [[ -n "$KEYSTORE_BASE64" && -n "$ANDROID_SIGNING_STORE_PASSWORD" && -n "$ANDROID_SIGNING_KEY_ALIAS" && -n "$ANDROID_SIGNING_KEY_PASSWORD" ]]; then
             umask 077
             export ANDROID_SIGNING_STORE_FILE="$RUNNER_TEMP/woona-release.keystore"
             printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$ANDROID_SIGNING_STORE_FILE"
@@ -45,6 +46,12 @@ jobs:
           else
             cp android/app/build/outputs/apk/debug/app-debug.apk release-assets/Woona-Android-debug.apk
           fi
+          (cd release-assets && sha256sum *.apk > SHA256SUMS-android.txt)
+      - name: Prepare debug APK
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: |
+          mkdir -p release-assets
+          cp android/app/build/outputs/apk/debug/app-debug.apk release-assets/Woona-Android-debug.apk
           (cd release-assets && sha256sum *.apk > SHA256SUMS-android.txt)
       - uses: actions/upload-artifact@v4
         with:
