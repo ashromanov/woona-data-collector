@@ -1,7 +1,6 @@
 # Woona Data Collector
 
-[![Mobile CI](https://github.com/ashromanov/woona-data-collector/actions/workflows/mobile.yml/badge.svg)](https://github.com/ashromanov/woona-data-collector/actions/workflows/mobile.yml)
-[![Releases](https://img.shields.io/github/v/release/ashromanov/woona-data-collector?display_name=tag)](https://github.com/ashromanov/woona-data-collector/releases)
+[CI](https://github.com/ashromanov/woona-data-collector/actions/workflows/mobile.yml) · [Releases](https://github.com/ashromanov/woona-data-collector/releases) · [Agent guide](AGENTS.md)
 
 Native Android 12+ and iOS 17+ apps for dog profiles, questionnaires, BLE sensor recordings, optional synchronized video, offline storage, and resumable server sync. The shared FastAPI service stores metadata in PostgreSQL and recording files on disk. See [Architecture](ARCHITECTURE.md) for the data flow and [the shared contracts](shared/docs/target-server-plan/README.md) for schemas and API details.
 
