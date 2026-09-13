@@ -745,7 +745,7 @@ final class AppViewModel: ObservableObject {
             statusText = finalStatus.capitalized
             reloadRecentRecordings()
             if let finalized = try store.recording(id: recording.id) {
-                await sync(recording: finalized)
+                await self.sync(recording: finalized)
             }
         } catch { showError("Failed to finalize recording", error: error) }
     }
