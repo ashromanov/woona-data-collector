@@ -158,7 +158,7 @@ struct DogQuestionnaireEditor: View {
         Binding(get: { draft[keyPath: path].map(String.init) ?? "" }, set: { draft[keyPath: path] = Int($0) })
     }
     private func optionalDouble(_ path: WritableKeyPath<DogQuestionnaire, Double?>) -> Binding<String> {
-        Binding(get: { draft[keyPath: path].map(String.init) ?? "" }, set: { draft[keyPath: path] = Double($0.replacingOccurrences(of: ",", with: ".")) })
+        Binding(get: { draft[keyPath: path].map { String($0) } ?? "" }, set: { draft[keyPath: path] = Double($0.replacingOccurrences(of: ",", with: ".")) })
     }
     private func signBinding(_ value: String) -> Binding<Bool> {
         Binding(
@@ -273,7 +273,7 @@ struct SessionQuestionnaireEditor: View {
     @ViewBuilder private func errorText(_ id: String) -> some View { if let error = errors[id] { Text(questionnaireValidationError(error, language: language)).font(.caption).foregroundStyle(.red) } }
     private func optionalText(_ path: WritableKeyPath<SessionQuestionnaire, String?>) -> Binding<String> { Binding(get: { draft[keyPath: path] ?? "" }, set: { draft[keyPath: path] = $0.isEmpty ? nil : $0 }) }
     private func optionalInt(_ path: WritableKeyPath<SessionQuestionnaire, Int?>) -> Binding<String> { Binding(get: { draft[keyPath: path].map(String.init) ?? "" }, set: { draft[keyPath: path] = Int($0) }) }
-    private func optionalDouble(_ path: WritableKeyPath<SessionQuestionnaire, Double?>) -> Binding<String> { Binding(get: { draft[keyPath: path].map(String.init) ?? "" }, set: { draft[keyPath: path] = Double($0.replacingOccurrences(of: ",", with: ".")) }) }
+    private func optionalDouble(_ path: WritableKeyPath<SessionQuestionnaire, Double?>) -> Binding<String> { Binding(get: { draft[keyPath: path].map { String($0) } ?? "" }, set: { draft[keyPath: path] = Double($0.replacingOccurrences(of: ",", with: ".")) }) }
     private var detailsTitle: String { language == .russian ? "Описание" : "Details" }
     private func optionTitle(_ value: String) -> String { questionnaireOptionTitle(value, language: language) }
     private static let fieldOrder = ["sessionLabel", "operatorName", "activityGroup", "activityType", "activityDetails", "location", "surface", "surfaceDetails", "airTemperature", "sensorPosition", "sensorPositionDetails", "collarTightness", "preMeasurementState", "preMeasurementStateDetails", "pulse", "respiration", "bodyTemperature", "measurementAtUtc"]
