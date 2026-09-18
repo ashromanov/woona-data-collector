@@ -13,20 +13,6 @@ cool-trams.digital {
 	handle /openapi.json {
 		reverse_proxy api:8080
 	}
-	@local_file_head {
-		method HEAD
-		path /data/local-files/
-	}
-	handle @local_file_head {
-		reverse_proxy label_studio:8080 {
-			method GET
-			header_up Range "bytes=0-0"
-			header_down Content-Length "{rp.header.Content-Range}"
-			header_down Content-Length "bytes 0-0/([0-9]+)" "$1"
-			@partial status 206
-			replace_status @partial 200
-		}
-	}
 	handle {
 		reverse_proxy label_studio:8080
 	}

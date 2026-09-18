@@ -28,7 +28,8 @@ LABELS = {
 def config(kind: str) -> str:
     if kind == "behavior":
         labels = "".join(f'<Label value="{html.escape(label, quote=True)}"/>' for label in LABELS[kind][1])
-        return '<View><Video name="video" value="$video" height="400" timelineHeight="110"/>' \
+        # ponytail: source MP4s are nominally 30 FPS; use per-video CFR derivatives if frame drift matters.
+        return '<View><Video name="video" value="$video" frameRate="30" height="400" timelineHeight="110"/>' \
                f'<TimelineLabels name="movement" toName="video">{labels}</TimelineLabels></View>'
     object_tag = '<HyperText name="context" value="$html" clickableLinks="true"/>'
     choices = "".join(f'<Choice value="{html.escape(choice, quote=True)}"/>' for choice in LABELS[kind][1])

@@ -26,6 +26,7 @@ class LabelSyncTest(unittest.TestCase):
             self.assertIn("clickableLinks", config("quality"))
             self.assertIn('value="$video"', config("behavior"))
             self.assertIn('<TimelineLabels name="movement" toName="video">', config("behavior"))
+            self.assertIn('frameRate="30"', config("behavior"))
             self.assertEqual(len(LABELS["behavior"][1]), 19)
             self.assertNotIn('<Choices', config("behavior"))
 

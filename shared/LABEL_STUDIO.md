@@ -63,7 +63,9 @@ frame intervals on the video timeline; overlapping intervals with different
 tags are expected. Submit only after reviewing the entire video. The player is
 400 px high so the video and timeline can fit together on a laptop. The v1
 whole-video classification project is migrated only if it has no completed
-annotations. The project cards and project
+annotations. The timeline uses the nominal 30 FPS of the source MP4s; because
+phone video can be variable-frame-rate, frame-to-sensor alignment must use the
+original sync metadata and timestamps rather than assuming exact 30 FPS. The project cards and project
 API show `task_number` and `finished_task_number` separately for each
 category. Task metadata retains its Woona recording UUID or Drive file ID,
 source, dog, date and schema version. Source files are linked read-only from
