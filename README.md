@@ -4,6 +4,8 @@
 
 Native Android 12+ and iOS 17+ apps for dog profiles, questionnaires, BLE sensor recordings, optional synchronized video, offline storage, and resumable server sync. The shared FastAPI service stores metadata in PostgreSQL and recording files on disk. See [Architecture](ARCHITECTURE.md) for the data flow and [the shared contracts](shared/docs/target-server-plan/README.md) for schemas and API details.
 
+The production labeling stack, versioned Google Drive snapshot, and per-category Label Studio counts are documented in [Label Studio deployment](shared/LABEL_STUDIO.md).
+
 | Directory | Contents |
 | --- | --- |
 | [`android/`](android/) | Single-module Kotlin/Compose app, Gradle wrapper, tests, and SDK setup |

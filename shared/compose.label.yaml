@@ -35,6 +35,7 @@ services:
       POSTGRE_HOST: label_postgres
       POSTGRE_PORT: "5432"
       LABEL_STUDIO_HOST: https://cool-trams.digital
+      CSRF_TRUSTED_ORIGINS: https://cool-trams.digital
       LABEL_STUDIO_USERNAME: admin@cool-trams.digital
       LABEL_STUDIO_PASSWORD: ${LABEL_ADMIN_PASSWORD:?set LABEL_ADMIN_PASSWORD}
       LABEL_STUDIO_USER_TOKEN: ${LABEL_API_TOKEN:?set LABEL_API_TOKEN}
