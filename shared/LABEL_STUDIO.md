@@ -62,15 +62,20 @@ snapshot; repeat it after any later file transfers.
 
 ## Labeling and counts
 
-Projects are versioned as `Дыхание v1`, `Качество сигнала v1`, and
-`Движения собак v2`. The first two get every verified recording; the
-video project gets only recordings with MP4. Its `TimelineLabels` configuration
-uses the 19 fixed movement/behavior tags from the team's labeling guide. Label
-frame intervals on the video timeline; overlapping intervals with different
-tags are expected. Submit only after reviewing the entire video. The player is
-400 px high so the video and timeline can fit together on a laptop. The v1
-whole-video classification project is migrated only if it has no completed
-annotations. The timeline uses the nominal 30 FPS of the source MP4s; because
+Projects are versioned as `Проверка исходных записей v1`, `Виды активности v1`,
+`Аллюр v1`, and `Хромота v1`. The source-review project gets every verified
+recording (including BLE-only sessions); the three `TimelineLabels` projects get
+only recordings with MP4. Classes come from `guide/Woona_Виды_активности_чеклист.pdf`,
+`guide/Woona_Аллюр_чеклист.pdf`, and `guide/Woona_Хромота_чеклист.pdf` (24 July
+2026), interpreted under the corrected 30 July recording protocol. Label only
+clean video intervals, mark rejected intervals as `Брак`, and record pass/jump
+details in the per-region notes. Activity classes are `Лежит, не спит`, `Спит`,
+`Ходит`, `Бегает`, `Прыгает`; gait classes are `Медленный шаг`, `Быстрый шаг без
+перехода на рысь`, `Рысь`, `Галоп`; lameness-project intervals are `Спокойная
+стойка`, `Обычный шаг`, `Лёгкая рысь`, `Бордюр`, `Лестница`. The separate clinical
+lameness choice is optional and must come from verified clinical data, never be
+inferred from video alone. The player is 400 px high. The timeline uses the
+nominal 30 FPS of the source MP4s; because
 phone video can be variable-frame-rate, frame-to-sensor alignment must use the
 original sync metadata and timestamps rather than assuming exact 30 FPS. The project cards and project
 API show `task_number` and `finished_task_number` separately for each

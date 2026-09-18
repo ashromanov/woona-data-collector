@@ -23,12 +23,15 @@ class LabelSyncTest(unittest.TestCase):
             self.assertEqual(item["data"]["source_id"], "drive:source-id")
             self.assertIn("%D0%94", item["data"]["video"])
             self.assertIn("&lt;видео&gt;", item["data"]["html"])
-            self.assertIn("clickableLinks", config("quality"))
-            self.assertIn('value="$video"', config("behavior"))
-            self.assertIn('<TimelineLabels name="movement" toName="video">', config("behavior"))
-            self.assertIn('frameRate="30"', config("behavior"))
-            self.assertEqual(len(LABELS["behavior"][1]), 19)
-            self.assertNotIn('<Choices', config("behavior"))
+            self.assertIn("clickableLinks", config("source"))
+            for kind, count in (("activity", 5), ("gait", 4), ("lameness", 5)):
+                self.assertEqual(len(LABELS[kind][1]), count)
+                self.assertIn('value="$video"', config(kind))
+                self.assertIn('<TimelineLabels name="segment" toName="video">', config(kind))
+                self.assertIn('frameRate="30"', config(kind))
+                self.assertIn('perRegion="true"', config(kind))
+            self.assertIn('value="Прыгает"', config("activity"))
+            self.assertIn('name="clinical_lameness"', config("lameness"))
 
     def test_community_task_pagination(self):
         with patch("server.label_sync.request_json", side_effect=[

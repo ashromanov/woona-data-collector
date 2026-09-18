@@ -14,26 +14,41 @@ from urllib.request import Request, urlopen
 from sqlalchemy import create_engine, text
 
 LABELS = {
-    "breathing": ("Woona · Дыхание v1", ["спокойное", "частое дыхание / пыхтение", "одышка", "неопределимо"]),
-    "quality": ("Woona · Качество сигнала v1", ["годная", "частично годная", "негодная"]),
-    "behavior": ("Woona · Движения собак v2", [
-        "Спокойная стойка", "Лежит, не спит", "Спит", "Ходит", "Бегает",
-        "Прыгает", "Обычный шаг", "Медленный шаг", "Быстрый шаг без перехода на рысь",
-        "Лёгкая рысь", "Рысь", "Галоп", "Разворачивается", "Бордюр", "Лестница",
-        "Лижется", "Пьёт", "Лает", "Чешется",
-    ]),
+    "source": ("Woona · Проверка исходных записей v1", ["Комплект пригоден", "Брак / неполный комплект", "Требует проверки"]),
+    "activity": ("Woona · Виды активности v1", ["Лежит, не спит", "Спит", "Ходит", "Бегает", "Прыгает"]),
+    "gait": ("Woona · Аллюр v1", ["Медленный шаг", "Быстрый шаг без перехода на рысь", "Рысь", "Галоп"]),
+    "lameness": ("Woona · Хромота v1", ["Спокойная стойка", "Обычный шаг", "Лёгкая рысь", "Бордюр", "Лестница"]),
 }
 
 
 def config(kind: str) -> str:
-    if kind == "behavior":
-        labels = "".join(f'<Label value="{html.escape(label, quote=True)}"/>' for label in LABELS[kind][1])
-        # ponytail: source MP4s are nominally 30 FPS; use per-video CFR derivatives if frame drift matters.
-        return '<View><Video name="video" value="$video" frameRate="30" height="400" timelineHeight="110"/>' \
-               f'<TimelineLabels name="movement" toName="video">{labels}</TimelineLabels></View>'
-    object_tag = '<HyperText name="context" value="$html" clickableLinks="true"/>'
-    choices = "".join(f'<Choice value="{html.escape(choice, quote=True)}"/>' for choice in LABELS[kind][1])
-    return f'<View>{object_tag}<Choices name="{kind}" toName="context" choice="single">{choices}</Choices></View>'
+    if kind == "source":
+        choices = "".join(f'<Choice value="{html.escape(choice, quote=True)}"/>' for choice in LABELS[kind][1])
+        return '<View><HyperText name="context" value="$html" clickableLinks="true"/>' \
+               f'<Choices name="source" toName="context" choice="single">{choices}</Choices></View>'
+    labels = "".join(f'<Label value="{html.escape(label, quote=True)}"/>' for label in LABELS[kind][1])
+    # ponytail: source MP4s are nominally 30 FPS; use sync metadata for exact sensor alignment.
+    result = '<View><Video name="video" value="$video" frameRate="30" height="400" timelineHeight="110"/>' \
+             f'<TimelineLabels name="segment" toName="video">{labels}</TimelineLabels>' \
+             '<Choices name="segment_quality" toName="video" choice="single" perRegion="true">' \
+             '<Choice value="Чистый"/><Choice value="Брак"/></Choices>'
+    if kind == "activity":
+        result += '<Choices name="jump_type" toName="video" choice="single" perRegion="true" ' \
+                  'visibleWhen="region-selected" whenLabelValue="Прыгает">' \
+                  '<Choice value="Через препятствие"/><Choice value="На поверхность"/>' \
+                  '<Choice value="С поверхности"/></Choices>'
+    if kind == "gait":
+        result += '<Choices name="direction" toName="video" choice="single" perRegion="true">' \
+                  '<Choice value="Туда"/><Choice value="Обратно"/></Choices>'
+    if kind == "lameness":
+        result += '<Choices name="viewpoint" toName="video" choice="single" perRegion="true">' \
+                  '<Choice value="Спереди"/><Choice value="Сзади"/>' \
+                  '<Choice value="Слева направо"/><Choice value="Справа налево"/></Choices>' \
+                  '<Header value="Клиническую метку указывать только по подтверждённым данным, не по видео"/>' \
+                  '<Choices name="clinical_lameness" toName="video" choice="single">' \
+                  '<Choice value="Да"/><Choice value="Нет"/><Choice value="Неопределённо"/></Choices>'
+    return result + '<TextArea name="segment_notes" toName="video" perRegion="true" ' \
+                    'displayMode="region-list" rows="2" placeholder="Номер, причина брака; для прыжка: тип, высота, отрыв/приземление"/></View>'
 
 
 def file_url(relative: str) -> str:
@@ -141,17 +156,10 @@ def sync() -> dict[str, tuple[int, int]]:
     counts = {}
     for kind, (title, _) in LABELS.items():
         existing = existing_projects.get(title)
-        if kind == "behavior" and existing is None:
-            legacy = existing_projects.get("Woona · Поведение на видео v1")
-            if legacy is not None:
-                if legacy.get("finished_task_number", 0):
-                    raise RuntimeError("refusing to change a labeled video project")
-                existing = request_json("PATCH", f'/api/projects/{legacy["id"]}',
-                                        {"title": title, "label_config": config(kind)})
         project = existing["id"] if existing else request_json(
             "POST", "/api/projects", {"title": title, "label_config": config(kind)})["id"]
         ensure_storage(project)
-        expected = [item for item in sources if kind != "behavior" or "video" in item["data"]]
+        expected = [item for item in sources if kind == "source" or "video" in item["data"]]
         current = {row["data"].get("source_id") for row in paged(f"/api/tasks?project={project}")}
         missing = [item for item in expected if item["data"]["source_id"] not in current]
         for offset in range(0, len(missing), 50):
