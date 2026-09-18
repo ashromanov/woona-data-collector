@@ -175,6 +175,7 @@ def load_dashboard() -> dict:
     projects = paged("/api/projects")
     tasks = {kind: paged(f'/api/tasks?project={next(p["id"] for p in projects if p["title"] == LABELS[kind][0])}')
              for kind in KINDS}
+    # ponytail: read each labeled task directly; batch/cache only if annotation volume makes this slow.
     labeled = {(kind, t["id"]): request_json("GET", f'/api/tasks/{t["id"]}')
                for kind in KINDS for t in tasks[kind] if t.get("is_labeled")}
     return summarize(records, projects, tasks, labeled, extra)
@@ -193,7 +194,8 @@ def render(data: dict, query: str) -> str:
     for kind in KINDS:
         c = data["categories"][kind]
         percent = round(100 * c["labeled"] / c["tasks"]) if c["tasks"] else 0
-        classes = " · ".join(f'{escape(name)}: {stats["records"]} записей / {stats["segments"]} интервалов'
+        unit = "выборов" if kind == "source" else "интервалов"
+        classes = " · ".join(f'{escape(name)}: {stats["records"]} записей / {stats["segments"]} {unit}'
                              for name, stats in c["classes"].items())
         category_rows.append(f'<tr><td><a href="/projects/{c["project_id"]}/data">{escape(c["title"])}</a>'
                              f'<div class="sub">{classes}</div></td><td>{c["labeled"]} / {c["tasks"]}'
