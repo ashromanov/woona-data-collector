@@ -56,8 +56,14 @@ copy browser cookies or account tokens to the server.
 ## Labeling and counts
 
 Projects are versioned as `Дыхание v1`, `Качество сигнала v1`, and
-`Поведение на видео v1`. The first two get every verified recording; the
-video project gets only recordings with MP4. The project cards and project
+`Движения собак v2`. The first two get every verified recording; the
+video project gets only recordings with MP4. Its `TimelineLabels` configuration
+uses the 19 fixed movement/behavior tags from the team's labeling guide. Label
+frame intervals on the video timeline; overlapping intervals with different
+tags are expected. Submit only after reviewing the entire video. The player is
+400 px high so the video and timeline can fit together on a laptop. The v1
+whole-video classification project is migrated only if it has no completed
+annotations. The project cards and project
 API show `task_number` and `finished_task_number` separately for each
 category. Task metadata retains its Woona recording UUID or Drive file ID,
 source, dog, date and schema version. Source files are linked read-only from

@@ -16,16 +16,23 @@ from sqlalchemy import create_engine, text
 LABELS = {
     "breathing": ("Woona · Дыхание v1", ["спокойное", "частое дыхание / пыхтение", "одышка", "неопределимо"]),
     "quality": ("Woona · Качество сигнала v1", ["годная", "частично годная", "негодная"]),
-    "behavior": ("Woona · Поведение на видео v1", ["покой", "ходьба", "бег", "другое"]),
+    "behavior": ("Woona · Движения собак v2", [
+        "Спокойная стойка", "Лежит, не спит", "Спит", "Ходит", "Бегает",
+        "Прыгает", "Обычный шаг", "Медленный шаг", "Быстрый шаг без перехода на рысь",
+        "Лёгкая рысь", "Рысь", "Галоп", "Разворачивается", "Бордюр", "Лестница",
+        "Лижется", "Пьёт", "Лает", "Чешется",
+    ]),
 }
 
 
 def config(kind: str) -> str:
-    control = "behavior" if kind == "behavior" else kind
-    object_name = "video" if kind == "behavior" else "context"
-    object_tag = '<Video name="video" value="$video"/>' if kind == "behavior" else '<HyperText name="context" value="$html" clickableLinks="true"/>'
+    if kind == "behavior":
+        labels = "".join(f'<Label value="{html.escape(label, quote=True)}"/>' for label in LABELS[kind][1])
+        return '<View><Video name="video" value="$video" height="400" timelineHeight="110"/>' \
+               f'<TimelineLabels name="movement" toName="video">{labels}</TimelineLabels></View>'
+    object_tag = '<HyperText name="context" value="$html" clickableLinks="true"/>'
     choices = "".join(f'<Choice value="{html.escape(choice, quote=True)}"/>' for choice in LABELS[kind][1])
-    return f'<View>{object_tag}<Choices name="{control}" toName="{object_name}" choice="single">{choices}</Choices></View>'
+    return f'<View>{object_tag}<Choices name="{kind}" toName="context" choice="single">{choices}</Choices></View>'
 
 
 def file_url(relative: str) -> str:
@@ -128,13 +135,20 @@ def ensure_storage(project: int) -> None:
 
 
 def sync() -> dict[str, tuple[int, int]]:
-    existing_projects = {project["title"]: project["id"] for project in paged("/api/projects")}
+    existing_projects = {project["title"]: project for project in paged("/api/projects")}
     sources = historical_tasks(Path(os.environ["LABEL_SNAPSHOT_ROOT"])) + app_tasks(os.environ["DATABASE_URL"])
     counts = {}
     for kind, (title, _) in LABELS.items():
-        project = existing_projects.get(title)
-        if project is None:
-            project = request_json("POST", "/api/projects", {"title": title, "label_config": config(kind)})["id"]
+        existing = existing_projects.get(title)
+        if kind == "behavior" and existing is None:
+            legacy = existing_projects.get("Woona · Поведение на видео v1")
+            if legacy is not None:
+                if legacy.get("finished_task_number", 0):
+                    raise RuntimeError("refusing to change a labeled video project")
+                existing = request_json("PATCH", f'/api/projects/{legacy["id"]}',
+                                        {"title": title, "label_config": config(kind)})
+        project = existing["id"] if existing else request_json(
+            "POST", "/api/projects", {"title": title, "label_config": config(kind)})["id"]
         ensure_storage(project)
         expected = [item for item in sources if kind != "behavior" or "video" in item["data"]]
         current = {row["data"].get("source_id") for row in paged(f"/api/tasks?project={project}")}

@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from server.label_sync import config, ensure_storage, historical_tasks, paged
+from server.label_sync import LABELS, config, ensure_storage, historical_tasks, paged
 
 
 class LabelSyncTest(unittest.TestCase):
@@ -25,6 +25,9 @@ class LabelSyncTest(unittest.TestCase):
             self.assertIn("&lt;видео&gt;", item["data"]["html"])
             self.assertIn("clickableLinks", config("quality"))
             self.assertIn('value="$video"', config("behavior"))
+            self.assertIn('<TimelineLabels name="movement" toName="video">', config("behavior"))
+            self.assertEqual(len(LABELS["behavior"][1]), 19)
+            self.assertNotIn('<Choices', config("behavior"))
 
     def test_community_task_pagination(self):
         with patch("server.label_sync.request_json", side_effect=[
