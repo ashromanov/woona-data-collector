@@ -16,6 +16,26 @@ def digest(path: Path) -> str:
     return value.hexdigest()
 
 
+def verify(manifest: Path, target: Path) -> dict[str, str]:
+    """Hash every pinned file after transfers from any download method."""
+    source = json.loads(manifest.read_text(encoding="utf-8"))
+    if source["schema_version"] != 1:
+        raise ValueError("unsupported snapshot schema")
+    checksums = {}
+    for item in source["files"]:
+        relative = Path(item["path"])
+        if relative.is_absolute() or ".." in relative.parts or not relative.parts:
+            raise ValueError(f"unsafe Drive path: {relative}")
+        path = target / "raw" / relative
+        if not path.is_file() or path.stat().st_size != item["size"]:
+            raise ValueError(f"missing or wrong-size Drive file: {relative}")
+        checksums[item["id"]] = digest(path)
+    pending = target / "checksums.tmp"
+    pending.write_text(json.dumps(checksums, indent=2, sort_keys=True) + "\n")
+    pending.replace(target / "checksums.json")
+    return checksums
+
+
 def download(manifest: Path, target: Path, gdown: str) -> None:
     source = json.loads(manifest.read_text(encoding="utf-8"))
     if source["schema_version"] != 1:
@@ -59,5 +79,9 @@ if __name__ == "__main__":
     parser.add_argument("manifest", type=Path)
     parser.add_argument("target", type=Path)
     parser.add_argument("--gdown", default="gdown")
+    parser.add_argument("--verify-only", action="store_true")
     args = parser.parse_args()
-    download(args.manifest, args.target, args.gdown)
+    if args.verify_only:
+        print(f"verified {len(verify(args.manifest, args.target))} Drive files")
+    else:
+        download(args.manifest, args.target, args.gdown)

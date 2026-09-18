@@ -14,7 +14,7 @@ val hasAndroidSigningConfig = listOf(
     androidSigningKeyPassword,
 ).all { it.isPresent }
 val woonaServerBaseUrl = providers.gradleProperty("woonaServerBaseUrl")
-    .orElse("http://10.0.2.2:8080")
+    .orElse("https://cool-trams.digital")
 val woonaServerToken = providers.gradleProperty("woonaServerToken")
     .orElse("")
 fun String.asBuildConfigString(): String = "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""

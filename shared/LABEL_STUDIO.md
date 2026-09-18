@@ -50,8 +50,11 @@ python3 tools/normalize_drive_snapshot.py /srv/woona/drive-2026-09-18
 
 Download is resumable: verified files are skipped. If Google blocks a public
 download, use an authenticated local Google session and copy the completed
-files over SSH; merge the resulting checksum maps before normalizing. Do not
-copy browser cookies or account tokens to the server.
+files over SSH, then run `python3 tools/download_drive_snapshot.py
+data/drive-2026-09-18.json /srv/woona/drive-2026-09-18 --verify-only`
+before normalizing. This re-hashes every transferred file and writes one
+complete checksum map. Do not copy browser cookies or account tokens to the
+server.
 
 ## Labeling and counts
 
