@@ -8,6 +8,12 @@ services:
     restart: unless-stopped
     environment:
       WOONA_ALLOW_LEGACY_MIGRATION: "false"
+      LABEL_STUDIO_URL: http://label_studio:8080
+      LABEL_STUDIO_HOST_HEADER: cool-trams.digital
+      LABEL_STUDIO_API_TOKEN: ${LABEL_API_TOKEN:?set LABEL_API_TOKEN}
+      LABEL_SNAPSHOT_ROOT: /srv/drive
+    volumes:
+      - ${LABEL_SNAPSHOT_ROOT:?set LABEL_SNAPSHOT_ROOT}:/srv/drive:ro
 
   label_postgres:
     image: postgres:18

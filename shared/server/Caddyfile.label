@@ -13,6 +13,10 @@ cool-trams.digital {
 	handle /openapi.json {
 		reverse_proxy api:8080
 	}
+	@dashboard path /dashboard /dashboard/*
+	handle @dashboard {
+		reverse_proxy api:8080
+	}
 	handle {
 		reverse_proxy label_studio:8080
 	}

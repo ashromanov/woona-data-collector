@@ -311,6 +311,10 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="Woona API", version="1.0.0", lifespan=lifespan)
 
+from server.dashboard import router as dashboard_router
+
+app.include_router(dashboard_router)
+
 
 @app.middleware("http")
 async def request_id_middleware(request: Request, call_next):

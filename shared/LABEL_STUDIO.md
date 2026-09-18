@@ -1,8 +1,8 @@
 # Woona labeling deployment
 
-The production route is `https://cool-trams.digital/`. Caddy sends `/v1/*`
-and `/health/*` to the existing FastAPI ingest service and all other paths to
-Label Studio. Android and iOS keep their existing HTTPS resumable upload and
+The production route is `https://cool-trams.digital/`. Caddy sends `/v1/*`,
+`/health/*` and `/dashboard` to the existing FastAPI ingest service and all
+other paths to Label Studio. Android and iOS keep their existing HTTPS resumable upload and
 receipt protocol. A worker imports only server-verified recordings into Label
 Studio every 60 seconds. No MinIO is needed: the existing versioned PostgreSQL
 metadata and SHA-256-verified filesystem storage already provide the ingest
@@ -91,6 +91,37 @@ docker compose --env-file .env --env-file .env.label \
   -f compose.yaml -f compose.label.yaml exec -T label_sync \
   python -m server.label_sync --once
 ```
+
+## Live dashboard and questionnaires
+
+Open `https://cool-trams.digital/dashboard` after signing in to Label Studio.
+The page and `/dashboard/data` require a valid Label Studio session; neither
+endpoint accepts the device upload token. Each request reads PostgreSQL
+recordings, artifact metadata and questionnaires, checks that referenced files
+still exist at their expected size, and reads current Label Studio tasks and
+annotations. The page refreshes every 60 seconds. New verified app uploads
+appear once `label_sync` imports them (normally within 60 seconds). The Drive
+snapshot is an immutable versioned historical source; adding a new Drive batch
+requires normalization and a new import rather than copying unindexed files
+into the snapshot.
+
+The primary key shown for a recording is `woona:<recording UUID>` or
+`drive:<source binlog ID>`. All artifacts of an app recording have the same
+`artifacts.recording_id` foreign key; Label Studio tasks across projects share
+that stable `data.source_id`. The dashboard counts a complete recording only
+when video and BLE are both present. Its annotation progress is separated by
+project and per-class interval; historical CSV reference annotations never
+count as submitted Label Studio work. BLE/video time alignment is preserved in
+the recording's sync artifact, not computed by the dashboard.
+
+On Android, questionnaires first live in the app-private
+`filesDir/Woona/woona.sqlite`. Server sync saves the dog questionnaire as an
+immutable, versioned `dog_profile_versions.questionnaire` JSONB row and the
+session questionnaire as `recordings.session_questionnaire` JSONB. Each
+recording references its exact `dog_profile_version_id`, so later edits to a
+dog's questionnaire do not change the answers attached to old recordings.
+The dashboard shows the answers for app recordings; historical Drive sessions
+have no linked Woona questionnaire. Both databases are included in backups.
 
 ## Backups
 
