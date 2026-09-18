@@ -1,6 +1,7 @@
 """Import verified Woona and Drive recordings into Label Studio projects."""
 
 import argparse
+import fcntl
 import html
 import json
 import logging
@@ -151,6 +152,13 @@ def ensure_storage(project: int) -> None:
 
 
 def sync() -> dict[str, tuple[int, int]]:
+    # ponytail: one shared container lock; use a database advisory lock if workers are replicated.
+    with open("/tmp/woona-label-sync.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        return _sync_unlocked()
+
+
+def _sync_unlocked() -> dict[str, tuple[int, int]]:
     existing_projects = {project["title"]: project for project in paged("/api/projects")}
     sources = historical_tasks(Path(os.environ["LABEL_SNAPSHOT_ROOT"])) + app_tasks(os.environ["DATABASE_URL"])
     counts = {}

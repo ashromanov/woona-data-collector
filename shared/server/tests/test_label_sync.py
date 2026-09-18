@@ -1,10 +1,12 @@
 import json
 import tempfile
+import time
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
-from server.label_sync import LABELS, config, ensure_storage, historical_tasks, paged
+from server.label_sync import LABELS, config, ensure_storage, historical_tasks, paged, sync
 
 
 class LabelSyncTest(unittest.TestCase):
@@ -46,6 +48,23 @@ class LabelSyncTest(unittest.TestCase):
         ]) as api:
             ensure_storage(1)
             self.assertEqual("/label-studio/files/drive", api.call_args.args[2]["path"])
+
+    def test_parallel_sync_calls_do_not_create_duplicate_projects(self):
+        active = 0
+        peak = 0
+
+        def run_once():
+            nonlocal active, peak
+            active += 1
+            peak = max(peak, active)
+            time.sleep(0.02)
+            active -= 1
+            return {}
+
+        with patch("server.label_sync._sync_unlocked", side_effect=run_once):
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                self.assertEqual(list(pool.map(lambda _: sync(), range(2))), [{}, {}])
+        self.assertEqual(peak, 1)
 
 
 if __name__ == "__main__":
