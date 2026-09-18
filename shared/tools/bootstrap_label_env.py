@@ -32,6 +32,7 @@ if __name__ == "__main__":
         "LABEL_DB_PASSWORD": secrets.token_hex(32),
         "LABEL_ADMIN_PASSWORD": secrets.token_urlsafe(32),
         "LABEL_API_TOKEN": secrets.token_hex(20),
+        "LABEL_DJANGO_SECRET_KEY": secrets.token_hex(32),
         "LABEL_POSTGRES_ROOT": "/srv/woona/label-postgres",
         "LABEL_SNAPSHOT_ROOT": "/srv/woona/drive-2026-09-18",
     })

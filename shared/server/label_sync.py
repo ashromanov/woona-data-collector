@@ -91,6 +91,7 @@ def request_json(method: str, path: str, payload=None):
     base = os.environ["LABEL_STUDIO_URL"].rstrip("/")
     data = json.dumps(payload).encode() if payload is not None else None
     request = Request(base + path, data=data, method=method, headers={
+        "Host": os.environ["LABEL_STUDIO_HOST_HEADER"],
         "Authorization": "Token " + os.environ["LABEL_STUDIO_API_TOKEN"],
         "Content-Type": "application/json",
     })

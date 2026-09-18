@@ -38,6 +38,7 @@ services:
       LABEL_STUDIO_USERNAME: admin@cool-trams.digital
       LABEL_STUDIO_PASSWORD: ${LABEL_ADMIN_PASSWORD:?set LABEL_ADMIN_PASSWORD}
       LABEL_STUDIO_USER_TOKEN: ${LABEL_API_TOKEN:?set LABEL_API_TOKEN}
+      SECRET_KEY: ${LABEL_DJANGO_SECRET_KEY:?set LABEL_DJANGO_SECRET_KEY}
       LABEL_STUDIO_ENABLE_LEGACY_API_TOKEN: "true"
       LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED: "true"
       LABEL_STUDIO_LOCAL_FILES_DOCUMENT_ROOT: /label-studio/files
@@ -64,6 +65,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-woona}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-woona}
       LABEL_STUDIO_URL: http://label_studio:8080
+      LABEL_STUDIO_HOST_HEADER: cool-trams.digital
       LABEL_STUDIO_API_TOKEN: ${LABEL_API_TOKEN:?set LABEL_API_TOKEN}
       LABEL_SNAPSHOT_ROOT: /srv/drive
     depends_on:
