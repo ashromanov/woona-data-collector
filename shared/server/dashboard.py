@@ -7,7 +7,10 @@ import stat
 from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
+from string import Template
+from typing import Literal
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
 from urllib.request import Request as UrlRequest, urlopen
 from zoneinfo import ZoneInfo
 
@@ -189,74 +192,151 @@ def load_dashboard() -> dict:
     return summarize(records, projects, tasks, labeled, extra)
 
 
-def render(data: dict, query: str) -> str:
+def render(data: dict, query: str, status: str = "all", ble: str = "all", page: int = 1) -> str:
     escape = html.escape
     totals = data["totals"]
-    cards = [("Группы файлов", totals["groups"]), ("Видео + BLE", totals["video_ble"]),
-             ("Размечено ≥1 категории", totals["annotated_any"]),
-             ("Все 3 видеокатегории", totals["annotated_all"]),
-             ("Анкеты собак / сессий", f'{totals["profile_versions"]} / {totals["session_questionnaires"]}')]
-    card_html = "".join(f'<div class="card"><small>{escape(name)}</small><strong>{value}</strong></div>'
-                        for name, value in cards)
+    app_records = sum(record["origin"] == "Woona" for record in data["records"])
+    ratio = round(100 * totals["session_questionnaires"] / app_records) if app_records else 0
+    cards = [
+        ("Группы файлов", totals["groups"], "всего групп"),
+        ("Видео + BLE", totals["video_ble"], "полные пары"),
+        ("Размечено ≥1 категории", totals["annotated_any"], "видеозаписей"),
+        ("Все 3 видеокатегории", totals["annotated_all"], f'из {totals["video_ble"]}'),
+    ]
+    card_html = "".join(f'<div class="metric"><span>{name}</span><div><strong>{value}</strong><small>{hint}</small></div></div>'
+                        for name, value, hint in cards)
+    card_html += (f'<div class="metric"><span>Анкеты собак / сессий</span><div><strong>{totals["profile_versions"]}'
+                  f' <em>/ {totals["session_questionnaires"]}</em></strong><small>сессий: {totals["session_questionnaires"]}/{app_records}</small></div>'
+                  f'<div class="meter"><i style="width:{ratio}%"></i></div></div>')
+
+    colors = {"source": ("#0052cc", "#de350b", "#ffab00"),
+              "activity": ("#4c9aff", "#6554c0", "#36b37e", "#ff8b00", "#ff5630"),
+              "gait": ("#00875a", "#00b8d9", "#ffab00", "#bf2600"),
+              "lameness": ("#5243aa", "#0052cc", "#ff8b00", "#ff5630", "#de350b")}
+    labels = {"source": "Валидация", "activity": "Видеоразметка", "gait": "Кинематика", "lameness": "Диагностика"}
     category_rows = []
     for kind in KINDS:
-        c = data["categories"][kind]
-        percent = round(100 * c["labeled"] / c["tasks"]) if c["tasks"] else 0
+        category = data["categories"][kind]
+        percent = round(100 * category["labeled"] / category["tasks"]) if category["tasks"] else 0
         unit = "выборов" if kind == "source" else "интервалов"
-        classes = " · ".join(f'{escape(name)}: {stats["records"]} записей / {stats["segments"]} {unit}'
-                             for name, stats in c["classes"].items())
-        category_rows.append(f'<tr><td><a href="/projects/{c["project_id"]}/data">{escape(c["title"])}</a>'
-                             f'<div class="sub">{classes}</div></td><td>{c["labeled"]} / {c["tasks"]}'
-                             f'<div class="bar"><i style="width:{percent}%"></i></div></td></tr>')
+        chips = "".join(f'<span class="class-chip"><i style="background:{color}"></i>{escape(name)}: '
+                        f'<b>{stats["records"]} записей / {stats["segments"]} {unit}</b></span>'
+                        for (name, stats), color in zip(category["classes"].items(), colors[kind]))
+        category_rows.append(
+            f'<div class="project-row"><div class="project-main"><div class="project-title">'
+            f'<a href="/projects/{category["project_id"]}/data">{escape(category["title"])}</a>'
+            f'<span class="type-tag">{labels[kind]}</span></div><div class="chips">{chips}</div></div>'
+            f'<div class="project-progress"><span>{category["labeled"]} / {category["tasks"]} '
+            f'<small>({percent}%)</small></span><div class="meter"><i style="width:{percent}%"></i></div></div></div>')
+
+    def matches(record: dict) -> bool:
+        if query.casefold() not in (record["source_id"] + " " + record["dog"] + " " + record["origin"]).casefold():
+            return False
+        if ble != "all" and record["ble"] != (ble == "present"):
+            return False
+        if status == "ready" and not (record["video"] and record["ble"] and not record["annotated_any"]):
+            return False
+        if status == "in_progress" and not (record["annotated_any"] and not record["annotated_all"]):
+            return False
+        if status == "complete" and not record["annotated_all"]:
+            return False
+        if status == "incomplete" and record["video"] and record["ble"]:
+            return False
+        return True
+
+    filtered = [record for record in data["records"] if matches(record)]
+    per_page = 25
+    page_count = max(1, (len(filtered) + per_page - 1) // per_page)
+    page = min(page, page_count)
+    visible = filtered[(page - 1) * per_page:page * per_page]
+
+    def page_url(number: int) -> str:
+        return "/dashboard?" + urlencode({"q": query, "status": status, "ble": ble, "page": number}) + "#data-manager"
+
     rows = []
-    for record in data["records"]:
-        if query and query.casefold() not in (record["source_id"] + " " + record["dog"] + " " + record["origin"]).casefold():
-            continue
-        status = " / ".join("✓" if record["tasks"][kind] and record["tasks"][kind]["labeled"] else "—"
-                            for kind in VIDEO_KINDS)
-        links = " ".join(f'<a href="/projects/{data["categories"][kind]["project_id"]}/data?task={record["tasks"][kind]["id"]}">{escape(kind)}</a>'
-                         for kind in KINDS if record["tasks"][kind])
-        files = "".join(f'<li><a href="{escape(file_url(f["relative"]), quote=True)}">{escape(f["name"])}</a>'
-                        f' · {f["size"]:,} B</li>' for f in record["files"] if f["available"])
-        files += "".join(f'<li>{escape(f["name"])} · {f["size"]:,} B · недоступен/ожидает загрузки</li>'
-                         for f in record["files"] if not f["available"])
-        surveys = ""
+    for record in visible:
+        source_id = record["source_id"]
+        short_id = source_id.split(":", 1)[1][:12] + "…"
+        files = "".join(f'<li><a href="{escape(file_url(item["relative"]), quote=True)}">'
+                        f'{escape(item["name"])}</a> · {item["size"]:,} B</li>'
+                        if item["available"] else f'<li>{escape(item["name"])} · недоступен</li>'
+                        for item in record["files"])
+        file_details = f'<details><summary>{len(record["files"])} файлов · {record["bytes"] / 1048576:.1f} MiB</summary>' \
+                       f'<ul>{files}</ul></details>'
         if record["profile"]:
-            surveys = '<details><summary>Анкеты</summary><p>Версия профиля: ' + escape(record["profile"]["version_id"]) + '</p>' \
-                      '<pre>' + escape(json.dumps({"dog": record["profile"]["answers"],
-                                                   "session": record["session_questionnaire"]["answers"]},
-                                                  ensure_ascii=False, indent=2)) + '</pre></details>'
+            answers = escape(json.dumps({"dog": record["profile"]["answers"],
+                                         "session": record["session_questionnaire"]["answers"]},
+                                        ensure_ascii=False, indent=2))
+            questionnaire = (f'<span class="pill ok">● Анкеты доступны</span><details><summary>Посмотреть</summary>'
+                             f'<div class="sub">Версия {escape(record["profile"]["version_id"])}</div>'
+                             f'<pre>{answers}</pre></details>')
         else:
-            surveys = '<span class="muted">Анкета Woona не связана</span>'
-        rows.append(f'<tr><td><code>{escape(record["source_id"])}</code><div class="sub">{escape(record["dog"])} · '
-                    f'{escape(record["date"])} · {escape(record["origin"])}</div></td>'
-                    f'<td>{"✓" if record["video"] else "—"} / {"✓" if record["ble"] else "—"}</td>'
-                    f'<td>{escape(record["ingest_status"])}<div class="sub">{len(record["files"])} файлов · '
-                    f'{record["bytes"] / 1048576:.1f} MiB · референсы: {record["reference_files"]}</div></td>'
-                    f'<td>{status}<div class="sub">{links}</div></td><td>{surveys}'
-                    f'<details><summary>Файлы</summary><ul>{files}</ul></details></td></tr>')
-    return '''<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="refresh" content="60"><title>Woona · Данные и разметка</title>
-<style>body{font:15px system-ui,sans-serif;background:#f5f6f1;color:#182326;margin:0}main{max-width:1440px;margin:auto;padding:30px}
-a{color:#126a61}header{display:flex;justify-content:space-between;align-items:center;gap:20px}h1{font-size:30px;margin:0}h2{margin:36px 0 14px}
-.muted,.sub,small{color:#667579}.sub{font-size:12px;margin-top:5px}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:12px;margin-top:26px}
-.card{background:white;border:1px solid #d9e2dd;border-radius:14px;padding:18px}.card small{display:block}.card strong{display:block;font-size:28px;margin-top:7px}
-.note{background:#e5f3ef;padding:14px;border-radius:10px;margin-top:18px}.table{overflow:auto;background:white;border:1px solid #d9e2dd;border-radius:12px}
-table{border-collapse:collapse;width:100%}td,th{text-align:left;padding:13px;vertical-align:top;border-bottom:1px solid #e6ebe8}th{white-space:nowrap;color:#526366}
-.bar{height:8px;background:#e4ebe7;border-radius:9px;margin-top:8px;min-width:130px}.bar i{display:block;background:#23a58c;height:100%;border-radius:9px}
-code{font-size:12px;word-break:break-all}details{max-width:400px}pre{white-space:pre-wrap;word-break:break-word;max-height:350px;overflow:auto}
-form{margin:16px 0}input{padding:10px;border:1px solid #bac9c1;border-radius:8px;width:min(330px,70vw)}button{padding:10px;border:0;border-radius:8px;background:#126a61;color:white}</style>
-<main><header><div><h1>Woona · данные и разметка</h1><div class="muted">Обновлено: ''' + escape(data["updated_at"]) + ''' · автообновление каждые 60 с</div></div><a href="/projects/">Label Studio ↗</a></header>
-<div class="cards">''' + card_html + '''</div><div class="note">«Группа файлов» не равна полной записи. Полная разметка = видео + BLE + отправленные аннотации во всех трёх видеопроектах. Старые CSV-референсы не засчитываются.</div>
-<p class="muted">Файлов в индексированных группах: ''' + str(totals["available_files"]) + ''' / ''' + str(totals["files"]) + ''' доступны · объём доступных: ''' + f'{totals["bytes"] / 1073741824:.2f}' + ''' GiB · вне индекса Drive: ''' + str(totals["drive_unindexed_files"]) + ''' · ожидают импорта в Label Studio: ''' + str(totals["pending_import"]) + '''</p>
-<h2>Категории разметки</h2><div class="table"><table><thead><tr><th>Проект и классы</th><th>Размечено / задач</th></tr></thead><tbody>''' + "".join(category_rows) + '''</tbody></table></div>
-<h2>Записи и анкеты</h2><form><input name="q" value="''' + escape(query, quote=True) + '''" placeholder="Поиск по ID, собаке или источнику"><button>Найти</button></form>
-<div class="table"><table><thead><tr><th>Группа</th><th>Видео / BLE</th><th>Загрузка и файлы</th><th>Активности / аллюр / хромота</th><th>Анкеты и файлы</th></tr></thead><tbody>''' + "".join(rows) + '''</tbody></table></div></main></html>'''
+            questionnaire = '<span class="pill neutral">Нет анкеты Woona</span>'
+        dots = "".join(f'<span class="progress-dot {"done" if record["tasks"][kind] and record["tasks"][kind]["labeled"] else ""}" '
+                       f'title="{escape(data["categories"][kind]["title"], quote=True)}" '
+                       f'aria-label="{escape(data["categories"][kind]["title"], quote=True)}: '
+                       f'{"готово" if record["tasks"][kind] and record["tasks"][kind]["labeled"] else "не размечено"}"></span>'
+                       for kind in KINDS)
+        done = sum(bool(record["tasks"][kind] and record["tasks"][kind]["labeled"]) for kind in KINDS)
+        next_kind = next((kind for kind in KINDS if record["tasks"][kind] and not record["tasks"][kind]["labeled"]),
+                         next((kind for kind in KINDS if record["tasks"][kind]), None))
+        action = (f'<a class="action" href="/projects/{data["categories"][next_kind]["project_id"]}/data?task='
+                  f'{record["tasks"][next_kind]["id"]}">{"Открыть" if done == 4 else "Разметить"} ↗</a>') if next_kind else '—'
+        state = "Завершено" if record["annotated_all"] else "В процессе" if record["annotated_any"] else "Ожидает разметки"
+        rows.append(f'<tr><td><code class="source-id" title="{escape(source_id, quote=True)}">{escape(short_id)}</code>'
+                    f'<div class="sub">{escape(record["dog"])} · {escape(record["date"])} · {escape(record["origin"])}</div></td>'
+                    f'<td><span class="pill {"ok" if record["video"] else "neutral"}">Видео: {"есть" if record["video"] else "нет"}</span> '
+                    f'<span class="pill {"ok" if record["ble"] else "neutral"}">BLE: {"есть" if record["ble"] else "нет"}</span></td>'
+                    f'<td>{file_details}<div class="sub">{escape(record["ingest_status"])} · референсы: {record["reference_files"]}</div></td>'
+                    f'<td><div class="dots">{dots}</div><span class="state">{state} ({done}/4)</span></td>'
+                    f'<td>{questionnaire}</td><td>{action}</td></tr>')
+
+    selected = lambda value, current: ' selected' if value == current else ''
+    status_options = "".join(f'<option value="{value}"{selected(value, status)}>{name}</option>' for value, name in (
+        ("all", "Все статусы"), ("ready", "Готово к разметке"), ("in_progress", "В процессе"),
+        ("complete", "Размечено"), ("incomplete", "Без пары видео + BLE")))
+    ble_options = "".join(f'<option value="{value}"{selected(value, ble)}>{name}</option>' for value, name in (
+        ("all", "BLE: все"), ("present", "BLE: есть"), ("absent", "BLE: нет")))
+    page_links = "".join(f'<a class="page-link {"active" if number == page else ""}" href="{page_url(number)}">{number}</a>'
+                         for number in range(max(1, page - 2), min(page_count, page + 2) + 1))
+    pagination = (f'<span>Показано {((page - 1) * per_page + 1) if filtered else 0}–'
+                  f'{min(page * per_page, len(filtered))} из {len(filtered)}</span><nav aria-label="Страницы">'
+                  f'<a class="page-link" href="{page_url(max(1, page - 1))}">‹</a>{page_links}'
+                  f'<a class="page-link" href="{page_url(min(page_count, page + 1))}">›</a></nav>')
+    return Template('''<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="refresh" content="60"><title>Woona / Данные и разметка · Label Studio</title>
+<style>
+:root{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#202124;background:#fff;font-size:13px}
+*{box-sizing:border-box}body{margin:0}a{color:inherit;text-decoration:none}a:hover{color:#ff6442}button,input,select{font:inherit}button,select{cursor:pointer}
+:focus-visible{outline:2px solid #ff6442;outline-offset:2px}.wrap{max-width:1600px;margin:auto;padding:0 24px}.mono,code,.metric strong,.project-progress,.pipeline,.pagination{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.topbar{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #e5e7eb}.topbar-inner{min-height:52px;display:flex;align-items:center;gap:25px}.brand{display:flex;align-items:center;gap:10px;font-weight:600;white-space:nowrap}.mark{width:27px;height:27px;border-radius:5px;background:#ff6442;display:flex;align-items:center;justify-content:center;gap:2px}.mark i{width:5px;height:13px;background:white;border-radius:1px}.mark i+ i{height:8px;align-self:flex-end;margin-bottom:7px}.slash{color:#c3c7cc}.tabs{align-self:stretch;display:flex;gap:18px;align-items:stretch}.tabs a{display:flex;align-items:center;color:#6b7280;font-weight:600;white-space:nowrap}.tabs a.active{color:#202124;border-bottom:2px solid #ff6442}.top-spacer{flex:1}.sync{font:11px ui-monospace,monospace;color:#6b7280;white-space:nowrap}.sync i,.footer i{display:inline-block;width:7px;height:7px;background:#10a778;border-radius:50%;margin-right:6px}.top-action{white-space:nowrap;padding:7px 11px;border:1px solid #d5d9dd;border-radius:5px;font-weight:600}.top-action.primary{background:#ff6442;color:white;border-color:#ff6442}.top-action.primary:hover,.action:hover{background:#e04f30;color:white}
+.summary{background:#fafafa;border-bottom:1px solid #e5e7eb}.metrics{display:grid;grid-template-columns:repeat(5,1fr);padding:18px 0}.metric{min-width:0;padding:4px 20px;border-left:1px solid #e5e7eb}.metric:first-child{padding-left:0;border-left:0}.metric>span{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#6b7280;font-weight:700}.metric>div:not(.meter){display:flex;align-items:baseline;gap:10px;margin-top:9px}.metric strong{font-size:27px;line-height:1}.metric strong em{font-size:16px;color:#9ca3af;font-style:normal}.metric small{font-size:11px;color:#6b7280}.meter{height:5px;background:#eee;border-radius:3px;overflow:hidden}.meter i{display:block;height:100%;background:#ff6442}.metric>.meter{margin-top:11px}.metric>.meter i{background:#242424}
+.notice{border-bottom:1px solid #e5e7eb}.notice-inner{display:flex;align-items:center;justify-content:space-between;gap:20px;padding-top:13px;padding-bottom:13px}.notice p{margin:0;color:#555e67;line-height:1.45}.notice b{color:#202124}.info{display:inline-grid;place-items:center;width:18px;height:18px;margin-right:9px;border:1px solid #d5d9dd;border-radius:4px;font-weight:700;color:#6b7280}.pipeline{display:flex;flex-wrap:wrap;gap:7px;background:#fafafa;border:1px solid #e5e7eb;border-radius:5px;padding:8px;color:#6b7280;font-size:11px;white-space:nowrap}.pipeline strong{color:#202124}
+main{padding-top:24px!important;padding-bottom:28px!important}.panel{border:1px solid #e5e7eb;border-radius:6px;overflow:hidden;background:#fff;margin-bottom:24px}.panel-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 16px;background:#fafafa;border-bottom:1px solid #e5e7eb}.panel-head h2{font-size:12px;letter-spacing:.06em;text-transform:uppercase;margin:0}.panel-head span{color:#8b9299;font-size:11px}.project-row{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:13px 16px;border-bottom:1px solid #f0f1f2}.project-row:last-child{border-bottom:0}.project-row:hover,tr:hover{background:#fcfcfc}.project-main{min-width:0}.project-title{display:flex;align-items:center;gap:10px;font-weight:600}.type-tag,.class-chip{border:1px solid #e5e7eb;border-radius:4px;background:#fafafa}.type-tag{font-size:10px;text-transform:uppercase;color:#687078;font-weight:500;padding:2px 6px}.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}.class-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 7px;font-size:11px}.class-chip i{width:8px;height:8px;flex:none;border-radius:2px}.class-chip b{font-weight:400;color:#6b7280}.project-progress{width:170px;flex:none;text-align:right;font-size:12px}.project-progress small{color:#9ca3af}.project-progress .meter{margin-top:8px}
+.toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 14px;background:#fafafa;border-bottom:1px solid #e5e7eb}.toolbar form{display:flex;flex-wrap:wrap;align-items:center;gap:8px}.toolbar input,.toolbar select{height:32px;padding:5px 9px;border:1px solid #d5d9dd;border-radius:5px;background:white;color:#202124}.toolbar input{width:270px}.toolbar button{height:32px;padding:0 15px;border:0;border-radius:5px;background:#262626;color:white;font-weight:600}.toolbar-info{color:#6b7280;font:11px ui-monospace,monospace}.table-scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:1030px}th,td{text-align:left;padding:10px 13px;vertical-align:top;border-bottom:1px solid #ebedef}th{background:#f8f9fa;color:#667078;text-transform:uppercase;letter-spacing:.04em;font-size:11px;font-weight:600;white-space:nowrap}td{font-size:12px}tr:last-child td{border-bottom:0}.sub{color:#80878e;font-size:11px;margin-top:5px}.source-id{font-weight:700;white-space:nowrap}.pill{display:inline-block;border:1px solid;border-radius:5px;padding:3px 7px;font-size:11px;white-space:nowrap;margin:0 4px 4px 0}.pill.ok{background:#ecfdf5;color:#047857;border-color:#a7f3d0}.pill.neutral{background:#f8f9fa;color:#6b7280;border-color:#e5e7eb}.dots{display:flex;gap:6px;margin:3px 0 7px}.progress-dot{width:13px;height:13px;border:1px solid #d1d5db;background:#e5e7eb;border-radius:50%}.progress-dot.done{background:#10a778;border-color:#0f996d}.state{font-size:11px;color:#6b7280}.action{display:inline-block;padding:6px 9px;border-radius:5px;background:#ff6442;color:white;font-weight:600;white-space:nowrap}.action:hover{color:white}details{max-width:290px}summary{cursor:pointer;color:#374151}details ul{padding-left:16px;max-height:240px;overflow:auto;overflow-wrap:anywhere}details li{margin:5px 0}pre{white-space:pre-wrap;word-break:break-word;max-height:250px;overflow:auto;font-size:11px}.pagination{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;color:#6b7280;font-size:11px;border-top:1px solid #e5e7eb}.pagination nav{display:flex;gap:4px}.page-link{display:inline-grid;place-items:center;min-width:28px;height:28px;border:1px solid #e5e7eb;border-radius:5px}.page-link.active{background:#ff6442;color:white;border-color:#ff6442}.empty{padding:24px;text-align:center;color:#6b7280}.footer{border-top:1px solid #e5e7eb;color:#6b7280;padding:17px 0;font:11px ui-monospace,monospace}
+@media(max-width:1100px){.metrics{grid-template-columns:repeat(3,1fr);gap:12px 0}.metric:nth-child(4){border-left:0;padding-left:0}.sync{display:none}.notice-inner{align-items:flex-start;flex-direction:column}.topbar-inner{gap:15px}}@media(max-width:700px){.wrap{padding-left:14px;padding-right:14px}.topbar-inner{flex-wrap:wrap;padding-top:8px;padding-bottom:8px}.tabs{order:3;width:100%;height:34px;gap:16px}.metrics{grid-template-columns:repeat(2,1fr)}.metric:nth-child(odd){border-left:0;padding-left:0}.metric:nth-child(4){border-left:1px solid #e5e7eb;padding-left:20px}.project-row{align-items:stretch;flex-direction:column;gap:12px}.project-progress{width:100%;text-align:left}.toolbar input{width:min(270px,80vw)}.pipeline{white-space:normal}}
+</style></head><body>
+<header class="topbar"><div class="wrap topbar-inner"><a class="brand" href="/projects/"><span class="mark" aria-hidden="true"><i></i><i></i></span><span>Woona</span><span class="slash">/</span><span>данные и разметка</span></a><nav class="tabs" aria-label="Разделы"><a class="active" href="#data-manager">Данные (Data Manager)</a><a href="#annotation-projects">Проекты разметки</a></nav><div class="top-spacer"></div><span class="sync"><i></i>Обновлено: $updated · каждые 60 с</span><a class="top-action" href="/dashboard/data">JSON</a><a class="top-action primary" href="/projects/">Label Studio ↗</a></div></header>
+<section class="summary"><div class="wrap metrics">$cards</div></section>
+<section class="notice"><div class="wrap notice-inner"><p><span class="info">i</span><b>«Группа файлов» не равна полной записи.</b> Полная разметка = видео + BLE + отправленные аннотации во всех трёх видеопроектах. Старые CSV-референсы не засчитываются.</p><div class="pipeline"><span>Файлов: <strong>$available / $files</strong></span><span>·</span><span>Объём: <strong>$gib GiB</strong></span><span>·</span><span>Вне индекса Drive: <strong>$unindexed</strong></span><span>·</span><span>Ожидают импорта: <strong>$pending</strong></span></div></div></section>
+<main class="wrap"><section class="panel" id="annotation-projects"><div class="panel-head"><h2>Категории разметки</h2><span>Размечено / задач</span></div>$projects</section>
+<section class="panel" id="data-manager"><div class="toolbar"><form method="get" action="/dashboard"><input type="search" name="q" value="$query" maxlength="100" placeholder="Поиск по ID, собаке или источнику" aria-label="Поиск по ID, собаке или источнику"><select name="status" aria-label="Статус разметки">$status_options</select><select name="ble" aria-label="Наличие BLE">$ble_options</select><button type="submit">Найти</button></form><span class="toolbar-info">Найдено $found из $total групп</span></div>
+<div class="table-scroll"><table><thead><tr><th>ID / группа</th><th>Видео / BLE</th><th>Файлы и хранилище</th><th>Прогресс (4 этапа)</th><th>Анкеты</th><th>Действие</th></tr></thead><tbody>$rows</tbody></table></div><div class="pagination">$pagination</div></section></main>
+<footer class="footer"><div class="wrap"><i></i>Woona ML pipeline · актуальные данные PostgreSQL, файлов и Label Studio</div></footer></body></html>''').substitute(
+        updated=escape(data["updated_at"]), cards=card_html, available=totals["available_files"],
+        files=totals["files"], gib=f'{totals["bytes"] / 1073741824:.2f}',
+        unindexed=totals["drive_unindexed_files"], pending=totals["pending_import"],
+        projects="".join(category_rows), query=escape(query, quote=True),
+        status_options=status_options, ble_options=ble_options, found=len(filtered), total=totals["groups"],
+        rows="".join(rows) if rows else '<tr><td class="empty" colspan="6">По выбранным фильтрам записей нет</td></tr>',
+        pagination=pagination)
 
 
 @router.get("", response_class=HTMLResponse, dependencies=[Depends(require_label_user)])
-def dashboard(q: str = Query("", max_length=100)):
-    return HTMLResponse(render(load_dashboard(), q), headers={"Cache-Control": "no-store"})
+def dashboard(q: str = Query("", max_length=100),
+              status: Literal["all", "ready", "in_progress", "complete", "incomplete"] = "all",
+              ble: Literal["all", "present", "absent"] = "all", page: int = Query(1, ge=1)):
+    return HTMLResponse(render(load_dashboard(), q, status, ble, page), headers={"Cache-Control": "no-store"})
 
 
 @router.get("/data", dependencies=[Depends(require_label_user)])

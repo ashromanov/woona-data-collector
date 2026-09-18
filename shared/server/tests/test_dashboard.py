@@ -50,6 +50,13 @@ class DashboardTest(unittest.TestCase):
         self.assertIn("&lt;", page)
         self.assertNotIn("Тест <пёс>", page)
         self.assertIn('content="60"', page)
+        self.assertIn('class="topbar"', page)
+        self.assertIn('class="panel" id="data-manager"', page)
+        self.assertIn('сессий: 1/1', page)
+        self.assertIn('Найдено 1 из 2 групп', render(data, "", status="in_progress"))
+        self.assertIn('Найдено 1 из 2 групп', render(data, "", status="incomplete"))
+        self.assertIn('Найдено 0 из 2 групп', render(data, "", ble="absent"))
+        self.assertIn('Показано 1–2 из 2', render(data, "", page=100))
 
     def test_anonymous_user_cannot_read_dashboard(self):
         request = Request({"type": "http", "headers": [], "method": "GET", "path": "/dashboard"})
