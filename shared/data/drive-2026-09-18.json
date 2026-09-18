@@ -1,0 +1,2191 @@
+{
+  "schema_version": 1,
+  "source_folder_id": "1mSVn896leMIAoyIGafiAsjDMgJ-nKDz_",
+  "snapshot_date": "2026-09-18",
+  "files": [
+    {
+      "id": "1PEh5ddz0bYJldhHsl_DIIolibcg8keTa",
+      "path": "День 1 (04.06)/2 День/джена/4 июн. 2026 г., 12_32_05-1.csv",
+      "size": 2339248,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "18raHmJqlf9_wok24bPYl4NeOYHTZu5AW",
+      "path": "День 1 (04.06)/2 День/джена/ble_dump_1780569098765_snapshot_csv.csv",
+      "size": 46972623,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1uFekt_qU2fuuBShDsHbHjlIzeVTDAaJH",
+      "path": "День 1 (04.06)/2 День/джена/ble_dump_1780569098765_snapshot_packet.bin",
+      "size": 8921352,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1hXt9PFwuHfPXXcQeNYLzO-KRC3KsIZWc",
+      "path": "День 1 (04.06)/2 День/джена/ble_log_1780569088801_snapshot_log.log",
+      "size": 130215,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1FXux6S4p_OHk5UWh6tmN0Xk7Nq4SF-8Y",
+      "path": "День 1 (04.06)/2 День/джена/ble_raw_1780569098762_snapshot_raw.binlog",
+      "size": 9668644,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1FS8D86J7eAjfYlhUSEaaVgFqEn859C49",
+      "path": "День 1 (04.06)/2 День/джена/edf/polar_jena.edf",
+      "size": 207624,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1-SQUhAB0gUd93cBstUcmBJJfVLBTqaww",
+      "path": "День 1 (04.06)/2 День/джена/polar_jena_annotations.csv",
+      "size": 17330,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1hFAjAdf4AxH0YUprMkpy6o0_AzFf4xMY",
+      "path": "День 1 (04.06)/2 День/джена/пыхтение_интервалы.txt",
+      "size": 762,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1sMfMy_bkcd_PdXlQoroH5YHhXFK-UYFg",
+      "path": "День 1 (04.06)/2 День/джена/разметка_вдохов_2026-06-04-12-32-05-873.csv",
+      "size": 52057,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1KLGo2-3VQLquN1vzyctQzAUF2ykW9_dH",
+      "path": "День 1 (04.06)/2 День/лозла/4 июн. 2026 г., 13_00_57-1.csv",
+      "size": 1485863,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1Zy97oT_0vJVFrZdzNKiFB5vpkwmwsYi5",
+      "path": "День 1 (04.06)/2 День/лозла/ble_dump_1780570844574_snapshot_csv.csv",
+      "size": 27579113,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1HZhRqOyYSfad6UXLjDdcaM4DvUQbOv5s",
+      "path": "День 1 (04.06)/2 День/лозла/ble_dump_1780570844574_snapshot_packet.bin",
+      "size": 5246314,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1IHK-0lt80veejatRUvyFUMeMgq6HyOC8",
+      "path": "День 1 (04.06)/2 День/лозла/ble_log_1780570836609_snapshot_log.log",
+      "size": 76942,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1AjvQsCo9BDH97QK7ZjOyy56VjQP7jQKP",
+      "path": "День 1 (04.06)/2 День/лозла/ble_raw_1780570844571_snapshot_raw.binlog",
+      "size": 5688102,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1FZMYKKZwPbD2t5ul8CO_YWwY9BlKZf34",
+      "path": "День 1 (04.06)/2 День/лозла/edf/polar_lozla.edf",
+      "size": 123670,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1CjwAnByDShZhSAb1mvqqKLYHnWo6BXbY",
+      "path": "День 1 (04.06)/2 День/лозла/polar_lozla_annotations.csv",
+      "size": 12845,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1WxXqOPYaLk_YxIKMkv5fHRDlpN_pMiO4",
+      "path": "День 1 (04.06)/2 День/лозла/разметка_вдохов_2026-06-04-13-06-02-169.csv",
+      "size": 3230,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1waFlCWvSS-9ikYQw3qH9_Z4BI7s8PG_2",
+      "path": "День 1 (04.06)/2 День/патрик/4 июн. 2026 г., 11_29_05-1.csv",
+      "size": 2360519,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1W83quQYWFovG71tKud3t25wiLFmDgqrW",
+      "path": "День 1 (04.06)/2 День/патрик/ble_dump_1780565341596_snapshot_csv.csv",
+      "size": 45003732,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1AkCrF5ncc5ftjlcw1Zg34r8QGng-69zZ",
+      "path": "День 1 (04.06)/2 День/патрик/ble_dump_1780565341596_snapshot_packet.bin",
+      "size": 8444305,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1JP2Hykci3GLAeNgMm4KNeu6D7UKJpYCU",
+      "path": "День 1 (04.06)/2 День/патрик/ble_log_1780565340135_snapshot_log.log",
+      "size": 122438,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1P_0xaM97dg_nsl2DY_m8KjAdpMBBTFtm",
+      "path": "День 1 (04.06)/2 День/патрик/ble_raw_1780565340135_snapshot_raw.binlog",
+      "size": 9158082,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1GiP0CnKBwK3HyVH0DpVQxdSiOeXYsbQb",
+      "path": "День 1 (04.06)/2 День/патрик/edf/polar_patrik.edf",
+      "size": 203906,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1aNAr1p65q3h0ipFi5Ya8dNr8mZhltDPs",
+      "path": "День 1 (04.06)/2 День/патрик/polar_patrik_annotations.csv",
+      "size": 19780,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1k2M5yJlxKy2SE8MIjkHwMLGWOAUSq4Ne",
+      "path": "День 1 (04.06)/2 День/патрик/разметка_вдохов_2026-06-04-11-29-04-751.csv",
+      "size": 16281,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1Y6emI0nL5mcFm9je4n0hxWekSwOvvkbx",
+      "path": "День 1 (04.06)/2 День/яра/4 июн. 2026 г., 12_08_55-1.csv",
+      "size": 1221684,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1BXdGCaQFq6bgVn0qzrTgiradEFYfhdQo",
+      "path": "День 1 (04.06)/2 День/яра/ble_dump_1780567726538_snapshot_csv.csv",
+      "size": 27650723,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1C3xgVVS2Jc2QbKTofA_gF_SX6YjahjkY",
+      "path": "День 1 (04.06)/2 День/яра/ble_dump_1780567726538_snapshot_packet.bin",
+      "size": 5400535,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1EGRYrRHdFxHoKDA4765_QOyeN3fHpmUG",
+      "path": "День 1 (04.06)/2 День/яра/ble_log_1780567715245_snapshot_log.log",
+      "size": 79311,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1TPSycOMgxlNBxk4JoHbOkgdm310m08Or",
+      "path": "День 1 (04.06)/2 День/яра/ble_raw_1780567726536_snapshot_raw.binlog",
+      "size": 5854291,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1BNfpw4Y3hGkbcm-9nDbdEIQXX74p3TaP",
+      "path": "День 1 (04.06)/2 День/яра/edf/polar_yara.edf",
+      "size": 101876,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1izJMRYP37g73tQvsPupt568rjEKye-FX",
+      "path": "День 1 (04.06)/2 День/яра/polar_yara_annotations.csv",
+      "size": 10820,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1__fTPALCS2LVQyNM6xiw7VCT2LQI16Lx",
+      "path": "День 1 (04.06)/2 День/яра/разметка_вдохов_2026-06-04-12-08-55-040.csv",
+      "size": 15269,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1jY_1jNID4OvqF3pgFoLtN68q2ZZjtwah",
+      "path": "День 1 (04.06)/3 Вечер/джена/4 июн. 2026 г., 18_27_13-1.csv",
+      "size": 2341947,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1p-rLfFU0mlVZuA4Ejyy8Uz29Of566LVQ",
+      "path": "День 1 (04.06)/3 Вечер/джена/ble_dump_1780590434662_snapshot_csv.csv",
+      "size": 45092917,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1P0DmIpR4lvIeXDLh44rpD7ECBetCdEu4",
+      "path": "День 1 (04.06)/3 Вечер/джена/ble_dump_1780590434662_snapshot_packet.bin",
+      "size": 8626829,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1ftyFWAustLidqzVfF59T9DKuFGwJI9K9",
+      "path": "День 1 (04.06)/3 Вечер/джена/ble_log_1780590433751_snapshot_log.log",
+      "size": 123969,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1boOoR2VHGimX1Zl9OQWI0IrP27Vy0cAk",
+      "path": "День 1 (04.06)/3 Вечер/джена/ble_raw_1780590433768_snapshot_raw.binlog",
+      "size": 9351853,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1nNwdQ5U5-GCDw1g2YLtPOEBHU1yI6I3Y",
+      "path": "День 1 (04.06)/3 Вечер/джена/edf/polar_jena_evening.edf",
+      "size": 200280,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1EiC8LOweF2WWdxnh93MSNHSEhU0j6Jpq",
+      "path": "День 1 (04.06)/3 Вечер/джена/polar_jena_evening_annotations.csv",
+      "size": 22307,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1OgHx5aUszW2CSa3atzeLKn_scjTf0IGW",
+      "path": "День 1 (04.06)/3 Вечер/джена/пыхтение_интервалы.txt",
+      "size": 1414,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1V6EDAr14FKZdG66VChM-CMJ4zJgkAZ-l",
+      "path": "День 1 (04.06)/3 Вечер/джена/разметка_вдохов_2026-06-04-18-27-16-709.csv",
+      "size": 47156,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1gH2h7YaUu0vZhjKxpQZn4Rt0NfJol1oM",
+      "path": "День 1 (04.06)/3 Вечер/лозла/4 июн. 2026 г., 18_08_40-1.csv",
+      "size": 2271461,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1Z8abiOkxDmYv4CEIeOIHIjuc_jFr1jKu",
+      "path": "День 1 (04.06)/3 Вечер/лозла/ble_dump_1780589324981_snapshot_csv.csv",
+      "size": 42603597,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1cSNTzYAAFkzclwZUE7GLVFBc5VIynsj3",
+      "path": "День 1 (04.06)/3 Вечер/лозла/ble_dump_1780589324981_snapshot_packet.bin",
+      "size": 8304067,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1Jo1iW3yFp36cBRrafO1qDC0hVdWIC8ch",
+      "path": "День 1 (04.06)/3 Вечер/лозла/ble_log_1780589323540_snapshot_log.log",
+      "size": 120548,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1ZOiTOmaHwgqzGBUoQhYM6Oc9WDKX6Ep4",
+      "path": "День 1 (04.06)/3 Вечер/лозла/ble_raw_1780589323549_snapshot_raw.binlog",
+      "size": 9009149,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1W7Oym5-OTXKShzK790HfyLefQFw7gtnO",
+      "path": "День 1 (04.06)/3 Вечер/лозла/edf/polar_lozla_evening.edf",
+      "size": 194086,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1MFdv65ScCN7KaiOhFUoziqNft_lCifWH",
+      "path": "День 1 (04.06)/3 Вечер/лозла/polar_lozla_evening_annotations.csv",
+      "size": 16284,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1RBeORIixThWRD0qJrjbgUxmCT8xe6xPq",
+      "path": "День 1 (04.06)/3 Вечер/лозла/разметка_вдохов_2026-06-04-18-08-43-915.csv",
+      "size": 18456,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "179GMo_2skBO-F2PnwuO-hhMtf3RnuBld",
+      "path": "День 1 (04.06)/3 Вечер/патрик/4 июн. 2026 г., 18_51_33-1.csv",
+      "size": 2290585,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1bfeaU9Pd1ryMCxw5zNjIeM-YUou6udOT",
+      "path": "День 1 (04.06)/3 Вечер/патрик/ble_dump_1780591891493_snapshot_csv.csv",
+      "size": 44620297,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1m2KVSGCaHNaUgtMYE9MaZm-k3vbkdFUu",
+      "path": "День 1 (04.06)/3 Вечер/патрик/ble_dump_1780591891493_snapshot_packet.bin",
+      "size": 8612895,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "10HHed-dy9JEZEtcFL-Ai-OLDk_btEYj6",
+      "path": "День 1 (04.06)/3 Вечер/патрик/ble_log_1780591882186_snapshot_log.log",
+      "size": 125843,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1zlestQfwvLPekaAaUnu0lmlbgC6C2hcV",
+      "path": "День 1 (04.06)/3 Вечер/патрик/ble_raw_1780591891492_snapshot_raw.binlog",
+      "size": 9327803,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1AYtBR4dMC3BihfxQyXVeFIuKi_9u3eFS",
+      "path": "День 1 (04.06)/3 Вечер/патрик/edf/polar_patrik_evening.edf",
+      "size": 194688,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1y6ZqCn4uJXbiTB9Ce4ypHwaipE6J96qE",
+      "path": "День 1 (04.06)/3 Вечер/патрик/polar_patrik_evening_annotations.csv",
+      "size": 15847,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "19dclbwOOOdxcKqa4CTkHFy_lKoPKlfWf",
+      "path": "День 1 (04.06)/3 Вечер/патрик/разметка_вдохов_2026-06-04-18-51-34-393.csv",
+      "size": 12948,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1YYqkQuzCzCRCou4JZnx3C0JhNlm-AZqY",
+      "path": "День 1 (04.06)/3 Вечер/яра/4 июн. 2026 г., 17_47_14-1.csv",
+      "size": 2970548,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1SOUIn0r0yP_Jz8xpunCZcSj8KG7kGWpC",
+      "path": "День 1 (04.06)/3 Вечер/яра/ble_dump_1780588202463_snapshot_csv.csv",
+      "size": 43356019,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1CjX_8OUb9XTdkoZx51-dJtSOctVJO0PV",
+      "path": "День 1 (04.06)/3 Вечер/яра/ble_dump_1780588202463_snapshot_packet.bin",
+      "size": 8458298,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "10QSKNOlgPkovQak0LZZODNCdhnWvN9zQ",
+      "path": "День 1 (04.06)/3 Вечер/яра/ble_log_1780588200963_snapshot_log.log",
+      "size": 123503,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1u9dR5NOx0QnXcYf7sakzBXL3IgQP9oZI",
+      "path": "День 1 (04.06)/3 Вечер/яра/ble_raw_1780588200975_snapshot_raw.binlog",
+      "size": 9205996,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1EJf7cq8xEdl3Z7lfNkQ4kMH8kvrtwY3n",
+      "path": "День 1 (04.06)/3 Вечер/яра/edf/polar_yara_evening.edf",
+      "size": 264408,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1XVasjTd-MpufA5CVA7v92GbcBNWv0MV9",
+      "path": "День 1 (04.06)/3 Вечер/яра/polar_yara_evening_annotations.csv",
+      "size": 27779,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1veBwb3IzsXQMCjIiWtRvv5YILwvL8tfL",
+      "path": "День 1 (04.06)/3 Вечер/яра/разметка_вдохов_2026-06-04-17-50-06-518.csv",
+      "size": 19231,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1XoD2LS4oq2T-csaXFKPpraJr2FwkV32j",
+      "path": "день 10 (03.07)/лозла/ble_dump_1783078683271_snapshot_csv.csv",
+      "size": 269858677,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1R9RYFLNnGN61a8c6txNVqWPTI7MOtzz4",
+      "path": "день 10 (03.07)/лозла/ble_dump_1783078683271_snapshot_packet.bin",
+      "size": 53475343,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1A0egS31v0CAtiNptAkzu_mhGfnyOKzXB",
+      "path": "день 10 (03.07)/лозла/ble_log_1783078683271_snapshot_log.log",
+      "size": 937172,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "14qSJWcLHP1Ju7g0M8RKQXe8Fka3mTOX_",
+      "path": "день 10 (03.07)/лозла/ble_raw_1783078683271_snapshot_raw.binlog",
+      "size": 57898215,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1Mhi4tNGGXLQwmuid9yIPpMITK9LL-haI",
+      "path": "день 10 (03.07)/лозла/polar_h10_лозла_2026-07-03-13-38-02-970_annotations.csv",
+      "size": 85901,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1e9zZCLPcadxqpfgopysW8kA2MvrHWchT",
+      "path": "день 10 (03.07)/лозла/разметка_дыхания_2канала_2026-07-03-13-38-04-920.csv",
+      "size": 90981,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "15Q_HgBffgzDKNG9FhFh9CiDlnhGBLRp4",
+      "path": "день 10 (03.07)/патрик/ble_dump_1783073585777_snapshot_csv.csv",
+      "size": 340967278,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "12d61MKlUWJMv0RrS4_zATRwhMPfcx0_9",
+      "path": "день 10 (03.07)/патрик/ble_dump_1783073585777_snapshot_packet.bin",
+      "size": 65401245,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1Ma8QIY45169uyDAxD7sTW-YPxkbanwYv",
+      "path": "день 10 (03.07)/патрик/ble_log_1783073585777_snapshot_log.log",
+      "size": 1160038,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1H7k8qyQiAaoPZFOu80qs9IdE1sYeLmma",
+      "path": "день 10 (03.07)/патрик/ble_raw_1783073585777_snapshot_raw.binlog",
+      "size": 70818201,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1BEaVX5RDkclamZKlXrOsnaXnc6soxjWP",
+      "path": "день 10 (03.07)/патрик/polar_h10_Патрик_2026-07-03-12-13-05-562_annotations.csv",
+      "size": 99163,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1PfNhEo9c7PIieioH5kmnDP93V3mFTHMZ",
+      "path": "день 10 (03.07)/патрик/разметка_дыхания_2канала_2026-07-03-12-13-05-763.csv",
+      "size": 41119,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1j8hnJzNGaOlC7HpfnWuyXT9Mf3TwhqhM",
+      "path": "День 11 (04.07)/Лозла/ble_dump_1783164757594_snapshot_csv.csv",
+      "size": 240185335,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1fmcsUsnuc83HyjfJDwtcNA9GEVnNA1dE",
+      "path": "День 11 (04.07)/Лозла/ble_dump_1783164757594_snapshot_packet.bin",
+      "size": 47914256,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1UKgRWU6b_wl4Ar1Y6LvXutjogFG7sMyN",
+      "path": "День 11 (04.07)/Лозла/ble_log_1783164757594_snapshot_log.log",
+      "size": 1092891,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1quBAjC_etyak-GfaM6GbyA0hzvBuZ_GB",
+      "path": "День 11 (04.07)/Лозла/ble_raw_1783164757594_snapshot_raw.binlog",
+      "size": 51884415,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1M7MrG8bh9z-84k5N7a-Bw9pJ61aDQUJQ",
+      "path": "День 11 (04.07)/Лозла/polar_lozla_0407_annotations.csv",
+      "size": 83620,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1Vhan82KPU9uPnxwe73Jq7M3IZqmflydU",
+      "path": "День 11 (04.07)/Лозла/разметка_дыхания_2канала_2026-07-04-13-32-37-403.csv",
+      "size": 42022,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1jwbUOCJZOLTK4dyfYKMolHQKZgVmvvzS",
+      "path": "День 11 (04.07)/Птарик/ble_dump_1783161260090_snapshot_csv.csv",
+      "size": 227246554,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "14dIe5r4olzZaBtTmytRIdWzVDN7nYrZ2",
+      "path": "День 11 (04.07)/Птарик/ble_dump_1783161260090_snapshot_packet.bin",
+      "size": 43710721,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1OCxgajsSJf_ank6f4OKFHvVr9ezNudQJ",
+      "path": "День 11 (04.07)/Птарик/ble_log_1783161260090_snapshot_log.log",
+      "size": 713982,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1qTmrD0dCQ3cLIQBM0EUS4pGAlaaw97sb",
+      "path": "День 11 (04.07)/Птарик/ble_raw_1783161260090_snapshot_raw.binlog",
+      "size": 47333102,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1gWbhofuCEj5PePnii7QkspDtN3ZIxa-o",
+      "path": "День 11 (04.07)/Птарик/polar_patrik_2026-07-04_annotations.csv",
+      "size": 83278,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1_XrQtqtnius6eu2S4cLbS6_kJQkqPKv0",
+      "path": "День 11 (04.07)/Птарик/разметка_дыхания_2канала_2026-07-04-12-34-20-034.csv",
+      "size": 33345,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "13-WsfWfJTYdV4B2PJDgmxRhhuEp0GLGP",
+      "path": "День 12 (09,07)/Лозла/ble_dump_1783621433669_snapshot_csv.csv",
+      "size": 520477945,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1m__ZTCcGnM0bmzqo9pbvHtbqhAjD1KO3",
+      "path": "День 12 (09,07)/Лозла/ble_dump_1783621433669_snapshot_packet.bin",
+      "size": 101089032,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1qRd6i8syxwXTHhvaNnaDgl9gXxjSxLYU",
+      "path": "День 12 (09,07)/Лозла/ble_log_1783621433669_snapshot_log.log",
+      "size": 2011489,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1ssmqVdVede8fD2bWSH3C84o6lKJ6k_Ku",
+      "path": "День 12 (09,07)/Лозла/ble_raw_1783621433669_snapshot_raw.binlog",
+      "size": 109457666,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1GwIzl82oEMqfAI5OD76ZbBWOJHz9LB33",
+      "path": "День 12 (09,07)/Лозла/polar_h10_лозла_2026-07-09-20-23-53_annotations.csv",
+      "size": 182174,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1AS4Ho0YfO1dOWInlrRB87UmicOQPZe4I",
+      "path": "День 12 (09,07)/Лозла/разметка_дыхания_2канала_2026-07-09-20-23-53-620.csv",
+      "size": 195478,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1G9E66LxY7op-vVvk7_hlSB_rkpFixI4R",
+      "path": "День 12 (09,07)/патрик/ble_dump_1783595183795_snapshot_csv.csv",
+      "size": 497399372,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1Ot9ybnvYxiD-28FMy3mJPpRzPasBKAsm",
+      "path": "День 12 (09,07)/патрик/ble_dump_1783595183795_snapshot_packet.bin",
+      "size": 96813334,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1fYmwjfUSEkiCjFUUlLAMnIcK8d82P6jU",
+      "path": "День 12 (09,07)/патрик/ble_log_1783595183795_snapshot_log.log",
+      "size": 2111621,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1BIqtk-a8EaVNkiTZLaM1sesFnb5Xm6qW",
+      "path": "День 12 (09,07)/патрик/ble_raw_1783595183795_snapshot_raw.binlog",
+      "size": 104835717,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1I-HrW5ZbWpJ7FVaEW0s9e9f5CrJQbxfI",
+      "path": "День 12 (09,07)/патрик/polar_h10_патрик_2026-07-09-13-06-23_annotations.csv",
+      "size": 164409,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1zGBM3BD3sGzEkpBre9ZReqDgQGGTwfuO",
+      "path": "День 12 (09,07)/патрик/разметка_дыхания_2канала_2026-07-09-13-06-23-622.csv",
+      "size": 69087,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "197TFDaoDqPgQTkDBTpx5croQb7h_MaCY",
+      "path": "День 13 (10.07)/лозла/ble_dump_1783709073673_snapshot_csv.csv",
+      "size": 400470192,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1tWtG-zsxz_JXdDWyda10NSXho2DAesJs",
+      "path": "День 13 (10.07)/лозла/ble_dump_1783709073673_snapshot_packet.bin",
+      "size": 76241620,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1ZWt9qoaBhVr0nLDyKSxolqO_bJ56efc_",
+      "path": "День 13 (10.07)/лозла/ble_log_1783709073673_snapshot_log.log",
+      "size": 1716871,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "19JYUEU4356BCoXXHFYmqfhgxHSR9EmEx",
+      "path": "День 13 (10.07)/лозла/ble_raw_1783709073673_snapshot_raw.binlog",
+      "size": 82551478,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "19ewCaRpQUGwJvZqDtiru5EPQcS4c6H1u",
+      "path": "День 13 (10.07)/лозла/polar_h10_лозла_2026-07-10-20-44-33_annotations.csv",
+      "size": 138094,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1_uOSl7rnkJU0vsRi64fZrrDSYh-VvIrk",
+      "path": "День 13 (10.07)/лозла/разметка_дыхания_2канала_2026-07-10-20-44-33-636.csv",
+      "size": 239570,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1QhY7LkPW9XjU8LEJNP6fmA7qVUHAnKQl",
+      "path": "День 13 (10.07)/патрик/ble_dump_1783690641664_snapshot_csv.csv",
+      "size": 104968094,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1xTFKVF8-WCs84ApZiPzpwXLmRCYSz_8c",
+      "path": "День 13 (10.07)/патрик/ble_dump_1783690641664_snapshot_packet.bin",
+      "size": 20166112,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1q86fQKusrIIDYUaS61sfKvcKMdZb4FfC",
+      "path": "День 13 (10.07)/патрик/ble_log_1783690641664_snapshot_log.log",
+      "size": 341758,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "11ml7khw2jfK02Cydpl3KqFbt1vj_19sD",
+      "path": "День 13 (10.07)/патрик/ble_raw_1783690641664_snapshot_raw.binlog",
+      "size": 21844928,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1skcE1nL4SCNb333VrQhxhVNBu9g2lqie",
+      "path": "День 13 (10.07)/патрик/polar_h10_gfnhbr_2026-07-10-15-37-21_annotations.csv",
+      "size": 32188,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1WtWf8wX_X2hK4C27ykfpNEmQ-nhvk_c-",
+      "path": "День 13 (10.07)/патрик/разметка_дыхания_2канала_2026-07-10-15-37-21-456.csv",
+      "size": 14442,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1os257S64TYAUQW4MXVH0nvQslvCGJjoq",
+      "path": "День 14 (11.07)/Патрик/ble_dump_1783772033360_snapshot_csv.csv",
+      "size": 222940369,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1cmV7kMKEsudgu3Q1FvSXq5BcuhW7cTkM",
+      "path": "День 14 (11.07)/Патрик/ble_dump_1783772033360_snapshot_packet.bin",
+      "size": 44215408,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1FUF2Z81ghaDFgx7P19uoYCOFdFFW2OZ9",
+      "path": "День 14 (11.07)/Патрик/ble_log_1783772033360_snapshot_log.log",
+      "size": 799252,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1_fqtOdn-bQPn5cEcDsCQMsj9Laa9EpRm",
+      "path": "День 14 (11.07)/Патрик/ble_raw_1783772033360_snapshot_raw.binlog",
+      "size": 47892452,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1A3qkZV1BUqtqRtmcB0ir_lpfkapJqjeC",
+      "path": "День 14 (11.07)/Патрик/polar_h10_Патрик_2026-07-11-14-13-53_annotations.csv",
+      "size": 73418,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1iJRIPaNxRV8FfxVjmYRx8j6UV6z69o4Y",
+      "path": "День 14 (11.07)/Патрик/разметка_дыхания_2канала_2026-07-11-14-13-53-205.csv",
+      "size": 67174,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1qAQadI9o2cFLEj9jJoFicoTvEa-YpsH2",
+      "path": "День 15 (13.07)/джена/ble_dump_1784476584620_snapshot_csv.csv",
+      "size": 174268347,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1jgaOtInOmtfs0QSrG7WU54pmFq8ou5e8",
+      "path": "День 15 (13.07)/джена/ble_dump_1784476584620_snapshot_packet.bin",
+      "size": 32888689,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1Ztis7I1Y9_qidWsTios3Ly5kajjpfR-1",
+      "path": "День 15 (13.07)/джена/ble_log_1784476584620_snapshot_log.log",
+      "size": 615021,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "15uLzOpmTlbbzj6l6CjK-a34TDMuuvgo4",
+      "path": "День 15 (13.07)/джена/ble_raw_1784476584620_snapshot_raw.binlog",
+      "size": 35619728,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1DfhR7uLlCPRHUpHkVOEW3H1mYkHN2up3",
+      "path": "День 15 (13.07)/джена/polar_h10_Дженна_2026-07-19-17-56-24_clean_annotations.csv",
+      "size": 60935,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1uYsRb6J1r2lF02bLCm5xMIpXp0ZTF32Y",
+      "path": "День 15 (13.07)/джена/разметка_дыхания_2канала_2026-07-19-17-56-07-874.csv",
+      "size": 12203,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "18kJ3msJm1f36CK1j_npgnUYsFcx2hQ7J",
+      "path": "День 15 (13.07)/патрик/ble_dump_1783937727142_snapshot_csv.csv",
+      "size": 180432787,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1TqY3V7X2shJV6eNs62k7HGv1EuNyBroQ",
+      "path": "День 15 (13.07)/патрик/ble_dump_1783937727142_snapshot_packet.bin",
+      "size": 35508476,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1ssSyi3PEpanJOoCcKauD-PQOdPhHdNJb",
+      "path": "День 15 (13.07)/патрик/ble_log_1783937727142_snapshot_log.log",
+      "size": 579940,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1N6UEjL0McsimEShS519oqSovyzfxOMft",
+      "path": "День 15 (13.07)/патрик/ble_raw_1783937727142_snapshot_raw.binlog",
+      "size": 38456945,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "18hTcTpoWD8-D7tJjnih1llV4T6IojNR9",
+      "path": "День 15 (13.07)/патрик/polar_h10_патриик_2026-07-13-12-15-27_clean_annotations.csv",
+      "size": 60517,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "12JqDNWousueLI1ZQELe7_B-DPJvA06e3",
+      "path": "День 15 (13.07)/патрик/разметка_дыхания_2канала_2026-07-13-12-15-27-071.csv",
+      "size": 33507,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1AH36wpmJ12JlKPVzuGYQVljEZ2urbVcM",
+      "path": "День 15 (13.07)/Слива/ble_dump_1783936781744_snapshot_csv.csv",
+      "size": 31639133,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "12LGWgIpjb_Hal_k--NHe8N0-uR-75NYu",
+      "path": "День 15 (13.07)/Слива/ble_dump_1783936781744_snapshot_packet.bin",
+      "size": 5423786,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1GMCxPTUUzc4lWdKTDRCW-uql-y4eb4mh",
+      "path": "День 15 (13.07)/Слива/ble_log_1783936781744_snapshot_log.log",
+      "size": 132862,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1SR6HVZ0jFIhcwDv-l8uVKTW6vIzsKGrx",
+      "path": "День 15 (13.07)/Слива/ble_raw_1783936781744_snapshot_raw.binlog",
+      "size": 5885444,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1CRuXHoh35FHgvyzEqSAJgYtReAImwXC2",
+      "path": "День 15 (13.07)/Слива/polar_h10_Слива_2026-07-13-12-59-41-463_annotations.csv",
+      "size": 12466,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "19UDel8RnvBj2N_ZvSAOcgmJlCf5SAuiG",
+      "path": "День 15 (13.07)/Слива/разметка_дыхания_2канала_2026-07-13-11-59-41-579.csv",
+      "size": 4076,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1dQyKlJjzyBCZ9a_OuXwLZQKHnGpMrKuc",
+      "path": "день 17 (12.08)/патрик/ble_dump_1786527524599_snapshot_csv.csv",
+      "size": 477087444,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1qUrpWaoeZEbrHrtQPV4lo4ydPDem2JNv",
+      "path": "день 17 (12.08)/патрик/ble_dump_1786527524599_snapshot_packet.bin",
+      "size": 91216821,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1baxHh_7gbibwp7CeocpUgjFhNYppiopw",
+      "path": "день 17 (12.08)/патрик/ble_log_1786527524599_snapshot_log.log",
+      "size": 1568957,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1knadzm4_ZEfzPahBGvQ-MmwqrzH6egby",
+      "path": "день 17 (12.08)/патрик/ble_raw_1786527524599_snapshot_raw.binlog",
+      "size": 98774616,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1FtV56AFxv5KoC0vfA3rTK7AMdJLGlQIo",
+      "path": "день 17 (12.08)/патрик/polar_h10_патрик_2026-08-12-11-38-44-068_reviewed_R.csv",
+      "size": 134665,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1hawvzjeAz35IhmkgbH11IU9oOcLnnb8C",
+      "path": "день 17 (12.08)/патрик/разметка_дыхания_2канала_2026-08-12-11-38-44-517.csv",
+      "size": 77819,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1ufcxJrWMcr_7r0J-VbL6KYgtCWvOkLl2",
+      "path": "день 18(14.08)/Лозла/ble_dump_1786704590705_snapshot_csv.csv",
+      "size": 196097709,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1mR_QBlk3DvXiFHzT6lAvwGX7hUWUD-6m",
+      "path": "день 18(14.08)/Лозла/ble_dump_1786704590705_snapshot_packet.bin",
+      "size": 39041578,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1ogOiTmVoZyZYPLRWecZeagJPwnD27WGn",
+      "path": "день 18(14.08)/Лозла/ble_log_1786704590705_snapshot_log.log",
+      "size": 671914,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1qdaI-z4RNdCUtmLOZz6vE8a618_3FdBE",
+      "path": "день 18(14.08)/Лозла/ble_raw_1786704590705_snapshot_raw.binlog",
+      "size": 42288367,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1O7rSNIbe4XwwGmGi488KN5KsiUIh76dP",
+      "path": "день 18(14.08)/Лозла/polar_h10_лозла_2026-08-14-12-49-49-781_reviewed_R.csv",
+      "size": 76985,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1wLuHLXfw83igAASGlN9cX39shYQth_W-",
+      "path": "день 18(14.08)/Лозла/разметка_дыхания_2канала_2026-08-14-12-49-50-564.csv",
+      "size": 21020,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1hu03nZXZHUN9_WzEYT5vVmF7ab-8oEcz",
+      "path": "день 18(14.08)/патрик/вечер/ble_dump_1786723647539_snapshot_csv.csv",
+      "size": 132529328,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1W5KZaqxdrdUHCT1aGr1cD791_UFK3zic",
+      "path": "день 18(14.08)/патрик/вечер/ble_dump_1786723647539_snapshot_packet.bin",
+      "size": 27616238,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1bqu0uSiRVTFVHNWwkbTwXy_B_K8CffFJ",
+      "path": "день 18(14.08)/патрик/вечер/ble_log_1786723647539_snapshot_log.log",
+      "size": 473307,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1d26AGC_sbIMfc2wFFFn92fcMi4Z7YgXf",
+      "path": "день 18(14.08)/патрик/вечер/ble_raw_1786723647539_snapshot_raw.binlog",
+      "size": 29904633,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "19iVd55FvFRb5dWZGrsXNtT2m_axuBZGR",
+      "path": "день 18(14.08)/патрик/вечер/polar_h10_патрик_2026-08-14-18-07-26-932_reviewed_R.csv",
+      "size": 34765,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1dRImnpvumqOfcFqv1bP5n1IT__9xWRIG",
+      "path": "день 18(14.08)/патрик/вечер/разметка_дыхания_2канала_2026-08-14-18-07-28-334.csv",
+      "size": 20890,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1agGXFg6EVBOHHhXFpPt2TEzmCK2l5CN4",
+      "path": "день 18(14.08)/патрик/утро/ble_dump_1786701821525_snapshot_csv.csv",
+      "size": 146649210,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1rCWehfitfQs-dFUawawQ4iYSuW9FZHF8",
+      "path": "день 18(14.08)/патрик/утро/ble_dump_1786701821525_snapshot_packet.bin",
+      "size": 29115879,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "17nqS0LwsCexMXYBz7m1CUrW1xWd1SxNu",
+      "path": "день 18(14.08)/патрик/утро/ble_log_1786701821525_snapshot_log.log",
+      "size": 494305,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1tW8Lq3LwqNuEq__L0k0-Y6Z3_feyIU2Q",
+      "path": "день 18(14.08)/патрик/утро/ble_raw_1786701821525_snapshot_raw.binlog",
+      "size": 31527123,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1uY7ZOJmRIVIYNP5hJ_1vAx28cnK7d-f1",
+      "path": "день 18(14.08)/патрик/утро/polar_h10_патрик_2026-08-14-12-03-40-383_reviewed_R.csv",
+      "size": 47790,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "12TxMcyNWwENZ7Q9VqYuVTQriy0IfcIav",
+      "path": "день 18(14.08)/патрик/утро/разметка_дыхания_2канала_2026-08-14-12-03-41-476.csv",
+      "size": 61336,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "15zuv35wKra3taM6pNP0MekL35SomeFyk",
+      "path": "День 2 (05.06)/3 Вечер/джена/5 июн. 2026 г., 17_26_41-1.csv",
+      "size": 2206397,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1nk0JD_-BrKTa73AQJn-h3mH62Jd7dU6h",
+      "path": "День 2 (05.06)/3 Вечер/джена/ble_dump_1780673206590_snapshot_csv.csv",
+      "size": 44647637,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1R_uHXJyn0vfdNfI0PS0-eTbZwqXetYhR",
+      "path": "День 2 (05.06)/3 Вечер/джена/ble_dump_1780673206590_snapshot_packet.bin",
+      "size": 8262020,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1EUoALDBkiFFGpDKFLZWRMR0CGlKxo6-I",
+      "path": "День 2 (05.06)/3 Вечер/джена/ble_log_1780673204882_snapshot_log.log",
+      "size": 120864,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1PqRGBNyxqc9es-TOvnLX2NWbWnZn_LdS",
+      "path": "День 2 (05.06)/3 Вечер/джена/ble_raw_1780673204893_snapshot_raw.binlog",
+      "size": 9011291,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1J1OQCxW48yP1ywPQYXvEO8A3XazSgtY0",
+      "path": "День 2 (05.06)/3 Вечер/джена/edf/polar_jena_0506.edf",
+      "size": 190578,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1gxthHeHgr97WBW3uepsie9YCOzX10llJ",
+      "path": "День 2 (05.06)/3 Вечер/джена/polar_jena_0506_annotations.csv",
+      "size": 18108,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1Plj4DM7mvJvMxOGUNi_tz8w2KuOmmCLL",
+      "path": "День 2 (05.06)/3 Вечер/джена/разметка_вдохов_2026-06-05-17-26-48-045.csv",
+      "size": 25225,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1EZ1YHpbKK6vxT-hoEelYybBfj3YSQrOQ",
+      "path": "День 2 (05.06)/3 Вечер/лозла/5 июн. 2026 г., 17_08_45-1.csv",
+      "size": 2561864,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1Bt241bGO47ASCyF7bcET1mUzuHi8Cxka",
+      "path": "День 2 (05.06)/3 Вечер/лозла/ble_dump_1780672127625_snapshot_csv.csv",
+      "size": 46003783,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "15I8YtfvxrB7iYuJbdx4poF716vN4yiKl",
+      "path": "День 2 (05.06)/3 Вечер/лозла/ble_dump_1780672127625_snapshot_packet.bin",
+      "size": 8738896,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1e7gnr_G-C4no_hgZsk4X647aMflX140E",
+      "path": "День 2 (05.06)/3 Вечер/лозла/ble_log_1780672125801_snapshot_log.log",
+      "size": 128691,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1wJ8UKufocPfOoMVlK_y3U-VfHU8kzRvt",
+      "path": "День 2 (05.06)/3 Вечер/лозла/ble_raw_1780672125810_snapshot_raw.binlog",
+      "size": 9591270,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1ZJxeseKu9G3iefGNy6nA16DsXiwfEM47",
+      "path": "День 2 (05.06)/3 Вечер/лозла/edf/polar_lozla_0506.edf",
+      "size": 205496,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "14gMjiRkjnLPfV2OoEf71QyMtYqkFvFJJ",
+      "path": "День 2 (05.06)/3 Вечер/лозла/polar_lozla_0506_annotations.csv",
+      "size": 15752,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1_splpSCaW0dlHTFqfI4G4SQASgE_NPs0",
+      "path": "День 2 (05.06)/3 Вечер/лозла/разметка_вдохов_2026-06-05-17-09-08-147.csv",
+      "size": 18397,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1gzvpWFdKeNfN52U-Mjtsxq-C3DSPXtX1",
+      "path": "День 2 (05.06)/3 Вечер/патрик/5 июн. 2026 г., 17_48_48-1.csv",
+      "size": 2629377,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "182PXz-3BxjihJcYtLiCiEpSAeSBSw1EX",
+      "path": "День 2 (05.06)/3 Вечер/патрик/ble_dump_1780674530543_snapshot_csv.csv",
+      "size": 49804282,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1rBZM-MVkXEi-V6_FKs4wIwMfoCO1Nlt6",
+      "path": "День 2 (05.06)/3 Вечер/патрик/ble_dump_1780674530543_snapshot_packet.bin",
+      "size": 9342116,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1IJs8vXA8V4uPUdFtjtZzNReUqIzJXgg4",
+      "path": "День 2 (05.06)/3 Вечер/патрик/ble_log_1780674529440_snapshot_log.log",
+      "size": 135675,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1s7PdRi73yk78Sn5-QobPsH5flUk3dEy7",
+      "path": "День 2 (05.06)/3 Вечер/патрик/ble_raw_1780674529450_snapshot_raw.binlog",
+      "size": 10117990,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1pGTc1YhCuQ9JYTPaOgplyYm9f30YABn7",
+      "path": "День 2 (05.06)/3 Вечер/патрик/edf/polar_patrik_0506.edf",
+      "size": 217232,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1fh3wBUMo4AS0_V6YxZPdwbZNu_C2rTqn",
+      "path": "День 2 (05.06)/3 Вечер/патрик/polar_patrik_0506_annotations.csv",
+      "size": 21319,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1WcGFNSWTKJRZrmxp3mctIuKIxp3NqjyR",
+      "path": "День 2 (05.06)/3 Вечер/патрик/разметка_вдохов_2026-06-05-17-49-51-423.csv",
+      "size": 17469,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1Fq8SapLz-SZ_3zmrPkPAXwB75FgafUDi",
+      "path": "День 2 (05.06)/3 Вечер/яра/5 июн. 2026 г., 16_46_33-1.csv",
+      "size": 2712127,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1f54FdijqWFCki_aq1oi3Zz69E-PsAQO7",
+      "path": "День 2 (05.06)/3 Вечер/яра/ble_dump_1780670791843_snapshot_csv.csv",
+      "size": 51136058,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1uxUVlwrDhck5wg2jKHYjfgzicSSLfc85",
+      "path": "День 2 (05.06)/3 Вечер/яра/ble_dump_1780670791843_snapshot_packet.bin",
+      "size": 9987355,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "13lAWAkRlo3y_I3C4j1qoio75y2_WAFmt",
+      "path": "День 2 (05.06)/3 Вечер/яра/ble_log_1780670780312_snapshot_log.log",
+      "size": 147979,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1_GKDjzPx-DASBHU71j1ggBEMRTJ2nGwX",
+      "path": "День 2 (05.06)/3 Вечер/яра/ble_raw_1780670791841_snapshot_raw.binlog",
+      "size": 11052598,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1wvGvTuy4KclHOAtAM7FilhLh6iSEcyho",
+      "path": "День 2 (05.06)/3 Вечер/яра/edf/polar_yara_0506.edf",
+      "size": 222304,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1FNJTUTICDcUeEnJfleBU2OgZcIKcFFCC",
+      "path": "День 2 (05.06)/3 Вечер/яра/polar_yara_0506_annotations.csv",
+      "size": 21737,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1RTF07KjjMZnAt5gJnpCxUoW1JIEpcELR",
+      "path": "День 2 (05.06)/3 Вечер/яра/разметка_вдохов_2026-06-05-16-46-35-774.csv",
+      "size": 29213,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1_JuamkoEGC6O5EAyI2OlW3EM881Hsh5c",
+      "path": "День 3 (07.06)/2 День/джена/7 июн. 2026 г., 12_49_55-1.csv",
+      "size": 2661019,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1LFXCZmkpKm19z7yoaljttUMezw2eyCAY",
+      "path": "День 3 (07.06)/2 День/джена/ble_dump_1780829396296_snapshot_csv.csv",
+      "size": 50810242,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1BNcb9FJkkqxpoj7-7BaCnGzp48m3zXQ7",
+      "path": "День 3 (07.06)/2 День/джена/ble_dump_1780829396296_snapshot_packet.bin",
+      "size": 9510507,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1WTqS9cg8KsBt21Y5GUqqscJs5PeJO6ms",
+      "path": "День 3 (07.06)/2 День/джена/ble_log_1780829395075_snapshot_log.log",
+      "size": 139331,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1hbI32NJy6jklqdRGWPdNurQD7ndJ_iBJ",
+      "path": "День 3 (07.06)/2 День/джена/ble_raw_1780829395075_snapshot_raw.binlog",
+      "size": 10302946,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1xe3CsuDP-20sx_8VPkSQx5bp11hkVyCn",
+      "path": "День 3 (07.06)/2 День/джена/edf/polar_jena_0706.edf",
+      "size": 220608,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1YPP1KQ2bGPO-9yZ91XCdVlKF2U1C24rM",
+      "path": "День 3 (07.06)/2 День/джена/polar_jena_0706_annotations.csv",
+      "size": 14365,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1fxHgrzU_x1axqSpvV9nXwIf3bZCFlF15",
+      "path": "День 3 (07.06)/2 День/джена/разметка_вдохов_2026-06-07-12-51-04-664.csv",
+      "size": 40810,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1VpvT7CL6zmTXHA10Tlch0p2DEB55osRC",
+      "path": "День 3 (07.06)/2 День/лозла/7 июн. 2026 г., 13_24_11-1.csv",
+      "size": 1719538,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1bdaHPK8LFJ5elvPaqak2-UsDnnMRc0to",
+      "path": "День 3 (07.06)/2 День/лозла/ble_dump_1780831457227_snapshot_csv.csv",
+      "size": 32484873,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1xifGPvDxn2QR_v5v2Uq8jZBwL_3V1WW2",
+      "path": "День 3 (07.06)/2 День/лозла/ble_dump_1780831457227_snapshot_packet.bin",
+      "size": 6256063,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1xFJK0PfFqjAqEPnBPUl9axsUkJWxwcfG",
+      "path": "День 3 (07.06)/2 День/лозла/ble_log_1780831455423_snapshot_log.log",
+      "size": 92272,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1yjU7h-Ap8s8oSp6Xc5HNi-lp9yswO-NI",
+      "path": "День 3 (07.06)/2 День/лозла/ble_raw_1780831455423_snapshot_raw.binlog",
+      "size": 6799706,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "15zTYvEEmOeUEJUhm5Gp5fHDk9dr51vB5",
+      "path": "День 3 (07.06)/2 День/лозла/edf/polar_lozla_0706.edf",
+      "size": 145024,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1Yx-t_HaD24uVGE5TfmqqOXknJD0EAUXv",
+      "path": "День 3 (07.06)/2 День/лозла/polar_lozla_0706_annotations.csv",
+      "size": 10831,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1rDwQraTsMe8zW9pnhJ5tu3h4jR3-C7Sy",
+      "path": "День 3 (07.06)/2 День/лозла/разметка_вдохов_2026-06-07-13-24-11-578.csv",
+      "size": 16582,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1WfwqCEGwIlpm6pCv1Y49j9jzAfAcW18j",
+      "path": "День 3 (07.06)/2 День/патрик/7 июн. 2026 г., 12_33_29-1.csv",
+      "size": 2330131,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1xrUT7utX1ao_SClIXW6flr848MjE8XND",
+      "path": "День 3 (07.06)/2 День/патрик/ble_dump_1780828428322_snapshot_csv.csv",
+      "size": 44476444,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1M7_Vs3xzDtu-uj1f1xmlYLLtqgnXMQYj",
+      "path": "День 3 (07.06)/2 День/патрик/ble_dump_1780828428322_snapshot_packet.bin",
+      "size": 8528604,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1wz00mqGO6zgErCjSmK67Ohjx2gTJmbg7",
+      "path": "День 3 (07.06)/2 День/патрик/ble_log_1780828427174_snapshot_log.log",
+      "size": 125016,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1ckL-AsH4nvjn1GMiQelJQ6alBaeMnRwX",
+      "path": "День 3 (07.06)/2 День/патрик/ble_raw_1780828427182_snapshot_raw.binlog",
+      "size": 9246703,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1sJf_a06zmf0LkawSCk9uZFQH01aBIvOB",
+      "path": "День 3 (07.06)/2 День/патрик/edf/polar_patrik_0706.edf",
+      "size": 204582,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1jKL8jJMYg_01NG95swhzd_HjKCAiq0RE",
+      "path": "День 3 (07.06)/2 День/патрик/polar_patrik_0706_annotations.csv",
+      "size": 14688,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "155OmYTTeNeDncHjRRXv65gDzauzEKkWh",
+      "path": "День 3 (07.06)/2 День/патрик/разметка_вдохов_2026-06-07-12-33-50-377.csv",
+      "size": 14421,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1HTJ3EI9h1Fc44YqrygQ4g7kKp7OVs292",
+      "path": "День 3 (07.06)/2 День/яра/7 июн. 2026 г., 12_12_14-1.csv",
+      "size": 1901080,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1kjBMXidMeBS5BbnSRzbBLqsIj-H31DFq",
+      "path": "День 3 (07.06)/2 День/яра/ble_dump_1780827140379_snapshot_csv.csv",
+      "size": 29220476,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1K2FlIaiOS6H4vO8eJS_fVYW6T7NhFNDJ",
+      "path": "День 3 (07.06)/2 День/яра/ble_dump_1780827140379_snapshot_packet.bin",
+      "size": 5891434,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1cy0kRa3-hhTNo_PSIAvGHblFW-G8JDTx",
+      "path": "День 3 (07.06)/2 День/яра/ble_log_1780827139313_snapshot_log.log",
+      "size": 86508,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1x1P1aWiRDLMPec_7dZn6EzRF8Od6PnBI",
+      "path": "День 3 (07.06)/2 День/яра/ble_raw_1780827139314_snapshot_raw.binlog",
+      "size": 6403609,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1V6D4O3_HycsevhnI8e8YETzY_eCLNb55",
+      "path": "День 3 (07.06)/2 День/яра/edf/polar_yara_0706.edf",
+      "size": 159530,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1_MTVXUdFYZIfeeE9TxGpCd48TMgl9F1w",
+      "path": "День 3 (07.06)/2 День/яра/polar_yara_0706_annotations.csv",
+      "size": 20198,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "10L21yDB2_25oGXIvxPbcY85ws6MRaVgz",
+      "path": "День 3 (07.06)/2 День/яра/разметка_вдохов_2026-06-07-12-12-15-239.csv",
+      "size": 17831,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1KK6x0-DceyTFZFsw9Gu7rfK6eGCqt8Xv",
+      "path": "День 4 (08.06)/2 День/джена/8 июн. 2026 г., 13_59_05-1.csv",
+      "size": 2390652,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1vGv5WjPa1Z2nZLTdNhm9OaQ8gAOKdZlW",
+      "path": "День 4 (08.06)/2 День/джена/ble_dump_1780919948697_snapshot_csv.csv",
+      "size": 44894068,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1DXt4-UZrLK56dg0mwIZnOkDCE9peIpBJ",
+      "path": "День 4 (08.06)/2 День/джена/ble_dump_1780919948697_snapshot_packet.bin",
+      "size": 8542650,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1LU9HQas1wp5s8sZ4FoF5iS4bB5E6Xb2c",
+      "path": "День 4 (08.06)/2 День/джена/ble_log_1780919938840_snapshot_log.log",
+      "size": 125345,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1aQ138xtCTwUOdwtbR7UvfAuiInln7EEw",
+      "path": "День 4 (08.06)/2 День/джена/ble_raw_1780919948695_snapshot_raw.binlog",
+      "size": 9266413,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "16qyq9OvNItvxZKA-26a836sTa_IfiGDc",
+      "path": "День 4 (08.06)/2 День/джена/edf/polar_jena_0806.edf",
+      "size": 208976,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "15ghTRKqHCUl-icDy3qPjKQYxrbpPvk_h",
+      "path": "День 4 (08.06)/2 День/джена/polar_jena_0806_annotations.csv",
+      "size": 22155,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "18JoqVELtzj-gQzkt6SfiHh07IBcX9lFc",
+      "path": "День 4 (08.06)/2 День/джена/пыхтение_интервалы.txt",
+      "size": 1634,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "13LcE_TDxLWHwY0Ex4t68vem4ksIQ228J",
+      "path": "День 4 (08.06)/2 День/джена/разметка_вдохов_2026-06-08-13-59-13-788.csv",
+      "size": 72592,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1Ats3S1Om-9GBANmuKjC8RpGiUG_OyV29",
+      "path": "День 4 (08.06)/2 День/лозла/8 июн. 2026 г., 14_17_39-1.csv",
+      "size": 2417058,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1xIunWUYxT2fN35iQQvVBbAsAMAZP0xfU",
+      "path": "День 4 (08.06)/2 День/лозла/ble_dump_1780921060261_snapshot_csv.csv",
+      "size": 44519275,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1IHPWmzjMlzfEDazw-1792-3yX1_coXLo",
+      "path": "День 4 (08.06)/2 День/лозла/ble_dump_1780921060261_snapshot_packet.bin",
+      "size": 8767002,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "10lq4WyBfY5YDR7o7U6kuc9BuukPzLItj",
+      "path": "День 4 (08.06)/2 День/лозла/ble_log_1780921058402_snapshot_log.log",
+      "size": 127485,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1uP_4mZ4ZibYeTGihQsUk3ibiiKCsaFMc",
+      "path": "День 4 (08.06)/2 День/лозла/ble_raw_1780921058414_snapshot_raw.binlog",
+      "size": 9564370,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1Z8iVcid6Jys9Japy8aNLYS9WiTyKIG81",
+      "path": "День 4 (08.06)/2 День/лозла/edf/polar_lozla_0806.edf",
+      "size": 211680,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1w4SppXpK3lfxzPDkfeXv-Gt7QrG5v6UL",
+      "path": "День 4 (08.06)/2 День/лозла/polar_lozla_0806_annotations.csv",
+      "size": 16037,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1bakJoIcnXpWpJEzwP7iIcxSSo84l1gLO",
+      "path": "День 4 (08.06)/2 День/лозла/разметка_вдохов_2026-06-08-14-17-48-033.csv",
+      "size": 18241,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1oDBz0fawH6qCnIr4SbDu4i93evDLMF9O",
+      "path": "День 4 (08.06)/2 День/патрик/8 июн. 2026 г., 13_21_17-1.csv",
+      "size": 2616413,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1gpjZ20Rftzeikn85CWSclIWA9pJ1-LEl",
+      "path": "День 4 (08.06)/2 День/патрик/ble_dump_1780917725494_snapshot_csv.csv",
+      "size": 45710050,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "176Gbu6rLpJQ5xkMWcrB1VbBJ27xVwL1U",
+      "path": "День 4 (08.06)/2 День/патрик/ble_dump_1780917725494_snapshot_packet.bin",
+      "size": 8770680,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1C6DHOJyzDI6GeKuBrr6ydArVoAqe8Hzx",
+      "path": "День 4 (08.06)/2 День/патрик/ble_log_1780917724038_snapshot_log.log",
+      "size": 128145,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1TZLK3k-IAftitRgSbB7isNYgzMqSBeum",
+      "path": "День 4 (08.06)/2 День/патрик/ble_raw_1780917724059_snapshot_raw.binlog",
+      "size": 9525018,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1c2GDwVczPGXGm0UFhXJl-6G2DS7XO22c",
+      "path": "День 4 (08.06)/2 День/патрик/edf/polar_patrik_0806.edf",
+      "size": 216186,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1KpmzqKRnKG-uDu2b8Qdxsq-_k6ARnCN3",
+      "path": "День 4 (08.06)/2 День/патрик/polar_patrik_0806_annotations.csv",
+      "size": 14213,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1oH9X697Yrol_CI-k3JEoFaDe_8ip0TLg",
+      "path": "День 4 (08.06)/2 День/патрик/разметка_вдохов_2026-06-08-13-21-26-619.csv",
+      "size": 18003,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1j8nlhftc_LkQlRZsNSA1wcsWewG2RMaM",
+      "path": "День 4 (08.06)/2 День/яра/8 июн. 2026 г., 12_57_06-1.csv",
+      "size": 2361901,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1XarPLDzPPAtbdN83gcO47NWuwRlB6N1e",
+      "path": "День 4 (08.06)/2 День/яра/ble_dump_1780916222836_snapshot_csv.csv",
+      "size": 43663585,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1kqoL9kCHIcGVWwxaxvsNzlii26XyY3kK",
+      "path": "День 4 (08.06)/2 День/яра/ble_dump_1780916222836_snapshot_packet.bin",
+      "size": 8570565,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1xD-3zTuke0sAXaJEZle0BjauthP8F176",
+      "path": "День 4 (08.06)/2 День/яра/ble_log_1780916221317_snapshot_log.log",
+      "size": 124380,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1S92UBFk79kbFzZaaPkf1lEYPO5_VhrMZ",
+      "path": "День 4 (08.06)/2 День/яра/ble_raw_1780916221320_snapshot_raw.binlog",
+      "size": 9300068,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1pd4wmzwaW9QTdhdqX_-QNZmDwlJZSnwA",
+      "path": "День 4 (08.06)/2 День/яра/edf/polar_yara_0806.edf",
+      "size": 197672,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1q6-cguNzW2QFm0rdyyEt1a88KNaPY-0d",
+      "path": "День 4 (08.06)/2 День/яра/polar_yara_0806_annotations.csv",
+      "size": 21813,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1c3qLZTCSoVJofwGMedhJ8rYcaBupc2kc",
+      "path": "День 4 (08.06)/2 День/яра/разметка_вдохов_2026-06-08-12-57-05-888.csv",
+      "size": 22659,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1D_wghnOWtIowX0ILTbBO2bwiyWIMYnz5",
+      "path": "День 5 (12.06)/3 Вечер/ble_dump_1781274869994_snapshot_csv.csv",
+      "size": 132597921,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "15O8aONjoPYWaqmkm5cm9ds0rWZXDuQ7v",
+      "path": "День 5 (12.06)/3 Вечер/ble_dump_1781274869994_snapshot_packet.bin",
+      "size": 25388138,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "17SyEBKm7cEpWDUYCM0HEQThc2pOql5Im",
+      "path": "День 5 (12.06)/3 Вечер/ble_log_1781274869994_snapshot_log.log",
+      "size": 499790,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1_Ww8EdgrvU_QQm2ZE1vZskIOwIa3leeW",
+      "path": "День 5 (12.06)/3 Вечер/ble_raw_1781274869994_snapshot_raw.binlog",
+      "size": 27491489,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1P60A9Bd1fXUkxBvzuZ95uW3AdsbTRGaH",
+      "path": "День 5 (12.06)/3 Вечер/R-пики_annotations.csv",
+      "size": 45278,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1M473tNYuOYCXtVpMBrR-sP1AU_1ZB5UQ",
+      "path": "День 5 (12.06)/3 Вечер/разметка_дыхания_2канала_2026-06-12-16-34-29-799.csv",
+      "size": 41612,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1zg9AjRkhdrHUR35YfkJlbh9Wy_gv1o61",
+      "path": "День 6 (13.06)/1 Утро/патрик/ble_dump_1781344668831_snapshot_csv.csv",
+      "size": 70785585,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1EMjduRRt4UW5d_QIUyHdRCjWgdBaBuCM",
+      "path": "День 6 (13.06)/1 Утро/патрик/ble_dump_1781344668831_snapshot_packet.bin",
+      "size": 13588511,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1TX6qgH9PWrAqD1TTnH5dv2oPxuD14aVn",
+      "path": "День 6 (13.06)/1 Утро/патрик/ble_log_1781344668831_snapshot_log.log",
+      "size": 265447,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1Tooi3ZwgV47OC6eGmTWCM0gSWZAoMIN0",
+      "path": "День 6 (13.06)/1 Утро/патрик/ble_raw_1781344668831_snapshot_raw.binlog",
+      "size": 14723478,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1AS3mwOnvU2EA0TTt5fTNVAVZevvwPjdj",
+      "path": "День 6 (13.06)/1 Утро/патрик/polar_h10_патрик_2026-06-13-11-57-48-513_video.csv",
+      "size": 102,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1GJ5F8rBiV_GmwgbUb-s9N3Egfoayzqvk",
+      "path": "День 6 (13.06)/1 Утро/патрик/polar_patrik_2026-06-13_annotations.csv",
+      "size": 22155,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1UnhNJBvu_gy2yU7qbx7pvetgz3JUXEXk",
+      "path": "День 6 (13.06)/1 Утро/патрик/video_2026-06-13_12-56-50.mp4",
+      "size": 192255611,
+      "mime_type": "video/mp4"
+    },
+    {
+      "id": "1ob2cRdwj8WtjqCIzASOBQbMgqY5Xe70a",
+      "path": "День 6 (13.06)/1 Утро/патрик/Инструкции/Походка/Инструкция_по_использованию_прототипа_Woona.docx",
+      "size": 846482,
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    },
+    {
+      "id": "1ktwjVbJDOhnuicLNSXYFHjEsnznG61Ty",
+      "path": "День 6 (13.06)/1 Утро/патрик/разметка_дыхания.csv",
+      "size": 9376,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1c3tusajj7l1fOyb0khvyjoSFdrH4KEa9",
+      "path": "День 6 (13.06)/2 День/лозла/ble_dump_1781355868309_snapshot_csv.csv",
+      "size": 129987101,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1r36Pzo6CT7oiFETlk9t43bWAUTW4etQK",
+      "path": "День 6 (13.06)/2 День/лозла/ble_dump_1781355868309_snapshot_packet.bin",
+      "size": 24968420,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1l1ffO1nBTc2QkG8Y6HrUHUPS7R3OqVNE",
+      "path": "День 6 (13.06)/2 День/лозла/ble_log_1781355868309_snapshot_log.log",
+      "size": 493695,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1Y40ooa5cTwA72gLVW_O7xjqzcsLXwt6Q",
+      "path": "День 6 (13.06)/2 День/лозла/ble_raw_1781355868309_snapshot_raw.binlog",
+      "size": 27042616,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1bocGVD0VaWUViVZ0UGUGqb8PqKKuiD3Z",
+      "path": "День 6 (13.06)/2 День/лозла/polar_lozla_13_annotations.csv",
+      "size": 39426,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1Wr29sSRr_UlyylyE4jE6LpTONPaf7kRZ",
+      "path": "День 6 (13.06)/2 День/лозла/video_2026-06-13_16-04-10.mp4",
+      "size": 345690740,
+      "mime_type": "video/mp4"
+    },
+    {
+      "id": "1PsolVcXInO91RCJF_tfvoYWVjnwKu3kd",
+      "path": "День 6 (13.06)/2 День/лозла/разметка_дыхания_лозла_2канала.csv",
+      "size": 8093,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1nCCslwq_EhnJYpQ7LkIk1xFt6dtl7xLi",
+      "path": "День 7 (15.06)/1 Утро/патрик/ble_dump_1781520657308_snapshot_csv.csv",
+      "size": 18668364,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1uqgrN83SD2AxmFgPj_X8LXClifJRQkhJ",
+      "path": "День 7 (15.06)/1 Утро/патрик/ble_dump_1781520657308_snapshot_packet.bin",
+      "size": 3727878,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1bRqN3SagsHxWV2U1c0oMgau_oBED6P9d",
+      "path": "День 7 (15.06)/1 Утро/патрик/ble_log_1781520657308_snapshot_log.log",
+      "size": 70367,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1G96UUv8rUZnoJCn5XMwRVguxTzc2oUsB",
+      "path": "День 7 (15.06)/1 Утро/патрик/ble_raw_1781520657308_snapshot_raw.binlog",
+      "size": 4048720,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1VVfKglqtnnBCoMZ7dij__CyzXwIUTVYD",
+      "path": "День 7 (15.06)/1 Утро/патрик/polar_h10_патрик_2026-06-15-12-50-57-181_video.csv",
+      "size": 102,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1YCQtiS8zjzK35_Sy3HzhHwkxWlSET_H-",
+      "path": "День 7 (15.06)/1 Утро/патрик/polar_h10_патрик_2026-06-15-12-50-57-181_video.mp4",
+      "size": 52209206,
+      "mime_type": "video/mp4"
+    },
+    {
+      "id": "1xaqhpAxvEQ-oITZBMS7Hya7ShdEbx0tF",
+      "path": "День 7 (15.06)/1 Утро/патрик/polar_patrik_1506_annotations.csv",
+      "size": 6537,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1JmWO1W9lHchsJ-09-8v6vbhWm8PH2Hay",
+      "path": "День 7 (15.06)/1 Утро/патрик/разметка_дыхания_2канала_2026-06-15-12-50-57-319.csv",
+      "size": 10244,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1LckqfVT5DSiNPNgUJoJRGsG1WsrHDoLe",
+      "path": "День 7 (15.06)/2 День/Лозла/ble_dump_1781525807176_snapshot_csv.csv",
+      "size": 249520650,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1mzxh9_V_Mi4CotHjwNthG0xU7QeGyuvK",
+      "path": "День 7 (15.06)/2 День/Лозла/ble_dump_1781525807176_snapshot_packet.bin",
+      "size": 47557474,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1sUrWGuKckhrvOGp25dgBQrFlIMIfatoD",
+      "path": "День 7 (15.06)/2 День/Лозла/ble_log_1781525807176_snapshot_log.log",
+      "size": 935843,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1VwyJufmnMzXaqk6phtXWiYeJ8UiEKbJJ",
+      "path": "День 7 (15.06)/2 День/Лозла/ble_raw_1781525807176_snapshot_raw.binlog",
+      "size": 51502808,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1brigZUBvliAPVi_brG7dAeG_qFoQBvkp",
+      "path": "День 7 (15.06)/2 День/Лозла/polar_h10_лозла_2026-06-15-14-16-46-828_annotations.csv",
+      "size": 65058,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1ZXOqOWGbHo8cL21kxDuS2kxWdLYuKmlo",
+      "path": "День 7 (15.06)/2 День/Лозла/polar_h10_лозла_2026-06-15-14-16-46-828_video.csv",
+      "size": 100,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1wk75C47acSxWR9CQ85ygXvjhErEC_qva",
+      "path": "День 7 (15.06)/2 День/Лозла/polar_h10_лозла_2026-06-15-14-16-46-828_video.mp4",
+      "size": 749586894,
+      "mime_type": "video/mp4"
+    },
+    {
+      "id": "1pVrG6QJKRy7e6c3NJFtxgYRAG1cDoSgg",
+      "path": "День 7 (15.06)/2 День/Лозла/разметка_дыхания_2канала_2026-06-15-14-16-47-176.csv",
+      "size": 43805,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1hqJiSeBcutK0WjIxGqjiqPoIEGBDWOlM",
+      "path": "День 7 (15.06)/2 День/патрик/ble_dump_1781523383754_snapshot_csv.csv",
+      "size": 105248692,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1bF4eNqULJzbNxnaNzdrIcaqQzrvB5b0p",
+      "path": "День 7 (15.06)/2 День/патрик/ble_dump_1781523383754_snapshot_packet.bin",
+      "size": 20065475,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1dOYXvO_JzsNl1Y5_lQMJMiUQM6hQ9QlF",
+      "path": "День 7 (15.06)/2 День/патрик/ble_log_1781523383754_snapshot_log.log",
+      "size": 392555,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1oIiw5dM8cY72sZJXZaKdlFFlyvhzli_D",
+      "path": "День 7 (15.06)/2 День/патрик/ble_raw_1781523383754_snapshot_raw.binlog",
+      "size": 21743447,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1zd0sxXGkozAu-wHe1nnqTnMqPjS2mTXa",
+      "path": "День 7 (15.06)/2 День/патрик/polar_h10_патрик_2026-06-15-13-36-23-587_video.csv",
+      "size": 102,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1mI-4auv-6HSwNbn-SMjmpj6qp0cUdcI2",
+      "path": "День 7 (15.06)/2 День/патрик/polar_patrik_1506_1336_annotations.csv",
+      "size": 32986,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "14qRpKA8CqBJy-yF9ALtgOwJhv0JFY2Le",
+      "path": "День 7 (15.06)/2 День/патрик/video_2026-06-15_14-22-04.mp4",
+      "size": 281584733,
+      "mime_type": "video/mp4"
+    },
+    {
+      "id": "1bg6Na_rVbMeOOnt0_MSfQIVyzsLRW_6N",
+      "path": "День 7 (15.06)/2 День/патрик/разметка_дыхания_2канала_2026-06-15-13-36-23-655.csv",
+      "size": 23646,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1ueumX_64pgWa6TqQ_inn5c7w05JvineI",
+      "path": "день 8 (17.06)/Лозла/ble_dump_1781719686564_snapshot_csv.csv",
+      "size": 116466777,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1kUEiK1Tflq2U-GF_dpJvwli1KCJy1Np0",
+      "path": "день 8 (17.06)/Лозла/ble_dump_1781719686564_snapshot_packet.bin",
+      "size": 22210022,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1UQDHkBm_E7XArSK7gOYY_9tXs4puU0g6",
+      "path": "день 8 (17.06)/Лозла/ble_log_1781719686564_snapshot_log.log",
+      "size": 436556,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1bDYG_2nqQYbeH0CTI_OhEqF5ABt8JLDb",
+      "path": "день 8 (17.06)/Лозла/ble_raw_1781719686564_snapshot_raw.binlog",
+      "size": 24074579,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "12fT8bMezxasrO9szOpJbQ-BCgWIaR-mZ",
+      "path": "день 8 (17.06)/Лозла/polar_h10_лозла_2026-06-17-20-08-06-391_annotations.csv",
+      "size": 40738,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1YrWwgHwdDWisLg4a5AmZgb7gMH1SY6AI",
+      "path": "день 8 (17.06)/Лозла/разметка_дыхания_2канала_2026-06-17-20-08-06-567.csv",
+      "size": 72984,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1JUy_JFsL8M2qPEu4nasll6souSV57NsH",
+      "path": "день 9 (01.07)/Лозла/ble_dump_1782924598935_snapshot_csv.csv",
+      "size": 225489568,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1s9xMXaUsRMi5D4Gx6tk4obxdTUNJQfel",
+      "path": "день 9 (01.07)/Лозла/ble_dump_1782924598935_snapshot_packet.bin",
+      "size": 46071970,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1eU3497yUHz66GWcM87pVOUJ4fJzymPqM",
+      "path": "день 9 (01.07)/Лозла/ble_log_1782924598935_snapshot_log.log",
+      "size": 801468,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1FpZ3XDfFqISGKgKu6-9Bae8PYo44dea9",
+      "path": "день 9 (01.07)/Лозла/ble_raw_1782924598935_snapshot_raw.binlog",
+      "size": 49907683,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1l4qXDad8ZG87TL3UqvyN2rugpmzR740A",
+      "path": "день 9 (01.07)/Лозла/polar_h10_лозла_2026-07-01-18-49-58-703_annotations.csv",
+      "size": 79080,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "17MTeZwgeD-Bekdah7E3wdLV31OdNgyJe",
+      "path": "день 9 (01.07)/Лозла/разметка_дыхания_2канала_2026-07-01-18-49-58-848.csv",
+      "size": 37434,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1RbBUkMsiyXrI2QY0etSI47-KZMeteKQJ",
+      "path": "день 9 (01.07)/патрик/вторая запись/ble_dump_1782924020790_snapshot_csv.csv",
+      "size": 31532313,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "15OAOFToyLrdLWRlloyktQzIJFGgrpoNd",
+      "path": "день 9 (01.07)/патрик/вторая запись/ble_dump_1782924020790_snapshot_packet.bin",
+      "size": 6461278,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1JohlJaFyuSj_CQEFBvepdrf_7_YR902B",
+      "path": "день 9 (01.07)/патрик/вторая запись/ble_log_1782924020790_snapshot_log.log",
+      "size": 107816,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1ZI_D1gKjlaPBt_H4X260GRvAp2QEe72_",
+      "path": "день 9 (01.07)/патрик/вторая запись/ble_raw_1782924020790_snapshot_raw.binlog",
+      "size": 6999386,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1gqF9KDOruBk3KIm1GVxJsVbc0fc-6Crv",
+      "path": "день 9 (01.07)/патрик/вторая запись/polar_patrik2_0107_annotations.txt",
+      "size": 12484,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1bDqewjSommqe3qojcU34835JWfrlZtcx",
+      "path": "день 9 (01.07)/патрик/вторая запись/разметка_дыхания_2канала_2026-07-01-18-40-20-728.csv",
+      "size": 3393,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1D-hWrgOibN8lpNiS8OCi54TQ1eumHPlE",
+      "path": "день 9 (01.07)/патрик/первая запись/ble_dump_1782922625687_snapshot_csv.csv",
+      "size": 92442265,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1u4ZuRALMv3gj3RTh62_gliIOpa0xf3i0",
+      "path": "день 9 (01.07)/патрик/первая запись/ble_dump_1782922625687_snapshot_packet.bin",
+      "size": 18008707,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1jEu-ow8QlkrMv7OJpNJVH5MCuDsX9sfw",
+      "path": "день 9 (01.07)/патрик/первая запись/ble_log_1782922625687_snapshot_log.log",
+      "size": 324222,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1ylc2bU5w3-bj4RQ462iCgHw8_y8HbNMl",
+      "path": "день 9 (01.07)/патрик/первая запись/ble_raw_1782922625687_snapshot_raw.binlog",
+      "size": 19513063,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1yilSUmHSpIq2Q0XqpyntD9JEuZ5fcotX",
+      "path": "день 9 (01.07)/патрик/первая запись/polar_patrik_0107_annotations.txt",
+      "size": 33061,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "18VHtOEtFYJ5uia28-fkKHQMcxIyLFqFx",
+      "path": "день 9 (01.07)/патрик/первая запись/разметка_дыхания_2канала_2026-07-01-18-17-05-714.csv",
+      "size": 7949,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1wjFv1w0sOffRFVPejgY5S-M7V4u1090_",
+      "path": "день16 (21.07)/джена/ble_dump_1784637491346_snapshot_csv.csv",
+      "size": 172670293,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "16er5477D5SfUyLGr1jZJdZxJ0qSh04B-",
+      "path": "день16 (21.07)/джена/ble_dump_1784637491346_snapshot_packet.bin",
+      "size": 34418971,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1eZbdz5QDBZaHnZIvKTvDmKQIcZ246Z2p",
+      "path": "день16 (21.07)/джена/ble_log_1784637491346_snapshot_log.log",
+      "size": 542201,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1vif7MVman8D8PEYyEwOh5NhPwDHdYURv",
+      "path": "день16 (21.07)/джена/ble_raw_1784637491346_snapshot_raw.binlog",
+      "size": 37283778,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "11fom2sUTCo3aBDe9N-r9ppQxuKKTFGv_",
+      "path": "день16 (21.07)/джена/polar_h10_Дженна_2026-07-21-14-38-11_clean_annotations.csv",
+      "size": 37736,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1xDejPN3Ju1Dm7iPWcBFOzgzBgt1a5G8p",
+      "path": "день16 (21.07)/джена/разметка_дыхания_2канала_2026-07-21-14-38-11-225_ошейник.csv",
+      "size": 17257,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1HQlRpsCWbR2rmay0h2tw0U4m3855H2Gv",
+      "path": "джена пыхтение, отдышка/ble_dump_1786721502509_snapshot_csv.csv",
+      "size": 38050985,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1lsVAtBhRmuZbxoH5fAlMKHPB1He973Xj",
+      "path": "джена пыхтение, отдышка/ble_dump_1786721502509_snapshot_packet.bin",
+      "size": 7644982,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1j31eSlFBP2lL4yDFWc0MU1NdH12l38XC",
+      "path": "джена пыхтение, отдышка/ble_log_1786721502509_snapshot_log.log",
+      "size": 130021,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1UZxQ2YtQuGeLp-iZAuQVT-E86dcyNq51",
+      "path": "джена пыхтение, отдышка/ble_raw_1786721502509_snapshot_raw.binlog",
+      "size": 8291797,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "12bP2pRFyAZYObkz6QrAGNkPuehhzjZly",
+      "path": "джена пыхтение, отдышка/разметка_дыхания_2канала_2026-08-14-17-31-42-473.csv",
+      "size": 92592,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1PWNRIjNp3vH2LPlZTgu9FVKtemRVj7QN",
+      "path": "измерение патрик 01.06.226/1 июн. 2026 г., 16_18_12-1.csv",
+      "size": 2799650,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "11oXDCJMqERpKkSnGDgUem6L4T-e9hXCQ",
+      "path": "измерение патрик 01.06.226/ble_dump_1780323497603_snapshot_csv.csv",
+      "size": 52511076,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1lBbmUlVT7KQTUluthpuDPwR-b7KcMhXI",
+      "path": "измерение патрик 01.06.226/ble_dump_1780323497603_snapshot_packet.bin",
+      "size": 10124828,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "19qktVQrNFM-rDfHJquSz13MrnkAVk1Ay",
+      "path": "измерение патрик 01.06.226/ble_log_1780323495940_snapshot_log.log",
+      "size": 132873,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1C0CykZe1atcx87t-9pkUEX-fyxbxGfmI",
+      "path": "измерение патрик 01.06.226/ble_raw_1780323495949_snapshot_raw.binlog",
+      "size": 11025073,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1pTwHLXe-u4orX1_cgl8QLfQadatUOx7U",
+      "path": "измерение патрик 01.06.226/edf/polar_1.edf",
+      "size": 7528,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1AfF7fH6c5xz9MCFApellqlsSc9FfjwgZ",
+      "path": "измерение патрик 01.06.226/edf/polar_2.edf",
+      "size": 245142,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1l-oLDDbiSoMAAqniwR2zS6x1rFf7BqGW",
+      "path": "измерение патрик 01.06.226/polar_2_annotations  R пики.csv",
+      "size": 14023,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1k4rPyDMmDkbu5keq5pmdxdvnBb_UBt3S",
+      "path": "измерение патрик 01.06.226/разметка_вдохов_2026-06-01-16-23-37-889.csv",
+      "size": 6999,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "16_LQEq5KACClvr_V2tC2_IAmsvp61jOj",
+      "path": "измерение патрика 02.06.2026/2 июн. 2026 г., 16_38_14-1.csv",
+      "size": 2228226,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1nbsXQSwIWeKILMxi13rZxoIIfq9GJuCr",
+      "path": "измерение патрика 02.06.2026/ble_dump_1780411095568_snapshot_csv.csv",
+      "size": 41240778,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1WFRdUT2AsQHfbOXN2l0nalrVcHCweaOx",
+      "path": "измерение патрика 02.06.2026/ble_dump_1780411095568_snapshot_packet.bin",
+      "size": 8093634,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1b3AVJ6iHywM1B8haHrZW5los0SUBtqvF",
+      "path": "измерение патрика 02.06.2026/ble_log_1780411093932_snapshot_log.log",
+      "size": 117147,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1hSyIVAFfvin3hIDE85rpI6bUkHpR7S-B",
+      "path": "измерение патрика 02.06.2026/ble_raw_1780411093940_snapshot_raw.binlog",
+      "size": 8781321,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1kvaJMhrtXi8aCSc6qLNg9KE_xen2WpI_",
+      "path": "измерение патрика 02.06.2026/edf/polar_0206_patrik.edf",
+      "size": 186914,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1H4GuyAv8X6M9RsQJmXR3jf7F1SMP2Y8d",
+      "path": "измерение патрика 02.06.2026/polar_0206_patrik_annotations.csv",
+      "size": 16540,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1islvwUcci-H37MWc9MK1e7vP-fXQmU2W",
+      "path": "измерение патрика 02.06.2026/WhoonaPet20260526-20260601_HEART_RATE_medm.csv",
+      "size": 183,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1hN50nRawZh5DBSiiU1nvKowD5pqcN75r",
+      "path": "измерение патрика 02.06.2026/разметка_вдохов_2026-06-02-16-38-33-018.csv",
+      "size": 1544,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1AbKUwgxKoOyeCkkITxURr4yYTPSQuPtQ",
+      "path": "измерение патрика 02.06.2026/разметка_вдохов_2026-06-02-16-40-08-112.csv",
+      "size": 13927,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1TCwPFhoiCNLhdiEWcFKk2Fl8NjGLOkNV",
+      "path": "патрик в седации/ble_dump_1784106929953_snapshot_csv.csv",
+      "size": 152567825,
+      "mime_type": "text/csv"
+    },
+    {
+      "id": "1AgNXnuIXxZxuGjEZjzY8TrFzgUR8I6F-",
+      "path": "патрик в седации/ble_dump_1784106929953_snapshot_packet.bin",
+      "size": 28962699,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1_BP419ZUa9fnBgr2j5OWPdIgGDn9GTdx",
+      "path": "патрик в седации/ble_log_1784106929953_snapshot_log.log",
+      "size": 510283,
+      "mime_type": "text/plain"
+    },
+    {
+      "id": "1Ut2sj-xIPfCb-d_76fdyO4LQmgm5c8LE",
+      "path": "патрик в седации/ble_raw_1784106929953_snapshot_raw.binlog",
+      "size": 31367190,
+      "mime_type": "application/octet-stream"
+    },
+    {
+      "id": "1Qp47ZUcB9IYnifx5YmoTcXgcbwkD3m7R",
+      "path": "патрик в седации/polar_h10_патрик_наркоз_2026-07-15-11-15-29_clean_annotations.csv",
+      "size": 122400,
+      "mime_type": "text/csv"
+    }
+  ]
+}

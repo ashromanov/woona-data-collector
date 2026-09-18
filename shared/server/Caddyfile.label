@@ -1,0 +1,23 @@
+cool-trams.digital {
+	encode zstd gzip
+
+	handle /v1/* {
+		reverse_proxy api:8080
+	}
+	handle /health/* {
+		reverse_proxy api:8080
+	}
+	handle /docs* {
+		reverse_proxy api:8080
+	}
+	handle /openapi.json {
+		reverse_proxy api:8080
+	}
+	handle {
+		reverse_proxy label_studio:8080
+	}
+}
+
+www.cool-trams.digital {
+	redir https://cool-trams.digital{uri} permanent
+}

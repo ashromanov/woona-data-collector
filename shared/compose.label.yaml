@@ -1,0 +1,97 @@
+services:
+  postgres:
+    restart: unless-stopped
+    volumes: !override
+      - ${WOONA_POSTGRES_ROOT:?set WOONA_POSTGRES_ROOT}:/var/lib/postgresql
+
+  api:
+    restart: unless-stopped
+    environment:
+      WOONA_ALLOW_LEGACY_MIGRATION: "false"
+
+  label_postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: labelstudio
+      POSTGRES_USER: labelstudio
+      POSTGRES_PASSWORD: ${LABEL_DB_PASSWORD:?set LABEL_DB_PASSWORD}
+    volumes:
+      - ${LABEL_POSTGRES_ROOT:?set LABEL_POSTGRES_ROOT}:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U labelstudio -d labelstudio"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  label_studio:
+    image: heartexlabs/label-studio:1.22.0@sha256:86b4e8046e83a16290cb2d1046f0fa94a4c98fdb9c8d42711808f18e25d47be2
+    restart: unless-stopped
+    environment:
+      DJANGO_DB: default
+      POSTGRE_NAME: labelstudio
+      POSTGRE_USER: labelstudio
+      POSTGRE_PASSWORD: ${LABEL_DB_PASSWORD:?set LABEL_DB_PASSWORD}
+      POSTGRE_HOST: label_postgres
+      POSTGRE_PORT: "5432"
+      LABEL_STUDIO_HOST: https://cool-trams.digital
+      LABEL_STUDIO_USERNAME: admin@cool-trams.digital
+      LABEL_STUDIO_PASSWORD: ${LABEL_ADMIN_PASSWORD:?set LABEL_ADMIN_PASSWORD}
+      LABEL_STUDIO_USER_TOKEN: ${LABEL_API_TOKEN:?set LABEL_API_TOKEN}
+      LABEL_STUDIO_ENABLE_LEGACY_API_TOKEN: "true"
+      LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED: "true"
+      LABEL_STUDIO_LOCAL_FILES_DOCUMENT_ROOT: /label-studio/files
+      DISABLE_SIGNUP_WITHOUT_LINK: "true"
+    depends_on:
+      label_postgres:
+        condition: service_healthy
+    volumes:
+      - label_studio_data:/label-studio/data
+      - ${WOONA_STORAGE_ROOT_HOST:?set WOONA_STORAGE_ROOT_HOST}:/label-studio/files/woona:ro
+      - ${LABEL_SNAPSHOT_ROOT:?set LABEL_SNAPSHOT_ROOT}:/label-studio/files/drive:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/', timeout=4)"]
+      interval: 10s
+      timeout: 6s
+      retries: 40
+
+  label_sync:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    command: ["python", "-m", "server.label_sync"]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-woona}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-woona}
+      LABEL_STUDIO_URL: http://label_studio:8080
+      LABEL_STUDIO_API_TOKEN: ${LABEL_API_TOKEN:?set LABEL_API_TOKEN}
+      LABEL_SNAPSHOT_ROOT: /srv/drive
+    depends_on:
+      postgres:
+        condition: service_healthy
+      label_studio:
+        condition: service_healthy
+    volumes:
+      - ${LABEL_SNAPSHOT_ROOT:?set LABEL_SNAPSHOT_ROOT}:/srv/drive:ro
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+      label_studio:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./server/Caddyfile.label:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  label_studio_data:
+  caddy_data:
+  caddy_config:
