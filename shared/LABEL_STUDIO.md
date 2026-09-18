@@ -46,6 +46,7 @@ python3 tools/download_drive_snapshot.py data/drive-2026-09-18.json \
   /srv/woona/drive-2026-09-18 --gdown /opt/woona-tools/bin/gdown
 cp data/drive-2026-09-18.json /srv/woona/drive-2026-09-18/manifest.json
 python3 tools/normalize_drive_snapshot.py /srv/woona/drive-2026-09-18
+setfacl -R -m u:1001:rX /srv/woona/drive-2026-09-18/raw
 ```
 
 Download is resumable: verified files are skipped. If Google blocks a public
@@ -55,6 +56,9 @@ data/drive-2026-09-18.json /srv/woona/drive-2026-09-18 --verify-only`
 before normalizing. This re-hashes every transferred file and writes one
 complete checksum map. Do not copy browser cookies or account tokens to the
 server.
+
+The ACL grants the Label Studio container read-only access to the private
+snapshot; repeat it after any later file transfers.
 
 ## Labeling and counts
 
