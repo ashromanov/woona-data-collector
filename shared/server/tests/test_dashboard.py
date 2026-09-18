@@ -1,12 +1,16 @@
 import unittest
+from pathlib import Path
 from fastapi import HTTPException
 from starlette.requests import Request
 
-from server.dashboard import KINDS, render, require_label_user, summarize
+from server.dashboard import KINDS, available_file, render, require_label_user, summarize
 from server.label_sync import LABELS
 
 
 class DashboardTest(unittest.TestCase):
+    def test_missing_file_is_unavailable_not_an_error(self):
+        self.assertFalse(available_file(Path("/nonexistent-woona-dashboard-file"), 0))
+
     def test_record_counts_and_class_progress(self):
         records = [
             {"source_id": "woona:one", "origin": "Woona", "dog": "Тест <пёс>",

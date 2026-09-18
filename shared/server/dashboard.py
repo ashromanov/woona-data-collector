@@ -3,6 +3,7 @@
 import html
 import json
 import os
+import stat
 from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -19,6 +20,14 @@ from server.label_sync import LABELS, file_url, paged, request_json
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 KINDS = ("source", "activity", "gait", "lameness")
 VIDEO_KINDS = KINDS[1:]
+
+
+def available_file(path: Path, expected_size: int) -> bool:
+    try:
+        info = path.stat()
+        return stat.S_ISREG(info.st_mode) and info.st_size == expected_size
+    except OSError:
+        return False
 
 
 def require_label_user(request: Request) -> None:
@@ -55,8 +64,7 @@ def records_from_sources() -> tuple[list[dict], dict]:
             indexed_ids.add(item["drive_id"])
             path = snapshot / "raw" / item["path"]
             files.append({"name": Path(item["path"]).name, "relative": "drive/raw/" + item["path"],
-                          "size": item["size"],
-                          "available": path.is_file() and path.stat().st_size == item["size"]})
+                          "size": item["size"], "available": available_file(path, item["size"])})
         records.append({"source_id": "drive:" + session["id"], "origin": "Drive",
                         "dog": session["dog"], "date": session["capture_date"],
                         "files": files, "ingest_status": "verified", "profile": None,
@@ -105,7 +113,7 @@ def records_from_sources() -> tuple[list[dict], dict]:
                                     "type": row["artifact_type"],
                                     "available": row["storage_status"] == "available" and
                                     path is not None and STORAGE_ROOT in path.parents and
-                                    path.is_file() and path.stat().st_size == row["expected_size_bytes"]})
+                                    available_file(path, row["expected_size_bytes"])})
     records.extend(app_records.values())
     return records, {"drive_files": len(manifest["files"]),
                      "drive_unindexed_files": len(manifest["files"]) - len(indexed_ids),
