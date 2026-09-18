@@ -20,6 +20,7 @@ cool-trams.digital {
 	handle @local_file_head {
 		reverse_proxy label_studio:8080 {
 			method GET
+			header_up Range "bytes=0-0"
 		}
 	}
 	handle {
