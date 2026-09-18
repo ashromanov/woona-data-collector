@@ -13,6 +13,15 @@ cool-trams.digital {
 	handle /openapi.json {
 		reverse_proxy api:8080
 	}
+	@local_file_head {
+		method HEAD
+		path /data/local-files/
+	}
+	handle @local_file_head {
+		reverse_proxy label_studio:8080 {
+			method GET
+		}
+	}
 	handle {
 		reverse_proxy label_studio:8080
 	}
