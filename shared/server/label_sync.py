@@ -107,8 +107,11 @@ def paged(path: str) -> list[dict]:
         body = request_json("GET", f"{path}{separator}{urlencode({'page': page, 'page_size': 100})}")
         if isinstance(body, list):
             return body
-        results.extend(body["results"])
-        if not body.get("next"):
+        batch = body.get("results", body.get("tasks", []))
+        if not batch and body.get("total", body.get("count", 0)) > len(results):
+            raise RuntimeError(f"pagination stopped early: {path}")
+        results.extend(batch)
+        if not body.get("next") and len(results) >= body.get("total", body.get("count", len(results))):
             return results
         page += 1
 

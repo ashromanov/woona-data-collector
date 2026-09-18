@@ -2,8 +2,9 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from server.label_sync import config, historical_tasks
+from server.label_sync import config, historical_tasks, paged
 
 
 class LabelSyncTest(unittest.TestCase):
@@ -24,6 +25,13 @@ class LabelSyncTest(unittest.TestCase):
             self.assertIn("&lt;видео&gt;", item["data"]["html"])
             self.assertIn("clickableLinks", config("quality"))
             self.assertIn('value="$video"', config("behavior"))
+
+    def test_community_task_pagination(self):
+        with patch("server.label_sync.request_json", side_effect=[
+            {"total": 2, "tasks": [{"id": 1}]},
+            {"total": 2, "tasks": [{"id": 2}]},
+        ]):
+            self.assertEqual([row["id"] for row in paged("/api/tasks?project=1")], [1, 2])
 
 
 if __name__ == "__main__":
