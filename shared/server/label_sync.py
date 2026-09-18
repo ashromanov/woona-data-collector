@@ -116,6 +116,17 @@ def paged(path: str) -> list[dict]:
         page += 1
 
 
+def ensure_storage(project: int) -> None:
+    current = {item["path"] for item in request_json("GET", f"/api/storages/localfiles/?project={project}")}
+    for name in ("woona", "drive"):
+        path = "/label-studio/files/" + name
+        if path not in current:
+            request_json("POST", "/api/storages/localfiles/", {
+                "project": project, "path": path, "title": name,
+                "synchronizable": False, "use_blob_urls": True,
+            })
+
+
 def sync() -> dict[str, tuple[int, int]]:
     existing_projects = {project["title"]: project["id"] for project in paged("/api/projects")}
     sources = historical_tasks(Path(os.environ["LABEL_SNAPSHOT_ROOT"])) + app_tasks(os.environ["DATABASE_URL"])
@@ -124,6 +135,7 @@ def sync() -> dict[str, tuple[int, int]]:
         project = existing_projects.get(title)
         if project is None:
             project = request_json("POST", "/api/projects", {"title": title, "label_config": config(kind)})["id"]
+        ensure_storage(project)
         expected = [item for item in sources if kind != "behavior" or "video" in item["data"]]
         current = {row["data"].get("source_id") for row in paged(f"/api/tasks?project={project}")}
         missing = [item for item in expected if item["data"]["source_id"] not in current]

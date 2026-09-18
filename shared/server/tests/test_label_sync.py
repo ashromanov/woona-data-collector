@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from server.label_sync import config, historical_tasks, paged
+from server.label_sync import config, ensure_storage, historical_tasks, paged
 
 
 class LabelSyncTest(unittest.TestCase):
@@ -32,6 +32,13 @@ class LabelSyncTest(unittest.TestCase):
             {"total": 2, "tasks": [{"id": 2}]},
         ]):
             self.assertEqual([row["id"] for row in paged("/api/tasks?project=1")], [1, 2])
+
+    def test_storage_connections_are_idempotent(self):
+        with patch("server.label_sync.request_json", side_effect=[
+            [{"path": "/label-studio/files/woona"}], {"id": 2},
+        ]) as api:
+            ensure_storage(1)
+            self.assertEqual("/label-studio/files/drive", api.call_args.args[2]["path"])
 
 
 if __name__ == "__main__":
