@@ -4,10 +4,12 @@ umask 077
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
-set -a
-source .env
-source .env.label
-set +a
+read_env() {
+    python3 -c 'import sys; from pathlib import Path; print(next(line.split("=", 1)[1] for line in Path(sys.argv[1]).read_text().splitlines() if line.startswith(sys.argv[2] + "=")))' .env "$1"
+}
+POSTGRES_USER="$(read_env POSTGRES_USER)"
+POSTGRES_DB="$(read_env POSTGRES_DB)"
+WOONA_STORAGE_ROOT_HOST="$(read_env WOONA_STORAGE_ROOT_HOST)"
 
 backup_root="${WOONA_BACKUP_ROOT:-/srv/woona/backups}"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
