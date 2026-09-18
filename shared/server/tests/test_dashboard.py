@@ -57,6 +57,8 @@ class DashboardTest(unittest.TestCase):
         self.assertIn('Найдено 1 из 2 групп', render(data, "", status="incomplete"))
         self.assertIn('Найдено 0 из 2 групп', render(data, "", ble="absent"))
         self.assertIn('Показано 1–2 из 2', render(data, "", page=100))
+        self.assertIn('Нет пары видео + BLE', render(data, ""))
+        self.assertIn('Проверить ↗', render(data, ""))
 
     def test_anonymous_user_cannot_read_dashboard(self):
         request = Request({"type": "http", "headers": [], "method": "GET", "path": "/dashboard"})

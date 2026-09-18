@@ -281,8 +281,10 @@ def render(data: dict, query: str, status: str = "all", ble: str = "all", page: 
         next_kind = next((kind for kind in KINDS if record["tasks"][kind] and not record["tasks"][kind]["labeled"]),
                          next((kind for kind in KINDS if record["tasks"][kind]), None))
         action = (f'<a class="action" href="/projects/{data["categories"][next_kind]["project_id"]}/data?task='
-                  f'{record["tasks"][next_kind]["id"]}">{"Открыть" if done == 4 else "Разметить"} ↗</a>') if next_kind else '—'
-        state = "Завершено" if record["annotated_all"] else "В процессе" if record["annotated_any"] else "Ожидает разметки"
+                  f'{record["tasks"][next_kind]["id"]}">{"Открыть" if done == 4 else "Проверить" if next_kind == "source" else "Разметить"} ↗</a>') if next_kind else '—'
+        state = ("Нет пары видео + BLE" if not (record["video"] and record["ble"]) else
+                 "Видео размечено" if record["annotated_all"] else "В процессе" if record["annotated_any"] else
+                 "Ожидает разметки")
         rows.append(f'<tr><td><code class="source-id" title="{escape(source_id, quote=True)}">{escape(short_id)}</code>'
                     f'<div class="sub">{escape(record["dog"])} · {escape(record["date"])} · {escape(record["origin"])}</div></td>'
                     f'<td><span class="pill {"ok" if record["video"] else "neutral"}">Видео: {"есть" if record["video"] else "нет"}</span> '
@@ -294,7 +296,7 @@ def render(data: dict, query: str, status: str = "all", ble: str = "all", page: 
     selected = lambda value, current: ' selected' if value == current else ''
     status_options = "".join(f'<option value="{value}"{selected(value, status)}>{name}</option>' for value, name in (
         ("all", "Все статусы"), ("ready", "Готово к разметке"), ("in_progress", "В процессе"),
-        ("complete", "Размечено"), ("incomplete", "Без пары видео + BLE")))
+        ("complete", "Размечены 3 видеокатегории"), ("incomplete", "Без пары видео + BLE")))
     ble_options = "".join(f'<option value="{value}"{selected(value, ble)}>{name}</option>' for value, name in (
         ("all", "BLE: все"), ("present", "BLE: есть"), ("absent", "BLE: нет")))
     page_links = "".join(f'<a class="page-link {"active" if number == page else ""}" href="{page_url(number)}">{number}</a>'
