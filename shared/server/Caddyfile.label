@@ -21,6 +21,8 @@ cool-trams.digital {
 		reverse_proxy label_studio:8080 {
 			method GET
 			header_up Range "bytes=0-0"
+			@partial status 206
+			replace_status @partial 200
 		}
 	}
 	handle {
