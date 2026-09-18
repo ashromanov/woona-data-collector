@@ -1,4 +1,5 @@
 import unittest
+from copy import deepcopy
 from pathlib import Path
 from fastapi import HTTPException
 from starlette.requests import Request
@@ -59,6 +60,11 @@ class DashboardTest(unittest.TestCase):
         self.assertIn('Показано 1–2 из 2', render(data, "", page=100))
         self.assertIn('Нет пары видео + BLE', render(data, ""))
         self.assertIn('Проверить ↗', render(data, ""))
+        pending = deepcopy(data)
+        pending["records"][0]["tasks"] = {kind: None for kind in KINDS}
+        pending["records"][0]["annotated_any"] = False
+        self.assertIn('Ожидает импорта', render(pending, ""))
+        self.assertIn('Найдено 0 из 2 групп', render(pending, "", status="ready"))
 
     def test_anonymous_user_cannot_read_dashboard(self):
         request = Request({"type": "http", "headers": [], "method": "GET", "path": "/dashboard"})

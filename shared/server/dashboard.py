@@ -234,7 +234,9 @@ def render(data: dict, query: str, status: str = "all", ble: str = "all", page: 
             return False
         if ble != "all" and record["ble"] != (ble == "present"):
             return False
-        if status == "ready" and not (record["video"] and record["ble"] and not record["annotated_any"]):
+        if status == "ready" and not (record["video"] and record["ble"] and
+                                      all(record["tasks"][kind] for kind in VIDEO_KINDS) and
+                                      not record["annotated_any"]):
             return False
         if status == "in_progress" and not (record["annotated_any"] and not record["annotated_all"]):
             return False
@@ -282,7 +284,8 @@ def render(data: dict, query: str, status: str = "all", ble: str = "all", page: 
                          next((kind for kind in KINDS if record["tasks"][kind]), None))
         action = (f'<a class="action" href="/projects/{data["categories"][next_kind]["project_id"]}/data?task='
                   f'{record["tasks"][next_kind]["id"]}">{"Открыть" if done == 4 else "Проверить" if next_kind == "source" else "Разметить"} ↗</a>') if next_kind else '—'
-        state = ("Нет пары видео + BLE" if not (record["video"] and record["ble"]) else
+        state = ("Ожидает импорта" if not record["tasks"]["source"] else
+                 "Нет пары видео + BLE" if not (record["video"] and record["ble"]) else
                  "Видео размечено" if record["annotated_all"] else "В процессе" if record["annotated_any"] else
                  "Ожидает разметки")
         rows.append(f'<tr><td><code class="source-id" title="{escape(source_id, quote=True)}">{escape(short_id)}</code>'
