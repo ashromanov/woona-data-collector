@@ -21,6 +21,8 @@ cool-trams.digital {
 		reverse_proxy label_studio:8080 {
 			method GET
 			header_up Range "bytes=0-0"
+			header_down Content-Length "{rp.header.Content-Range}"
+			header_down Content-Length "bytes 0-0/([0-9]+)" "$1"
 			@partial status 206
 			replace_status @partial 200
 		}
