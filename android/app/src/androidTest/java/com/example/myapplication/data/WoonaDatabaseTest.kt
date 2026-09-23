@@ -33,6 +33,26 @@ class WoonaDatabaseTest {
     }
 
     @Test
+    fun sheetQuestionnairesPreserveIdentitySurfacesAndHistoricalProfile() {
+        val dog = DogQuestionnaire(schemaVersion = 2, animalId = "финик", numberOrName = "Финик", species = "собака",
+            diseaseCategory = "Суставы", diagnosesDetails = "Дисплазия", specialistName = "Иван")
+        val profile = database.saveProfile(dog)
+        assertEquals(dog, dogQuestionnaireFromJson(dog.toJson()))
+        val session = SessionQuestionnaire(schemaVersion = 2, sessionLabel = "2", plannedActivities = listOf("Аллюр/движение"),
+            surfaces = listOf("Асфальт", "Грунт", "Трава"), sensorPosition = "Снизу на горле", notes = "Заметка")
+        assertEquals(session, sessionQuestionnaireFromJson(session.toJson()))
+        val recording = database.beginRecording(profile.id, RecordingSource.LIVE, session, ZoneId.of("Europe/Moscow"), Instant.parse("2026-09-04T16:08:00Z"))
+        database.finishRecording(recording.id, RecordingStatus.COMPLETED, Instant.parse("2026-09-04T16:10:00Z"))
+        val saved = requireNotNull(database.recording(recording.id)).questionnaire!!
+        assertEquals("финик", saved.animalId)
+        assertEquals(session.surfaces, saved.surfaces)
+        assertEquals("19:08", saved.startTime)
+        assertEquals("19:10", saved.endTime)
+        assertEquals(2.0, saved.durationMinutes!!, 0.0)
+        assertEquals(profile.profileVersionId, requireNotNull(database.recording(recording.id)).profileVersionId)
+    }
+
+    @Test
     fun profilesRecordingsAndArtifactsRoundTrip() {
         val questionnaire = DogQuestionnaire(
             numberOrName = "D-17",

@@ -85,7 +85,7 @@ final class AppViewModel: ObservableObject {
         let defaults = UserDefaults.standard
         selectedThemeMode = defaults.string(forKey: "themeMode").flatMap(AppThemeMode.init(rawValue:)) ?? .system
         selectedLanguage = defaults.string(forKey: "language").flatMap(AppLanguage.init(rawValue:)) ?? .english
-        serverBaseURL = defaults.string(forKey: "serverBaseURL") ?? "http://127.0.0.1:8080"
+        serverBaseURL = defaults.string(forKey: "serverBaseURL") ?? "https://cool-trams.digital"
         serverWifiOnly = defaults.object(forKey: "serverWifiOnly") as? Bool ?? true
         serverToken = keychainTokenStore.load()
         cameraRecorder.onRecordingFailure = { [weak self] message in

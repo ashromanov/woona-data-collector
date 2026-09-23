@@ -1,5 +1,11 @@
 # Woona labeling deployment
 
+**Current configuration (2026-09-21):** one existing project, **21 — Активность и
+Аллюр**, one timeline and the user's existing labels. See
+[the current questionnaires, import, identity model and operations](ACTIVITY_IMPORT.md).
+The four-project and Drive-2026-09-18 sections below describe the previous
+deployment; the current worker reads eligible V2 recordings from PostgreSQL.
+
 The production route is `https://cool-trams.digital/`. Caddy sends `/v1/*`,
 `/health/*` and `/dashboard` to the existing FastAPI ingest service and all
 other paths to Label Studio. Android and iOS keep their existing HTTPS resumable upload and
@@ -62,7 +68,7 @@ The ACL grants Label Studio (UID 1001) and the read-only dashboard API
 (UID 10001) access to the private snapshot; repeat it after any later file
 transfers.
 
-## Labeling and counts
+## Historical labeling and counts (superseded on 2026-09-21)
 
 Projects are versioned as `Проверка исходных записей v1`, `Виды активности v1`,
 `Аллюр v1`, and `Хромота v1`. The source-review project gets every verified

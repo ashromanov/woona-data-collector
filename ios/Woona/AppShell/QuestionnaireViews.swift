@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-struct DogQuestionnaireEditor: View {
+private struct LegacyDogQuestionnaireEditor: View {
     @Environment(\.dismiss) private var dismiss
     @State private var draft: DogQuestionnaire
     @State private var errors: [String: String] = [:]
@@ -185,7 +185,7 @@ struct DogQuestionnaireEditor: View {
     ]
 }
 
-struct SessionQuestionnaireEditor: View {
+private struct LegacySessionQuestionnaireEditor: View {
     @Environment(\.dismiss) private var dismiss
     @State private var draft = SessionQuestionnaire()
     @State private var errors: [String: String] = [:]
@@ -335,3 +335,185 @@ private let russianQuestionnaireOptions: [String: String] = [
     "left_neck": "Слева на шее", "right_neck": "Справа на шее", "chest": "Грудь", "back": "Спина",
     "loose": "Свободно", "snug": "Плотно", "tight": "Туго", "stress": "Стресс",
 ]
+
+struct DogQuestionnaireEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var draft: DogQuestionnaire
+    @State private var errors: [String: String] = [:]
+    let language: AppLanguage
+    let onSave: (DogQuestionnaire) -> Void
+
+    init(initial: DogQuestionnaire?, language: AppLanguage, onSave: @escaping (DogQuestionnaire) -> Void) {
+        var value = initial ?? DogQuestionnaire()
+        value.schemaVersion = 2
+        value.species = value.species ?? "собака"
+        _draft = State(initialValue: value)
+        self.language = language
+        self.onSave = onSave
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Идентификация") {
+                    Text("ID и кличка обязательны. Неизвестные ответы оставьте пустыми.")
+                    TextField("Номер/ID животного *", text: text(\.animalId))
+                    TextField("Кличка *", text: $draft.numberOrName)
+                    TextField("Вид", text: text(\.species))
+                    TextField("Приют/лагерь/место сбора", text: $draft.shelterOrPlace)
+                    TextField("Порода", text: text(\.breedName))
+                    TextField("Если метис — похожая порода/тип", text: text(\.resembles))
+                    sheetPicker("Размер", selection: $draft.size, values: ["мелкий", "средний", "крупный", "гигантский"])
+                }
+                Section("Возраст и пол") {
+                    TextField("Возраст, лет", text: integer(\.ageYears)).keyboardType(.numberPad)
+                    TextField("Возраст, месяцев", text: integer(\.ageMonths)).keyboardType(.numberPad)
+                    sheetPicker("Источник данных о возрасте", selection: $draft.ageSource, values: ["документы", "со слов владельца/приюта", "оценка по зубам", "неизвестно"])
+                    sheetPicker("Пол", selection: $draft.sex, values: ["самец", "самка", "неизвестно"])
+                    sheetPicker("Стерилизован/кастрирован", selection: $draft.sterilizationStatus, values: ["да", "нет", "неизвестно"])
+                }
+                Section("Тело") {
+                    TextField("Вес, кг", text: decimal(\.weightKg)).keyboardType(.decimalPad)
+                    sheetPicker("Как получен вес", selection: $draft.weightStatus, values: ["взвешен", "со слов владельца/приюта", "оценён"])
+                    TextField("BCS (1-9)", text: integer(\.bodyConditionScore)).keyboardType(.numberPad)
+                    sheetPicker("Оценка мышечной массы", selection: $draft.muscleMass, values: ["норма", "лёгкая потеря", "умеренная потеря", "выраженная потеря", "невозможно оценить"])
+                    TextField("Обхват шеи, см", text: decimal(\.neckCircumferenceCm)).keyboardType(.decimalPad)
+                    sheetPicker("Длина шерсти", selection: $draft.coatLength, values: ["короткая", "средняя", "длинная"])
+                    sheetPicker("Подшёрсток", selection: $draft.undercoat, values: ["отсутствует", "умеренный", "плотный"])
+                    sheetPicker("Выстриженные/выбритые участки", selection: $draft.shavedAreasStatus, values: ["да", "нет"])
+                    TextField("Где и почему (выстрижено)", text: text(\.shavedAreasDetails))
+                }
+                Section("Здоровье") {
+                    sheetPicker("Диагнозы поставлены ветеринаром", selection: $draft.diagnosesStatus, values: ["есть", "нет", "неизвестно"])
+                    TextField("Диагнозы (описание)", text: text(\.diagnosesDetails), axis: .vertical)
+                    TextField("Категория подтверждённого заболевания", text: text(\.diseaseCategory))
+                    TextField("Категория — уточнение (другое)", text: text(\.diseaseCategoryDetails))
+                    sheetPicker("Хроническая хромота/проблемы с суставами", selection: text(\.chronicLameness), values: ["да", "нет", "неизвестно"])
+                    TextField("Регулярные препараты и дозировка", text: text(\.medications), axis: .vertical)
+                    TextField("Анамнез/важные комментарии", text: text(\.history), axis: .vertical)
+                }
+                Section("Содержание") {
+                    sheetPicker("Где живёт", selection: $draft.housing, values: ["квартира/дом", "вольер", "помещение приюта", "свободный выгул", "другое"])
+                    TextField("Где живёт — уточнение (другое)", text: text(\.housingDetails))
+                    TextField("Прогулки (частота и продолжительность)", text: text(\.walksDescription))
+                    sheetPicker("Проживание с другими животными", selection: $draft.cohabitants, values: ["одна", "с другими собаками", "с другими животными"])
+                    sheetPicker("Разрешение на съёмку", selection: $draft.shelterPermission, values: ["да", "нет", "не требуется"])
+                    TextField("Примечания", text: text(\.notes), axis: .vertical)
+                    TextField("ФИО специалиста, проводящего запись", text: text(\.specialistName))
+                    Text("Дата и время сохранения заполняются автоматически.").font(.caption)
+                }
+                ForEach(errors.keys.sorted(), id: \.self) { key in Text("\(key): \(errors[key]!)").foregroundStyle(.red) }
+            }
+            .navigationTitle("Анкета собаки")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Отмена") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button("Сохранить") {
+                    errors = draft.validate().errors
+                    guard errors.isEmpty else { return }
+                    draft.savedAtLocal = sheetSavedAt()
+                    onSave(draft); dismiss()
+                } }
+            }
+        }
+    }
+    private func text(_ key: WritableKeyPath<DogQuestionnaire, String?>) -> Binding<String> {
+        Binding(get: { draft[keyPath: key] ?? "" }, set: { draft[keyPath: key] = $0.isEmpty ? nil : $0 })
+    }
+    private func integer(_ key: WritableKeyPath<DogQuestionnaire, Int?>) -> Binding<String> {
+        Binding(get: { draft[keyPath: key].map(String.init) ?? "" }, set: { draft[keyPath: key] = $0.isEmpty ? nil : (Int($0) ?? Int.min) })
+    }
+    private func decimal(_ key: WritableKeyPath<DogQuestionnaire, Double?>) -> Binding<String> {
+        Binding(get: { draft[keyPath: key].map { String($0) } ?? "" }, set: { draft[keyPath: key] = $0.isEmpty ? nil : (Double($0.replacingOccurrences(of: ",", with: ".")) ?? .nan) })
+    }
+}
+
+struct SessionQuestionnaireEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var draft = SessionQuestionnaire()
+    @State private var errors: [String: String] = [:]
+    let language: AppLanguage
+    let source: String
+    let onSave: (SessionQuestionnaire) -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Сессия") {
+                    Text("Собака связывается с выбранной карточкой. Технические время и длительность записываются автоматически.")
+                    TextField("Номер сессии *", text: $draft.sessionLabel)
+                    TextField("Дата сессии (ГГГГ-ММ-ДД)", text: text(\.sessionDate))
+                    TextField("Время начала записи (ЧЧ:ММ, для импорта)", text: text(\.startTime))
+                    TextField("Время окончания (ЧЧ:ММ, для импорта)", text: text(\.endTime))
+                    TextField("Фактическая продолжительность, мин (для импорта)", text: decimal(\.durationMinutes)).keyboardType(.decimalPad)
+                    TextField("Кто проводил запись", text: $draft.operatorName)
+                    Toggle("Записывать видео", isOn: $draft.videoRequested).disabled(source == "replay")
+                }
+                Section("Что планировалось записывать *") {
+                    ForEach(["Аллюр/движение", "Активность", "Покой", "Другое"], id: \.self) { value in
+                        Toggle(value, isOn: multiple(\.plannedActivities, value))
+                    }
+                    TextField("Формат записи — уточнение (другое)", text: text(\.activityDetails))
+                }
+                Section("Условия") {
+                    sheetPicker("Где проходила сессия", selection: $draft.location, values: ["В помещении", "На улице"])
+                    ForEach(["Асфальт", "Бетон", "Плитка", "Грунт", "Трава", "Гравий", "Дерево", "Ламинат", "Ковёр", "Снег", "Другое"], id: \.self) { value in
+                        Toggle(value, isOn: multiple(\.surfaces, value))
+                    }
+                    TextField("Поверхность — уточнение (другое)", text: text(\.surfaceDetails))
+                    TextField("Температура воздуха, °C", text: decimal(\.airTemperatureC)).keyboardType(.decimalPad)
+                    sheetPicker("Положение блока", selection: $draft.sensorPosition, values: ["Снизу на горле", "Сбоку слева", "Сбоку справа", "Сверху на шее", "Другое"])
+                    TextField("Положение блока — уточнение (другое)", text: text(\.sensorPositionDetails))
+                    sheetPicker("Насколько затянут ошейник", selection: $draft.collarTightness, values: ["Свободно", "Плотно", "Туго"])
+                }
+                Section("Состояние") {
+                    sheetPicker("Состояние животного перед записью", selection: $draft.preMeasurementState, values: ["Спало", "Спокойно лежало не менее 10 минут", "Спокойно бодрствовало", "Гуляло", "Бегало/играло", "Другое"])
+                    TextField("Состояние перед записью — уточнение (другое)", text: text(\.preMeasurementStateDetails))
+                    TextField("Когда последний раз получал препарат (ЧСС/дыхание/активность)", text: text(\.lastMedicationAt))
+                    TextField("Примечания", text: text(\.notes), axis: .vertical)
+                    TextField("ФИО специалиста, проводящего запись", text: text(\.specialistName))
+                }
+                ForEach(errors.keys.sorted(), id: \.self) { key in Text("\(key): \(errors[key]!)").foregroundStyle(.red) }
+            }
+            .onAppear { draft.schemaVersion = 2; draft.plannedActivities = draft.plannedActivities ?? []; draft.surfaces = draft.surfaces ?? []; if source == "replay" { draft.videoRequested = false } }
+            .navigationTitle("Анкета сессии")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Отмена") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button("Продолжить") {
+                    errors = draft.validate().errors
+                    guard errors.isEmpty else { return }
+                    draft.savedAtLocal = sheetSavedAt()
+                    onSave(draft); dismiss()
+                } }
+            }
+        }
+    }
+    private func text(_ key: WritableKeyPath<SessionQuestionnaire, String?>) -> Binding<String> {
+        Binding(get: { draft[keyPath: key] ?? "" }, set: { draft[keyPath: key] = $0.isEmpty ? nil : $0 })
+    }
+    private func decimal(_ key: WritableKeyPath<SessionQuestionnaire, Double?>) -> Binding<String> {
+        Binding(get: { draft[keyPath: key].map { String($0) } ?? "" }, set: { draft[keyPath: key] = $0.isEmpty ? nil : (Double($0.replacingOccurrences(of: ",", with: ".")) ?? .nan) })
+    }
+    private func multiple(_ key: WritableKeyPath<SessionQuestionnaire, [String]?>, _ value: String) -> Binding<Bool> {
+        Binding(get: { (draft[keyPath: key] ?? []).contains(value) }, set: { selected in
+            var values = draft[keyPath: key] ?? []
+            values.removeAll { $0 == value }
+            if selected { values.append(value) }
+            draft[keyPath: key] = values
+        })
+    }
+}
+
+private func sheetSavedAt() -> String {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+    return formatter.string(from: Date())
+}
+
+private func sheetPicker(_ title: String, selection: Binding<String>, values: [String]) -> some View {
+    let current = selection.wrappedValue
+    let options = [""] + values + (current.isEmpty || values.contains(current) ? [] : [current])
+    return Picker(title, selection: selection) {
+        ForEach(options, id: \.self) { Text($0.isEmpty ? "Не указано" : $0).tag($0) }
+    }
+}

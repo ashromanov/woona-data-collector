@@ -43,8 +43,18 @@ struct DogQuestionnaire: Codable, Equatable {
     var shelterPermission = ""
     var notesStatus = ""
     var notes: String?
+    var animalId: String?
+    var species: String?
+    var savedAtLocal: String?
+    var diseaseCategory: String?
+    var diseaseCategoryDetails: String?
+    var chronicLameness: String?
+    var medications: String?
+    var history: String?
+    var specialistName: String?
 
     func validate() -> QuestionnaireValidation {
+        if schemaVersion == 2 { return validateSheet() }
         var errors: [String: String] = [:]
         func required(_ key: String, _ value: String, max: Int) {
             if value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -118,6 +128,7 @@ struct DogQuestionnaire: Codable, Equatable {
     }
 
     mutating func normalizeConditionals() {
+        if schemaVersion == 2 { return }
         if breedStatus != "mixed" { resembles = nil }
         if !["purebred", "mixed"].contains(breedStatus) { breedName = nil }
         if ageStatus == "unknown" { ageYears = nil; ageMonths = nil; ageSource = "unknown" }
@@ -163,8 +174,20 @@ struct SessionQuestionnaire: Codable, Equatable {
     var bodyTemperatureC: Double?
     var measurementAtUtc: String?
     var videoRequested = true
+    var animalId: String?
+    var savedAtLocal: String?
+    var sessionDate: String?
+    var startTime: String?
+    var endTime: String?
+    var durationMinutes: Double?
+    var plannedActivities: [String]?
+    var surfaces: [String]?
+    var lastMedicationAt: String?
+    var notes: String?
+    var specialistName: String?
 
     func validate() -> QuestionnaireValidation {
+        if schemaVersion == 2 { return validateSheet() }
         var errors: [String: String] = [:]
         func required(_ key: String, _ value: String, max: Int) {
             let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -210,6 +233,7 @@ struct SessionQuestionnaire: Codable, Equatable {
     }
 
     mutating func normalizeConditionals() {
+        if schemaVersion == 2 { return }
         if !["mixed", "other"].contains(activityType) { activityDetails = nil }
         if surface != "other" { surfaceDetails = nil }
         if airTemperatureStatus == "not_measured" { airTemperatureC = nil }
@@ -231,6 +255,63 @@ struct SessionQuestionnaire: Codable, Equatable {
         "indoors": ["tile", "concrete", "wood", "laminate", "carpet", "bed", "kennel_mat", "other"],
         "outdoors": ["asphalt", "concrete", "grass", "soil", "gravel", "snow", "other"],
     ]
+}
+
+extension DogQuestionnaire {
+    func validateSheet() -> QuestionnaireValidation {
+        var errors: [String: String] = [:]
+        if (animalId ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (animalId ?? "").count > 100 { errors["animalId"] = "Укажите ID животного (до 100 символов)" }
+        if numberOrName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || numberOrName.count > 100 { errors["numberOrName"] = "Укажите кличку (до 100 символов)" }
+        let textFields: [(String, String?, Int)] = [
+            ("shelterOrPlace", shelterOrPlace, 200), ("breedName", breedName, 100), ("resembles", resembles, 200),
+            ("shavedAreasDetails", shavedAreasDetails, 500), ("diagnosesDetails", diagnosesDetails, 2000),
+            ("housingDetails", housingDetails, 500), ("walksDescription", walksDescription, 500),
+            ("notes", notes, 2000), ("medications", medications, 2000), ("history", history, 2000),
+            ("specialistName", specialistName, 2000), ("diseaseCategory", diseaseCategory, 2000),
+            ("diseaseCategoryDetails", diseaseCategoryDetails, 2000),
+        ]
+        for (key, value, limit) in textFields {
+            if let value, value.count > limit { errors[key] = "Максимум \(limit) символов" }
+        }
+        if let ageYears, !(0...40).contains(ageYears) { errors["ageYears"] = "Укажите 0–40 лет" }
+        if let ageMonths, !(0...11).contains(ageMonths) { errors["ageMonths"] = "Укажите 0–11 месяцев" }
+        if let weightKg, !weightKg.isFinite || weightKg <= 0 || weightKg > 150 { errors["weightKg"] = "Вес должен быть >0 и ≤150 кг" }
+        if let bodyConditionScore, !(1...9).contains(bodyConditionScore) { errors["bodyConditionScore"] = "BCS: 1–9" }
+        if let neckCircumferenceCm, !neckCircumferenceCm.isFinite || neckCircumferenceCm <= 0 || neckCircumferenceCm > 150 { errors["neckCircumferenceCm"] = "Обхват должен быть >0 и ≤150 см; оставьте пустым, если не измерен" }
+        return QuestionnaireValidation(errors: errors)
+    }
+}
+
+extension SessionQuestionnaire {
+    func validateSheet() -> QuestionnaireValidation {
+        var errors: [String: String] = [:]
+        if sessionLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || sessionLabel.count > 100 { errors["sessionLabel"] = "Укажите номер сессии (до 100 символов)" }
+        let textFields: [(String, String?, Int)] = [
+            ("operatorName", operatorName, 150), ("activityDetails", activityDetails, 1000),
+            ("surfaceDetails", surfaceDetails, 300), ("sensorPositionDetails", sensorPositionDetails, 300),
+            ("preMeasurementStateDetails", preMeasurementStateDetails, 500), ("notes", notes, 2000),
+            ("lastMedicationAt", lastMedicationAt, 2000), ("specialistName", specialistName, 2000),
+        ]
+        for (key, value, limit) in textFields {
+            if let value, value.count > limit { errors[key] = "Максимум \(limit) символов" }
+        }
+        let activities = plannedActivities ?? []
+        if activities.isEmpty || activities.contains(where: { $0.isEmpty }) || Set(activities).count != activities.count { errors["plannedActivities"] = "Выберите формат записи" }
+        let selectedSurfaces = surfaces ?? []
+        if selectedSurfaces.contains(where: { $0.isEmpty }) || Set(selectedSurfaces).count != selectedSurfaces.count { errors["surfaces"] = "Проверьте поверхности" }
+        if let airTemperatureC, !airTemperatureC.isFinite || !(-60...70).contains(airTemperatureC) { errors["airTemperatureC"] = "Температура: −60…70 °C" }
+        if let durationMinutes, !durationMinutes.isFinite || durationMinutes < 0 { errors["durationMinutes"] = "Продолжительность должна быть ≥0" }
+        for (key, value, format) in [("sessionDate", sessionDate, "yyyy-MM-dd"), ("startTime", startTime, "HH:mm"), ("endTime", endTime, "HH:mm")] {
+            if let value, !value.isEmpty {
+                let formatter = DateFormatter()
+                formatter.locale = Locale(identifier: "en_US_POSIX")
+                formatter.dateFormat = format
+                formatter.isLenient = false
+                if formatter.date(from: value) == nil { errors[key] = "Формат: \(format)" }
+            }
+        }
+        return QuestionnaireValidation(errors: errors)
+    }
 }
 
 struct DogProfile: Identifiable, Equatable {
@@ -384,8 +465,8 @@ final class WoonaStore {
                 )
             }
             try execute(
-                "INSERT INTO dog_profile_versions(id,dog_id,schema_version,validation_state,questionnaire_json,content_sha256,client_created_at_utc) VALUES(?,?,1,'complete',?,?,?)",
-                [.text(versionID.uuidString), .text(dogID.uuidString), .text(json), .text(Self.sha256(questionnaireData)), .text(now)]
+                "INSERT INTO dog_profile_versions(id,dog_id,schema_version,validation_state,questionnaire_json,content_sha256,client_created_at_utc) VALUES(?,?,?,'complete',?,?,?)",
+                [.text(versionID.uuidString), .text(dogID.uuidString), .integer(Int64(questionnaire.schemaVersion)), .text(json), .text(Self.sha256(questionnaireData)), .text(now)]
             )
         }
         return try profiles().first { $0.id == dogID }!
@@ -444,10 +525,10 @@ final class WoonaStore {
                 INSERT OR IGNORE INTO dog_profile_versions(
                   id,dog_id,schema_version,validation_state,questionnaire_json,
                   content_sha256,client_created_at_utc,superseded_at_utc
-                ) VALUES(?,?,1,'complete',?,?,?,?)
+                ) VALUES(?,?,?,'complete',?,?,?,?)
                 """,
                 [
-                    .text(profileVersionID.uuidString), .text(dogID.uuidString), .text(json),
+                    .text(profileVersionID.uuidString), .text(dogID.uuidString), .integer(Int64(questionnaire.schemaVersion)), .text(json),
                     .text(contentSha256), .text(updatedAtUTC), preserveLocal ? .text(updatedAtUTC) : .null,
                 ]
             )
@@ -483,10 +564,20 @@ final class WoonaStore {
 
     @discardableResult
     func createRecording(profile: DogProfile, source: String, questionnaire: SessionQuestionnaire) throws -> WoonaRecording {
+        var questionnaire = questionnaire
+        if questionnaire.schemaVersion == 2 { questionnaire.animalId = profile.questionnaire.animalId }
         guard questionnaire.validate().isValid else { throw WoonaStoreError.invalidData("Session questionnaire is incomplete") }
         let id = UUID()
         let now = Date()
         let started = Self.iso8601(now)
+        if questionnaire.schemaVersion == 2 && source == "live" {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "yyyy-MM-dd"
+            questionnaire.sessionDate = formatter.string(from: now)
+            formatter.dateFormat = "HH:mm"
+            questionnaire.startTime = formatter.string(from: now)
+        }
         let date = Self.dayFormatter.string(from: now)
         let relative = "recordings/\(profile.id.uuidString)/\(date)/\(id.uuidString)"
         try FileManager.default.createDirectory(
@@ -705,6 +796,20 @@ final class WoonaStore {
                 "UPDATE recordings SET status=?,ended_at_utc=?,server_sync_state='pending' WHERE id=?",
                 [.text(status), .text(now), .text(recording.id.uuidString)]
             )
+            if var questionnaire = recording.questionnaire, questionnaire.schemaVersion == 2 && recording.source == "live" {
+                let formatter = DateFormatter()
+                formatter.locale = Locale(identifier: "en_US_POSIX")
+                formatter.timeZone = TimeZone(identifier: recording.timezone)
+                formatter.dateFormat = "HH:mm"
+                questionnaire.endTime = formatter.string(from: Date())
+                let parser = ISO8601DateFormatter()
+                parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                if let start = parser.date(from: recording.startedAtUTC) ?? ISO8601DateFormatter().date(from: recording.startedAtUTC) {
+                    questionnaire.durationMinutes = max(0, Date().timeIntervalSince(start) / 60)
+                }
+                let json = String(data: try Self.sessionQuestionnaireData(questionnaire), encoding: .utf8)!
+                try execute("UPDATE recordings SET questionnaire_json=? WHERE id=?", [.text(json), .text(recording.id.uuidString)])
+            }
             try execute(
                 "INSERT OR REPLACE INTO server_sync_state(recording_id,state,attempt_count,updated_at_utc) VALUES(?,'pending',0,?)",
                 [.text(recording.id.uuidString), .text(now)]
@@ -969,7 +1074,7 @@ final class WoonaStore {
                 "breedName", "resembles", "ageYears", "ageMonths", "weightKg",
                 "bodyConditionScore", "neckCircumferenceCm", "shavedAreasDetails",
                 "diagnosesDetails", "housingDetails", "walksDescription", "notes",
-            ]
+            ] + (questionnaire.schemaVersion == 2 ? ["animalId", "species", "savedAtLocal", "diseaseCategory", "diseaseCategoryDetails", "chronicLameness", "medications", "history", "specialistName"] : [])
         )
     }
     static func sessionQuestionnaireData(_ questionnaire: SessionQuestionnaire) throws -> Data {
@@ -979,7 +1084,7 @@ final class WoonaStore {
                 "activityDetails", "surfaceDetails", "airTemperatureC",
                 "sensorPositionDetails", "preMeasurementStateDetails", "pulseBpm",
                 "respirationPerMinute", "bodyTemperatureC", "measurementAtUtc",
-            ]
+            ] + (questionnaire.schemaVersion == 2 ? ["animalId", "savedAtLocal", "sessionDate", "startTime", "endTime", "durationMinutes", "lastMedicationAt", "notes", "specialistName"] : [])
         )
     }
     private static func questionnaireData<T: Encodable>(_ questionnaire: T, nullKeys: [String]) throws -> Data {

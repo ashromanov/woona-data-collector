@@ -10,6 +10,7 @@ services:
       WOONA_ALLOW_LEGACY_MIGRATION: "false"
       LABEL_STUDIO_URL: http://label_studio:8080
       LABEL_STUDIO_HOST_HEADER: cool-trams.digital
+      LABEL_PROJECT_ID: ${LABEL_PROJECT_ID:-21}
       LABEL_STUDIO_API_TOKEN: ${LABEL_API_TOKEN:?set LABEL_API_TOKEN}
       LABEL_SNAPSHOT_ROOT: /srv/drive
     volumes:
@@ -73,6 +74,7 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-woona}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-woona}
       LABEL_STUDIO_URL: http://label_studio:8080
       LABEL_STUDIO_HOST_HEADER: cool-trams.digital
+      LABEL_PROJECT_ID: ${LABEL_PROJECT_ID:-21}
       LABEL_STUDIO_API_TOKEN: ${LABEL_API_TOKEN:?set LABEL_API_TOKEN}
       LABEL_SNAPSHOT_ROOT: /srv/drive
     depends_on:

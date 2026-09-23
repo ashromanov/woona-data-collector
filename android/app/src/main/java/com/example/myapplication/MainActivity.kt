@@ -172,25 +172,30 @@ class MainActivity : ComponentActivity() {
     }
 
     private val deviceFeatureController: DeviceFeatureController by lazy {
-        DeviceFeatureModuleEntryPoint.create(
-            context = this,
-            filesDir = filesDir,
-            fileProviderAuthority = "$packageName.provider",
-            serviceUuid = serviceUuid,
-            characteristicUuid = characteristicUuid,
-            descriptorUuid = descriptorUuid,
-            initialTransportProfile = transportPreferences.selectedTransportProfile(),
-            appTextResolver = appTextResolver,
-            woonaDatabase = woonaDatabase,
-            snapshotDirectory = File(cacheDir, "woona_export_snapshots"),
-            onRecordingChanged = {
-                runOnUiThread {
-                    refreshProfilesAndRecordings()
-                    ServerSyncScheduler.enqueuePending(applicationContext)
-                    refreshServerState()
-                }
-            },
-        )
+        DeviceFeatureControllerHolder.obtain(
+            onRecordingChanged = ::handleRecordingChanged,
+        ) {
+            DeviceFeatureModuleEntryPoint.create(
+                context = applicationContext,
+                filesDir = filesDir,
+                fileProviderAuthority = "$packageName.provider",
+                serviceUuid = serviceUuid,
+                characteristicUuid = characteristicUuid,
+                descriptorUuid = descriptorUuid,
+                initialTransportProfile = transportPreferences.selectedTransportProfile(),
+                appTextResolver = appTextResolver,
+                woonaDatabase = woonaDatabase,
+                snapshotDirectory = File(cacheDir, "woona_export_snapshots"),
+                onRecordingChanged = ::handleRecordingChanged,
+                onCaptureLifecycleChanged = { active ->
+                    if (active) {
+                        CaptureForegroundService.start(applicationContext)
+                    } else {
+                        CaptureForegroundService.stop(applicationContext)
+                    }
+                },
+            )
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -199,7 +204,9 @@ class MainActivity : ComponentActivity() {
         applyAppThemeMode(this, selectedThemeMode)
         super.onCreate(savedInstanceState)
 
-        woonaDatabase.interruptUnfinished()
+        if (!CaptureServiceBridge.isRunning && !DeviceFeatureControllerHolder.hasActiveCapture()) {
+            woonaDatabase.interruptUnfinished()
+        }
         refreshProfilesAndRecordings()
         savedInstanceState?.let { state ->
             editingProfile = state.getString(STATE_EDITING_PROFILE_ID)
@@ -217,6 +224,9 @@ class MainActivity : ComponentActivity() {
         ServerSyncScheduler.enqueuePending(applicationContext)
         observeServerWork()
         deviceFeatureController
+        CaptureServiceBridge.onStopRequested = {
+            DeviceFeatureControllerHolder.requestStop()
+        }
         enableEdgeToEdge()
         setContent {
             AppLocalizationEntryPoint.Provide(
@@ -441,10 +451,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
-        if (isCameraPermissionRequestInProgress) return
-        lifecycleScope.launch(Dispatchers.IO) {
-            deviceFeatureController.onPause()
-        }
+        // An Activity losing focus is not a capture stop. The foreground
+        // service and the explicit Stop action own the recording lifecycle.
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -467,8 +475,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         setChartFullscreenActive(false)
-        deviceFeatureController.close()
-        woonaDatabase.close()
+        if (!deviceFeatureController.isCaptureActive()) {
+            DeviceFeatureControllerHolder.releaseIfInactive(deviceFeatureController)
+            CaptureServiceBridge.onStopRequested = null
+            woonaDatabase.close()
+        }
         backgroundExecutor.shutdownNow()
         super.onDestroy()
     }
@@ -579,6 +590,14 @@ class MainActivity : ComponentActivity() {
         } else {
             profilePreferences.edit().putString(LAST_PROFILE_ID_KEY, selectedId).apply()
             recentRecordings = woonaDatabase.recentRecordings(selectedId)
+        }
+    }
+
+    private fun handleRecordingChanged() {
+        runOnUiThread {
+            refreshProfilesAndRecordings()
+            ServerSyncScheduler.enqueuePending(applicationContext)
+            refreshServerState()
         }
     }
 

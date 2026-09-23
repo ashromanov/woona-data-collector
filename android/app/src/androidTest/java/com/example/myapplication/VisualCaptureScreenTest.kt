@@ -1,6 +1,7 @@
 package com.example.myapplication
 
 import android.graphics.Bitmap
+import android.content.res.Configuration
 import android.os.ParcelFileDescriptor
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Column
@@ -9,11 +10,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollTo
@@ -30,6 +35,7 @@ import java.io.File
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.Assert.assertTrue
 
 @RunWith(AndroidJUnit4::class)
 class VisualCaptureScreenTest {
@@ -42,6 +48,37 @@ class VisualCaptureScreenTest {
         composeRule.onNodeWithText("Sensor and video are recording").assertIsDisplayed()
         composeRule.onNodeWithText("Stop session").assertIsDisplayed()
         composeRule.onNodeWithText("ECG 12", substring = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun landscapePreview_fitsScreenHeightAndKeepsAspectRatio() {
+        val landscape = Configuration().apply {
+            orientation = Configuration.ORIENTATION_LANDSCAPE
+            screenWidthDp = 640
+            screenHeightDp = 320
+        }
+        composeRule.setContent {
+            CompositionLocalProvider(LocalConfiguration provides landscape) {
+                ProfilesOverview(
+                    profiles = listOf(profile),
+                    selectedProfileId = profile.id,
+                    recordings = emptyList(),
+                    language = AppLanguage.ENGLISH,
+                    onSelectProfile = {},
+                    onCreateProfile = {},
+                    onEditProfile = {},
+                    onShareRecording = {},
+                    videoState = VideoCaptureState.RECORDING,
+                    videoOffsetMillis = null,
+                    onVideoAction = {},
+                )
+            }
+        }
+        val bounds = composeRule.onNodeWithTag("video_preview").getUnclippedBoundsInRoot()
+        val height = (bounds.bottom - bounds.top).value
+        val width = (bounds.right - bounds.left).value
+        assertTrue("Landscape preview is too tall", height <= 128.5f)
+        assertTrue("Landscape preview is stretched", kotlin.math.abs(width / height - 16f / 9f) < 0.02f)
     }
 
     private fun capture(state: VideoCaptureState, fileName: String) {

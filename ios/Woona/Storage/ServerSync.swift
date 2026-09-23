@@ -193,7 +193,7 @@ final class WoonaServerClient {
             ],
             "profileVersion": [
                 "id": profile.profileVersionID.uuidString,
-                "schemaVersion": 1,
+                "schemaVersion": profile.questionnaire.schemaVersion,
                 "validationState": "complete",
                 "questionnaire": questionnaire,
                 "contentSha256": profile.contentSha256,
@@ -314,7 +314,7 @@ final class WoonaServerClient {
                 ],
                 "dogProfileVersion": [
                     "id": profile.profileVersionID.uuidString,
-                    "schemaVersion": 1,
+                    "schemaVersion": profile.questionnaire.schemaVersion,
                     "validationState": "complete",
                     "questionnaire": profileJSON,
                     "contentSha256": profile.contentSha256,
@@ -331,7 +331,7 @@ final class WoonaServerClient {
                     "sensorHardwareId": NSNull(),
                     "appVersion": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "ios-dev",
                     "protocolVersion": "1",
-                    "questionnaireSchemaVersion": 1,
+                    "questionnaireSchemaVersion": questionnaire.schemaVersion,
                     "questionnaireValidationState": "complete",
                     "sessionQuestionnaire": sessionJSON,
                     "captureErrorCode": captureErrorCode ?? NSNull(),

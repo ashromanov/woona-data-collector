@@ -18,11 +18,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy import text
 
-from server.label_sync import LABELS, file_url, paged, request_json
+from server.label_sync import active_project, file_url, paged, request_json
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
-KINDS = ("source", "activity", "gait", "lameness")
-VIDEO_KINDS = KINDS[1:]
+KINDS = ("activity",)
+VIDEO_KINDS = KINDS
 
 
 def available_file(path: Path, expected_size: int) -> bool:
@@ -54,24 +54,7 @@ def require_label_user(request: Request) -> None:
 
 
 def records_from_sources() -> tuple[list[dict], dict]:
-    snapshot = Path(os.environ["LABEL_SNAPSHOT_ROOT"])
-    index = json.loads((snapshot / "recordings-v1.json").read_text(encoding="utf-8"))
-    manifest = json.loads((snapshot / "manifest.json").read_text(encoding="utf-8"))
-    if index["schema_version"] != 1:
-        raise ValueError("unsupported Drive index")
     records = []
-    indexed_ids = set()
-    for session in index["sessions"]:
-        files = []
-        for item in session["files"]:
-            indexed_ids.add(item["drive_id"])
-            path = snapshot / "raw" / item["path"]
-            files.append({"name": Path(item["path"]).name, "relative": "drive/raw/" + item["path"],
-                          "size": item["size"], "available": available_file(path, item["size"])})
-        records.append({"source_id": "drive:" + session["id"], "origin": "Drive",
-                        "dog": session["dog"], "date": session["capture_date"],
-                        "files": files, "ingest_status": "verified", "profile": None,
-                        "session_questionnaire": None})
 
     # Reuse the API's existing PostgreSQL engine; one recording ID owns all artifacts and questionnaires.
     from server.app import STORAGE_ROOT, engine
@@ -86,13 +69,15 @@ def records_from_sources() -> tuple[list[dict], dict]:
             FROM recordings r JOIN dogs d ON d.id=r.dog_id
             JOIN dog_profile_versions v ON v.id=r.dog_profile_version_id
             LEFT JOIN artifacts a ON a.recording_id=r.id
+            WHERE r.session_questionnaire->>'schemaVersion'='2'
+              AND (r.session_questionnaire->'plannedActivities') ?| ARRAY['Аллюр/движение','Активность']
             ORDER BY r.started_at DESC, a.id
         """)).mappings().all()
         survey_counts = {
             "dogs": connection.execute(text("SELECT count(*) FROM dogs")).scalar_one(),
             "profile_versions": connection.execute(text("SELECT count(*) FROM dog_profile_versions")).scalar_one(),
             "session_questionnaires": connection.execute(text(
-                "SELECT count(*) FROM recordings WHERE questionnaire_validation_state='complete'"
+                "SELECT count(*) FROM recordings WHERE questionnaire_validation_state='complete' AND session_questionnaire->>'schemaVersion'='2' AND (session_questionnaire->'plannedActivities') ?| ARRAY['Аллюр/движение','Активность']"
             )).scalar_one(),
         }
     app_records = {}
@@ -118,8 +103,8 @@ def records_from_sources() -> tuple[list[dict], dict]:
                                     path is not None and STORAGE_ROOT in path.parents and
                                     available_file(path, row["expected_size_bytes"])})
     records.extend(app_records.values())
-    return records, {"drive_files": len(manifest["files"]),
-                     "drive_unindexed_files": len(manifest["files"]) - len(indexed_ids),
+    return records, {"drive_files": 0,
+                     "drive_unindexed_files": 0,
                      **survey_counts}
 
 
@@ -137,18 +122,18 @@ def summarize(records: list[dict], projects: list[dict], tasks_by_kind: dict, an
             for annotation in full.get("annotations", []):
                 for result in annotation.get("result", []):
                     values = result.get("value", {})
-                    labels = values.get("timelinelabels", []) if kind != "source" else values.get("choices", [])
-                    if result.get("from_name") != ("source" if kind == "source" else "segment"):
+                    labels = values.get("timelinelabels", [])
+                    if result.get("from_name") != projects[0]["timeline_name"]:
                         continue
                     for label in labels:
                         class_sources[label].add(task["data"]["source_id"])
                         class_segments[label] += 1
-        project = next(p for p in projects if p["title"] == LABELS[kind][0])
+        project = projects[0]
         category[kind] = {"title": project["title"], "project_id": project["id"],
                           "tasks": len(tasks_by_kind[kind]),
                           "labeled": sum(bool(t.get("is_labeled")) for t in tasks_by_kind[kind]),
                           "classes": {label: {"records": len(class_sources[label]), "segments": class_segments[label]}
-                                      for label in LABELS[kind][1]}}
+                                      for label in project["labels"]}}
 
     for record in records:
         files = [f for f in record["files"] if f["available"]]
@@ -171,11 +156,11 @@ def summarize(records: list[dict], projects: list[dict], tasks_by_kind: dict, an
             "totals": {"groups": len(records), "video_ble": len(video_ble),
                        "annotated_any": sum(r["annotated_any"] for r in video_ble),
                        "annotated_all": sum(r["annotated_all"] for r in video_ble),
-                       "source_reviewed": category["source"]["labeled"],
+                        "source_reviewed": category["activity"]["labeled"],
                        "files": sum(len(r["files"]) for r in records),
                        "available_files": sum(f["available"] for r in records for f in r["files"]),
                        "bytes": sum(r["bytes"] for r in records),
-                       "pending_import": sum(not r["tasks"]["source"] for r in records),
+                        "pending_import": sum(not r["tasks"]["activity"] for r in records),
                        **extra},
             "ingest": dict(Counter(r["ingest_status"] for r in records)),
             "categories": category, "records": records}
@@ -183,8 +168,8 @@ def summarize(records: list[dict], projects: list[dict], tasks_by_kind: dict, an
 
 def load_dashboard() -> dict:
     records, extra = records_from_sources()
-    projects = paged("/api/projects")
-    tasks = {kind: paged(f'/api/tasks?project={next(p["id"] for p in projects if p["title"] == LABELS[kind][0])}')
+    projects = [active_project()]
+    tasks = {kind: paged(f'/api/tasks?project={projects[0]["id"]}')
              for kind in KINDS}
     # ponytail: read each labeled task directly; batch/cache only if annotation volume makes this slow.
     labeled = {(kind, t["id"]): request_json("GET", f'/api/tasks/{t["id"]}')
@@ -200,8 +185,8 @@ def render(data: dict, query: str, status: str = "all", ble: str = "all", page: 
     cards = [
         ("Группы файлов", totals["groups"], "всего групп"),
         ("Видео + BLE", totals["video_ble"], "полные пары"),
-        ("Размечено ≥1 категории", totals["annotated_any"], "видеозаписей"),
-        ("Все 3 видеокатегории", totals["annotated_all"], f'из {totals["video_ble"]}'),
+        ("Размечено", totals["annotated_any"], "видеозаписей"),
+        ("Готово к разметке", totals["video_ble"] - totals["annotated_all"], f'из {totals["video_ble"]}'),
     ]
     card_html = "".join(f'<div class="metric"><span>{name}</span><div><strong>{value}</strong><small>{hint}</small></div></div>'
                         for name, value, hint in cards)
@@ -221,7 +206,7 @@ def render(data: dict, query: str, status: str = "all", ble: str = "all", page: 
         unit = "выборов" if kind == "source" else "интервалов"
         chips = "".join(f'<span class="class-chip"><i style="background:{color}"></i>{escape(name)}: '
                         f'<b>{stats["records"]} записей / {stats["segments"]} {unit}</b></span>'
-                        for (name, stats), color in zip(category["classes"].items(), colors[kind]))
+                        for (name, stats), color in zip(category["classes"].items(), colors[kind] * 10))
         category_rows.append(
             f'<div class="project-row"><div class="project-main"><div class="project-title">'
             f'<a href="/projects/{category["project_id"]}/data">{escape(category["title"])}</a>'
@@ -283,8 +268,8 @@ def render(data: dict, query: str, status: str = "all", ble: str = "all", page: 
         next_kind = next((kind for kind in KINDS if record["tasks"][kind] and not record["tasks"][kind]["labeled"]),
                          next((kind for kind in KINDS if record["tasks"][kind]), None))
         action = (f'<a class="action" href="/projects/{data["categories"][next_kind]["project_id"]}/data?task='
-                  f'{record["tasks"][next_kind]["id"]}">{"Открыть" if done == 4 else "Проверить" if next_kind == "source" else "Разметить"} ↗</a>') if next_kind else '—'
-        state = ("Ожидает импорта" if not record["tasks"]["source"] else
+                  f'{record["tasks"][next_kind]["id"]}">{"Открыть" if done == len(KINDS) else "Разметить"} ↗</a>') if next_kind else '—'
+        state = ("Ожидает импорта" if not record["tasks"]["activity"] else
                  "Нет пары видео + BLE" if not (record["video"] and record["ble"]) else
                  "Видео размечено" if record["annotated_all"] else "В процессе" if record["annotated_any"] else
                  "Ожидает разметки")
@@ -293,13 +278,13 @@ def render(data: dict, query: str, status: str = "all", ble: str = "all", page: 
                     f'<td><span class="pill {"ok" if record["video"] else "neutral"}">Видео: {"есть" if record["video"] else "нет"}</span> '
                     f'<span class="pill {"ok" if record["ble"] else "neutral"}">BLE: {"есть" if record["ble"] else "нет"}</span></td>'
                     f'<td>{file_details}<div class="sub">{escape(record["ingest_status"])} · референсы: {record["reference_files"]}</div></td>'
-                    f'<td><div class="dots">{dots}</div><span class="state">{state} ({done}/4)</span></td>'
+                    f'<td><div class="dots">{dots}</div><span class="state">{state} ({done}/{len(KINDS)})</span></td>'
                     f'<td>{questionnaire}</td><td>{action}</td></tr>')
 
     selected = lambda value, current: ' selected' if value == current else ''
     status_options = "".join(f'<option value="{value}"{selected(value, status)}>{name}</option>' for value, name in (
         ("all", "Все статусы"), ("ready", "Готово к разметке"), ("in_progress", "В процессе"),
-        ("complete", "Размечены 3 видеокатегории"), ("incomplete", "Без пары видео + BLE")))
+        ("complete", "Размечено"), ("incomplete", "Без пары видео + BLE")))
     ble_options = "".join(f'<option value="{value}"{selected(value, ble)}>{name}</option>' for value, name in (
         ("all", "BLE: все"), ("present", "BLE: есть"), ("absent", "BLE: нет")))
     page_links = "".join(f'<a class="page-link {"active" if number == page else ""}" href="{page_url(number)}">{number}</a>'
@@ -323,10 +308,10 @@ main{padding-top:24px!important;padding-bottom:28px!important}.panel{border:1px 
 </style></head><body>
 <header class="topbar"><div class="wrap topbar-inner"><a class="brand" href="/projects/"><span class="mark" aria-hidden="true"><i></i><i></i></span><span>Woona</span><span class="slash">/</span><span>данные и разметка</span></a><nav class="tabs" aria-label="Разделы"><a class="active" href="#data-manager">Данные (Data Manager)</a><a href="#annotation-projects">Проекты разметки</a></nav><div class="top-spacer"></div><span class="sync"><i></i>Обновлено: $updated · каждые 60 с</span><a class="top-action" href="/dashboard/data">JSON</a><a class="top-action primary" href="/projects/">Label Studio ↗</a></div></header>
 <section class="summary"><div class="wrap metrics">$cards</div></section>
-<section class="notice"><div class="wrap notice-inner"><p><span class="info">i</span><b>«Группа файлов» не равна полной записи.</b> Полная разметка = видео + BLE + отправленные аннотации во всех трёх видеопроектах. Старые CSV-референсы не засчитываются.</p><div class="pipeline"><span>Файлов: <strong>$available / $files</strong></span><span>·</span><span>Объём: <strong>$gib GiB</strong></span><span>·</span><span>Вне индекса Drive: <strong>$unindexed</strong></span><span>·</span><span>Ожидают импорта: <strong>$pending</strong></span></div></div></section>
+<section class="notice"><div class="wrap notice-inner"><p><span class="info">i</span><b>Активность и Аллюр — одна дорожка разметки.</b> Здесь показаны записи этого протокола из PostgreSQL. Прогресс считается по отправленным аннотациям существующего проекта; CSV-референсы не засчитываются.</p><div class="pipeline"><span>Файлов: <strong>$available / $files</strong></span><span>·</span><span>Объём: <strong>$gib GiB</strong></span><span>·</span><span>Ожидают импорта: <strong>$pending</strong></span></div></div></section>
 <main class="wrap"><section class="panel" id="annotation-projects"><div class="panel-head"><h2>Категории разметки</h2><span>Размечено / задач</span></div>$projects</section>
 <section class="panel" id="data-manager"><div class="toolbar"><form method="get" action="/dashboard"><input type="search" name="q" value="$query" maxlength="100" placeholder="Поиск по ID, собаке или источнику" aria-label="Поиск по ID, собаке или источнику"><select name="status" aria-label="Статус разметки">$status_options</select><select name="ble" aria-label="Наличие BLE">$ble_options</select><button type="submit">Найти</button></form><span class="toolbar-info">Найдено $found из $total групп</span></div>
-<div class="table-scroll"><table><thead><tr><th>ID / группа</th><th>Видео / BLE</th><th>Файлы и хранилище</th><th>Прогресс (4 этапа)</th><th>Анкеты</th><th>Действие</th></tr></thead><tbody>$rows</tbody></table></div><div class="pagination">$pagination</div></section></main>
+<div class="table-scroll"><table><thead><tr><th>ID / группа</th><th>Видео / BLE</th><th>Файлы и хранилище</th><th>Прогресс разметки</th><th>Анкеты</th><th>Действие</th></tr></thead><tbody>$rows</tbody></table></div><div class="pagination">$pagination</div></section></main>
 <footer class="footer"><div class="wrap"><i></i>Woona ML pipeline · актуальные данные PostgreSQL, файлов и Label Studio</div></footer></body></html>''').substitute(
         updated=escape(data["updated_at"]), cards=card_html, available=totals["available_files"],
         files=totals["files"], gib=f'{totals["bytes"] / 1073741824:.2f}',

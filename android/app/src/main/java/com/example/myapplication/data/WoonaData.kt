@@ -51,6 +51,15 @@ data class DogQuestionnaire(
     val shelterPermission: String = "",
     val notesStatus: String = "",
     val notes: String? = null,
+    val animalId: String? = null,
+    val species: String? = null,
+    val savedAtLocal: String? = null,
+    val diseaseCategory: String? = null,
+    val diseaseCategoryDetails: String? = null,
+    val chronicLameness: String? = null,
+    val medications: String? = null,
+    val history: String? = null,
+    val specialistName: String? = null,
 )
 
 data class SessionQuestionnaire(
@@ -78,6 +87,17 @@ data class SessionQuestionnaire(
     val bodyTemperatureC: Double? = null,
     val measurementAtUtc: String? = null,
     val videoRequested: Boolean = true,
+    val animalId: String? = null,
+    val savedAtLocal: String? = null,
+    val sessionDate: String? = null,
+    val startTime: String? = null,
+    val endTime: String? = null,
+    val durationMinutes: Double? = null,
+    val plannedActivities: List<String> = emptyList(),
+    val surfaces: List<String> = emptyList(),
+    val lastMedicationAt: String? = null,
+    val notes: String? = null,
+    val specialistName: String? = null,
 )
 
 data class QuestionnaireValidation(
@@ -87,6 +107,7 @@ data class QuestionnaireValidation(
 }
 
 fun DogQuestionnaire.validate(): QuestionnaireValidation {
+    if (schemaVersion == 2) return validateSheet()
     val errors = linkedMapOf<String, String>()
     fun required(key: String, value: String) {
         if (value.trim().isEmpty()) errors[key] = "Required"
@@ -158,6 +179,7 @@ fun DogQuestionnaire.validate(): QuestionnaireValidation {
 }
 
 fun SessionQuestionnaire.validate(): QuestionnaireValidation {
+    if (schemaVersion == 2) return validateSheet()
     val errors = linkedMapOf<String, String>()
     fun required(key: String, value: String, max: Int) {
         if (value.trim().isEmpty()) errors[key] = "Required"
@@ -409,6 +431,17 @@ fun DogQuestionnaire.toJson(): String = JSONObject().apply {
     put("shelterPermission", shelterPermission)
     put("notesStatus", notesStatus)
     putNullable("notes", notes)
+    if (schemaVersion == 2) {
+        putNullable("animalId", animalId)
+        putNullable("species", species)
+        putNullable("savedAtLocal", savedAtLocal)
+        putNullable("diseaseCategory", diseaseCategory)
+        putNullable("diseaseCategoryDetails", diseaseCategoryDetails)
+        putNullable("chronicLameness", chronicLameness)
+        putNullable("medications", medications)
+        putNullable("history", history)
+        putNullable("specialistName", specialistName)
+    }
 }.toString()
 
 fun dogQuestionnaireFromJson(json: String): DogQuestionnaire {
@@ -450,6 +483,15 @@ fun dogQuestionnaireFromJson(json: String): DogQuestionnaire {
         shelterPermission = value.getString("shelterPermission"),
         notesStatus = value.getString("notesStatus"),
         notes = value.nullableString("notes"),
+        animalId = value.nullableString("animalId"),
+        species = value.nullableString("species"),
+        savedAtLocal = value.nullableString("savedAtLocal"),
+        diseaseCategory = value.nullableString("diseaseCategory"),
+        diseaseCategoryDetails = value.nullableString("diseaseCategoryDetails"),
+        chronicLameness = value.nullableString("chronicLameness"),
+        medications = value.nullableString("medications"),
+        history = value.nullableString("history"),
+        specialistName = value.nullableString("specialistName"),
     )
 }
 
@@ -478,6 +520,19 @@ fun SessionQuestionnaire.toJson(): String = JSONObject().apply {
     putNullable("bodyTemperatureC", bodyTemperatureC)
     putNullable("measurementAtUtc", measurementAtUtc)
     put("videoRequested", videoRequested)
+    if (schemaVersion == 2) {
+        putNullable("animalId", animalId)
+        putNullable("savedAtLocal", savedAtLocal)
+        putNullable("sessionDate", sessionDate)
+        putNullable("startTime", startTime)
+        putNullable("endTime", endTime)
+        putNullable("durationMinutes", durationMinutes)
+        put("plannedActivities", JSONArray(plannedActivities))
+        put("surfaces", JSONArray(surfaces))
+        putNullable("lastMedicationAt", lastMedicationAt)
+        putNullable("notes", notes)
+        putNullable("specialistName", specialistName)
+    }
 }.toString()
 
 fun CaptureSyncMetadata.toJson(
@@ -571,6 +626,17 @@ fun sessionQuestionnaireFromJson(json: String): SessionQuestionnaire {
         bodyTemperatureC = value.nullableDouble("bodyTemperatureC"),
         measurementAtUtc = value.nullableString("measurementAtUtc"),
         videoRequested = value.getBoolean("videoRequested"),
+        animalId = value.nullableString("animalId"),
+        savedAtLocal = value.nullableString("savedAtLocal"),
+        sessionDate = value.nullableString("sessionDate"),
+        startTime = value.nullableString("startTime"),
+        endTime = value.nullableString("endTime"),
+        durationMinutes = value.nullableDouble("durationMinutes"),
+        plannedActivities = value.optJSONArray("plannedActivities").toStringList(),
+        surfaces = value.optJSONArray("surfaces").toStringList(),
+        lastMedicationAt = value.nullableString("lastMedicationAt"),
+        notes = value.nullableString("notes"),
+        specialistName = value.nullableString("specialistName"),
     )
 }
 
@@ -1062,7 +1128,12 @@ class WoonaDatabase(
         zoneId: ZoneId = ZoneId.systemDefault(),
         now: Instant = Instant.now(),
     ): Recording {
-        requireNotNull(profile(profileId)) { "Unknown dog profile" }
+        val selectedProfile = requireNotNull(profile(profileId)) { "Unknown dog profile" }
+        val linkedQuestionnaire = if (questionnaire?.schemaVersion == 2) questionnaire.copy(
+            animalId = selectedProfile.questionnaire.animalId,
+            sessionDate = if (source == RecordingSource.LIVE) now.atZone(zoneId).toLocalDate().toString() else questionnaire.sessionDate,
+            startTime = if (source == RecordingSource.LIVE) now.atZone(zoneId).format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")) else questionnaire.startTime,
+        ) else questionnaire
         if (questionnaire != null) {
             require(questionnaire.validate().isValid) {
                 "Session questionnaire is incomplete: ${questionnaire.validate().errors.keys.joinToString()}"
@@ -1087,7 +1158,7 @@ class WoonaDatabase(
             putNull("ended_at_utc")
             put("timezone", timezone)
             put("app_version", "android")
-            if (questionnaire == null) putNull("questionnaire_json") else put("questionnaire_json", questionnaire.toJson())
+            if (linkedQuestionnaire == null) putNull("questionnaire_json") else put("questionnaire_json", linkedQuestionnaire.toJson())
             put("relative_directory", relativeDirectory)
             put("client_created_at_utc", now.toString())
         }
@@ -1146,6 +1217,12 @@ class WoonaDatabase(
             val values = ContentValues().apply {
                 put("status", status.value)
                 put("ended_at_utc", now.toString())
+                if (recording.questionnaire?.schemaVersion == 2 && recording.source == RecordingSource.LIVE) {
+                    put("questionnaire_json", recording.questionnaire.copy(
+                        endTime = now.atZone(ZoneId.of(recording.timezone)).format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")),
+                        durationMinutes = java.time.Duration.between(Instant.parse(recording.startedAtUtc), now).toMillis() / 60000.0,
+                    ).toJson())
+                }
             }
             writableDatabase.update("recordings", values, "id=?", arrayOf(recordingId))
             files.forEach { (type, file) -> insertArtifact(recordingId, type, file, now) }

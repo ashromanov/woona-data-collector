@@ -59,7 +59,7 @@ class PacketValidatorTest {
     }
 
     @Test
-    fun validate_acceptsPacketWithoutParsedSensorBlocks() {
+    fun validate_rejectsPacketWithoutParsedSensorBlocks() {
         val result = validator.validate(
             packetBytes = testPacket(
                 counter = 7,
@@ -68,7 +68,28 @@ class PacketValidatorTest {
             ),
         )
 
-        assertTrue(result is PacketValidationResult.Accepted)
+        assertEquals(
+            PacketValidationFailureReason.INVALID_SENSOR_BLOCKS,
+            (result as PacketValidationResult.Rejected).reason,
+        )
+    }
+
+    @Test
+    fun validate_acceptsPacketWithFourByteTrailer() {
+        val block = sensorBlock(
+            sensorType = 2,
+            channelSamples = listOf(listOf(10, 20)),
+        )
+        val packet = testPacket(
+            counter = 7,
+            timerMillis = 99,
+            measurementCount = 1,
+            blocks = listOf(block),
+        ) + byteArrayOf(1, 2, 3, 4)
+        packet[4] = (packet.size and 0xFF).toByte()
+        packet[5] = ((packet.size shr 8) and 0xFF).toByte()
+
+        assertTrue(validator.validate(packet) is PacketValidationResult.Accepted)
     }
 
     private fun testPacket(

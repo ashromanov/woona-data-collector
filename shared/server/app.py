@@ -16,7 +16,7 @@ from typing import Annotated, Any, Literal
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, ValidationError as SchemaValidationError
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Connection
@@ -257,6 +257,13 @@ def sha256_bytes(value: bytes) -> str:
 def validate_questionnaire(
     validator: Draft202012Validator | None, questionnaire: dict[str, Any], name: str
 ) -> None:
+    if questionnaire.get("schemaVersion") == 2:
+        from server.questionnaires import validate_sheet
+        try:
+            validate_sheet(name, questionnaire)
+        except (ValueError, SchemaValidationError) as error:
+            raise HTTPException(422, detail={"code": f"invalid_{name}_questionnaire", "message": str(error).split("\n")[0]}) from error
+        return
     if validator is None:
         raise HTTPException(503, detail={"code": "schema_not_ready"})
     errors = sorted(validator.iter_errors(questionnaire), key=lambda error: list(error.path))
@@ -442,21 +449,26 @@ def apply_profile(
     profile: ProfileVersionPayload,
     device_id: uuid.UUID,
 ) -> int:
-    if sha256_bytes(canonical_json(profile.questionnaire)) != profile.content_sha256:
+    existing_profile = connection.execute(
+        text("SELECT dog_id,content_sha256,questionnaire FROM dog_profile_versions WHERE id=:id"),
+        {"id": profile.id},
+    ).mappings().first()
+    # Android/iOS JSON encoders may write a received 27.0 as 27. An existing
+    # immutable version is reusable only with its original hash and equal
+    # validated answers; preserve the stored source representation and hash.
+    same_existing = existing_profile is not None and (
+        existing_profile["dog_id"] == dog.id
+        and existing_profile["content_sha256"] == profile.content_sha256
+        and existing_profile["questionnaire"] == profile.questionnaire
+    )
+    if sha256_bytes(canonical_json(profile.questionnaire)) != profile.content_sha256 and not same_existing:
         raise HTTPException(422, detail={"code": "profile_hash_mismatch"})
     if profile.validation_state == "complete":
+        if profile.schema_version != profile.questionnaire.get("schemaVersion"):
+            raise HTTPException(422, detail={"code": "profile_schema_version_mismatch"})
         validate_questionnaire(dog_validator, profile.questionnaire, "dog")
     elif not ALLOW_LEGACY_MIGRATION:
         raise HTTPException(403, detail={"code": "legacy_migration_disabled"})
-    existing_profile = connection.execute(
-        text(
-            """
-            SELECT dog_id,content_sha256
-            FROM dog_profile_versions WHERE id=:id
-            """
-        ),
-        {"id": profile.id},
-    ).mappings().first()
     if existing_profile is not None:
         if (
             existing_profile["dog_id"] != dog.id
@@ -551,6 +563,17 @@ def apply_profile(
             "created": profile.client_created_at_utc,
         },
     )
+    if profile.questionnaire.get("schemaVersion") == 2:
+        external_id = profile.questionnaire["animalId"].strip().casefold()
+        connection.execute(text("""
+            INSERT INTO dog_external_ids(namespace,external_id,dog_id)
+            VALUES('woona',:external,:dog) ON CONFLICT DO NOTHING
+        """), {"external": external_id, "dog": dog.id})
+        owner = connection.execute(text("SELECT dog_id FROM dog_external_ids WHERE namespace='woona' AND external_id=:external"),
+                                   {"external": external_id}).scalar_one()
+        if owner != dog.id:
+            raise HTTPException(409, detail={"code": "animal_id_already_exists", "dogId": str(owner),
+                                           "message": "Use the existing dog profile for this animal ID"})
     return revision
 
 
@@ -602,6 +625,11 @@ def put_recording(
     ):
         raise HTTPException(422, detail={"code": "ended_before_started"})
     if manifest.recording.questionnaire_validation_state == "complete":
+        if manifest.recording.questionnaire_schema_version != manifest.recording.session_questionnaire.get("schemaVersion"):
+            raise HTTPException(422, detail={"code": "session_schema_version_mismatch"})
+        animal_id = manifest.recording.session_questionnaire.get("animalId")
+        if animal_id and animal_id.strip().casefold() != str(manifest.dog_profile_version.questionnaire.get("animalId", "")).strip().casefold():
+            raise HTTPException(422, detail={"code": "session_dog_mismatch"})
         validate_questionnaire(
             session_validator,
             manifest.recording.session_questionnaire,

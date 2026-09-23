@@ -36,16 +36,17 @@ jobs:
           ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
         run: |
           mkdir -p release-assets
-          if [[ -n "$KEYSTORE_BASE64" && -n "$ANDROID_SIGNING_STORE_PASSWORD" && -n "$ANDROID_SIGNING_KEY_ALIAS" && -n "$ANDROID_SIGNING_KEY_PASSWORD" ]]; then
-            umask 077
-            export ANDROID_SIGNING_STORE_FILE="$RUNNER_TEMP/woona-release.keystore"
-            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$ANDROID_SIGNING_STORE_FILE"
-            (cd android && ./gradlew assembleRelease --no-daemon --console=plain)
-            "$ANDROID_SDK_ROOT/build-tools/36.1.0/apksigner" verify android/app/build/outputs/apk/release/app-release.apk
-            cp android/app/build/outputs/apk/release/app-release.apk release-assets/Woona-Android-release.apk
-          else
-            cp android/app/build/outputs/apk/debug/app-debug.apk release-assets/Woona-Android-debug.apk
-          fi
+          [[ -n "$KEYSTORE_BASE64" && -n "$ANDROID_SIGNING_STORE_PASSWORD" && -n "$ANDROID_SIGNING_KEY_ALIAS" && -n "$ANDROID_SIGNING_KEY_PASSWORD" ]] || {
+            echo 'Android signing secrets are required for a release tag' >&2
+            exit 1
+          }
+          umask 077
+          export ANDROID_SIGNING_STORE_FILE="$RUNNER_TEMP/woona-release.keystore"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$ANDROID_SIGNING_STORE_FILE"
+          (cd android && ./gradlew assembleRelease --no-daemon --console=plain)
+          certs="$("$ANDROID_SDK_ROOT/build-tools/36.1.0/apksigner" verify --print-certs android/app/build/outputs/apk/release/app-release.apk)"
+          grep -Fq 'cf308a3b4d025e871bf30225ce1d1c3499f0fcd9d557f8a8ac5f5c414b381fa2' <<< "$certs"
+          cp android/app/build/outputs/apk/release/app-release.apk release-assets/Woona-Android-release.apk
           (cd release-assets && sha256sum *.apk > SHA256SUMS-android.txt)
       - name: Prepare debug APK
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}

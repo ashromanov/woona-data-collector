@@ -36,12 +36,12 @@ class MainActivityRecreationTest {
                 .performScrollTo()
                 .performClick()
             composeRule
-                .onNodeWithText("Session label *")
+                .onNodeWithText("Номер сессии *")
                 .performTextInput("Lifecycle draft")
 
             scenario.recreate()
 
-            composeRule.onNodeWithText("Recording session").assertIsDisplayed()
+            composeRule.onNodeWithText("Session questionnaire").assertIsDisplayed()
             composeRule.onNodeWithText("Lifecycle draft").assertIsDisplayed()
         }
     }

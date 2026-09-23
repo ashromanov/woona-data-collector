@@ -3,6 +3,7 @@ package com.example.myapplication.profile
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
@@ -39,7 +41,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -299,36 +303,43 @@ private fun CaptureStatusCard(
                 }
             }
             if (showVideoPreview && state !in setOf(VideoCaptureState.FINISHED, VideoCaptureState.FAILED, VideoCaptureState.DEGRADED)) {
-                val portrait = LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT
-                AndroidView(
-                    factory = { context ->
-                        SurfaceView(context).apply {
-                            holder.addCallback(
-                                object : SurfaceHolder.Callback {
-                                    override fun surfaceCreated(holder: SurfaceHolder) {
-                                        onPreviewSurface(holder.surface)
-                                    }
+                val configuration = LocalConfiguration.current
+                val portrait = configuration.orientation == Configuration.ORIENTATION_PORTRAIT
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    AndroidView(
+                        factory = { context ->
+                            SurfaceView(context).apply {
+                                holder.addCallback(
+                                    object : SurfaceHolder.Callback {
+                                        override fun surfaceCreated(holder: SurfaceHolder) {
+                                            onPreviewSurface(holder.surface)
+                                        }
 
-                                    override fun surfaceChanged(
-                                        holder: SurfaceHolder,
-                                        format: Int,
-                                        width: Int,
-                                        height: Int,
-                                    ) {
-                                        onPreviewSurface(holder.surface)
-                                    }
+                                        override fun surfaceChanged(
+                                            holder: SurfaceHolder,
+                                            format: Int,
+                                            width: Int,
+                                            height: Int,
+                                        ) {
+                                            onPreviewSurface(holder.surface)
+                                        }
 
-                                    override fun surfaceDestroyed(holder: SurfaceHolder) {
-                                        onPreviewSurface(null)
-                                    }
-                                },
+                                        override fun surfaceDestroyed(holder: SurfaceHolder) {
+                                            onPreviewSurface(null)
+                                        }
+                                    },
+                                )
+                            }
+                        },
+                        modifier = Modifier
+                            .testTag("video_preview")
+                            .then(
+                                if (portrait) Modifier.fillMaxWidth()
+                                else Modifier.widthIn(max = (configuration.screenHeightDp * 0.4f * 16f / 9f).dp)
                             )
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(if (portrait) 9f / 16f else 16f / 9f),
-                )
+                            .aspectRatio(if (portrait) 9f / 16f else 16f / 9f),
+                    )
+                }
             }
             offsetMillis?.let {
                 Text(
@@ -438,7 +449,7 @@ private fun polarStatusLine(status: PolarStatus, language: AppLanguage): String 
 }
 
 @Composable
-fun DogQuestionnaireDialog(
+private fun LegacyDogQuestionnaireDialog(
     initial: DogQuestionnaire?,
     required: Boolean,
     language: AppLanguage,
@@ -690,7 +701,7 @@ fun DogQuestionnaireDialog(
 }
 
 @Composable
-fun SessionQuestionnaireDialog(
+private fun LegacySessionQuestionnaireDialog(
     language: AppLanguage,
     onDismiss: () -> Unit,
     onSave: (SessionQuestionnaire) -> Unit,
@@ -1351,3 +1362,141 @@ private fun syncStateLabel(state: String, language: AppLanguage): String = when 
 }
 
 private const val LIST_SEPARATOR = "\u001F"
+
+@Composable
+fun DogQuestionnaireDialog(
+    initial: DogQuestionnaire?, required: Boolean, language: AppLanguage,
+    onDismiss: () -> Unit, onSave: (DogQuestionnaire) -> Unit,
+) {
+    val values = rememberSaveable(initial, saver = questionnaireValuesSaver) {
+        mutableStateMapOf<String, String>().apply {
+            putDog(initial)
+            put("species", initial?.species ?: "собака")
+            initial?.let {
+                putIfNotNull("animalId", it.animalId)
+                putIfNotNull("diseaseCategory", it.diseaseCategory)
+                putIfNotNull("diseaseCategoryDetails", it.diseaseCategoryDetails)
+                putIfNotNull("chronicLameness", it.chronicLameness)
+                putIfNotNull("medications", it.medications)
+                putIfNotNull("history", it.history)
+                putIfNotNull("specialistName", it.specialistName)
+            }
+        }
+    }
+    var errors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    QuestionnaireDialog(
+        title = tr(language, "Dog questionnaire", "Анкета собаки"),
+        subtitle = tr(language, "ID and name are required. Leave unknown answers blank.", "ID и кличка обязательны. Неизвестные ответы оставьте пустыми."),
+        language = language, progress = listOf("animalId", "numberOrName").count { !values[it].isNullOrBlank() } to 2,
+        errorCount = errors.size, firstErrorKey = errors.keys.firstOrNull(), canDismiss = !required,
+        onDismiss = onDismiss, onSave = {
+            val result = values.toDogQuestionnaire().copy(
+                schemaVersion = 2, animalId = values.text("animalId"), species = values.text("species"),
+                savedAtLocal = java.time.LocalDateTime.now().toString(),
+                diseaseCategory = values.text("diseaseCategory"), diseaseCategoryDetails = values.text("diseaseCategoryDetails"),
+                chronicLameness = values.text("chronicLameness"), medications = values.text("medications"),
+                history = values.text("history"), specialistName = values.text("specialistName"),
+                ageYears = values.sheetInt("ageYears"), ageMonths = values.sheetInt("ageMonths"),
+                weightKg = values.sheetDouble("weightKg"), bodyConditionScore = values.sheetInt("bodyConditionScore"),
+                neckCircumferenceCm = values.sheetDouble("neckCircumferenceCm"),
+            )
+            errors = result.validate().errors
+            if (errors.isEmpty()) onSave(result)
+        },
+    ) {
+        Field(values, "animalId", "Номер/ID животного *", error = errors["animalId"])
+        Field(values, "numberOrName", "Кличка *", error = errors["numberOrName"])
+        Field(values, "species", "Вид")
+        Field(values, "shelterOrPlace", "Приют/лагерь/место сбора")
+        Field(values, "breedName", "Порода")
+        Field(values, "resembles", "Если метис — похожая порода/тип")
+        SheetChoice(values, "size", "Размер", "мелкий", "средний", "крупный", "гигантский")
+        Field(values, "ageYears", "Возраст, лет", KeyboardType.Number, errors["ageYears"])
+        Field(values, "ageMonths", "Возраст, месяцев", KeyboardType.Number, errors["ageMonths"])
+        SheetChoice(values, "ageSource", "Источник данных о возрасте", "документы", "со слов владельца/приюта", "оценка по зубам", "неизвестно")
+        SheetChoice(values, "sex", "Пол", "самец", "самка", "неизвестно")
+        SheetChoice(values, "sterilizationStatus", "Стерилизован/кастрирован", "да", "нет", "неизвестно")
+        Field(values, "weightKg", "Вес, кг", KeyboardType.Decimal, errors["weightKg"])
+        SheetChoice(values, "weightStatus", "Как получен вес", "взвешен", "со слов владельца/приюта", "оценён")
+        Field(values, "bodyConditionScore", "BCS (1-9)", KeyboardType.Number, errors["bodyConditionScore"])
+        SheetChoice(values, "muscleMass", "Оценка мышечной массы", "норма", "лёгкая потеря", "умеренная потеря", "выраженная потеря", "невозможно оценить")
+        Field(values, "neckCircumferenceCm", "Обхват шеи, см", KeyboardType.Decimal, errors["neckCircumferenceCm"])
+        SheetChoice(values, "coatLength", "Длина шерсти", "короткая", "средняя", "длинная")
+        SheetChoice(values, "undercoat", "Подшёрсток", "отсутствует", "умеренный", "плотный")
+        SheetChoice(values, "shavedAreasStatus", "Выстриженные/выбритые участки", "да", "нет")
+        Field(values, "shavedAreasDetails", "Где и почему (выстрижено)")
+        SheetChoice(values, "diagnosesStatus", "Диагнозы поставлены ветеринаром", "есть", "нет", "неизвестно")
+        Field(values, "diagnosesDetails", "Диагнозы (описание)", singleLine = false)
+        Field(values, "diseaseCategory", "Категория подтверждённого заболевания")
+        Field(values, "diseaseCategoryDetails", "Категория — уточнение (другое)")
+        SheetChoice(values, "chronicLameness", "Хроническая хромота/проблемы с суставами", "да", "нет", "неизвестно")
+        Field(values, "medications", "Регулярные препараты и дозировка", singleLine = false)
+        Field(values, "history", "Анамнез/важные комментарии", singleLine = false)
+        SheetChoice(values, "housing", "Где живёт", "квартира/дом", "вольер", "помещение приюта", "свободный выгул", "другое")
+        Field(values, "housingDetails", "Где живёт — уточнение (другое)")
+        Field(values, "walksDescription", "Прогулки (частота и продолжительность)")
+        SheetChoice(values, "cohabitants", "Проживание с другими животными", "одна", "с другими собаками", "с другими животными")
+        SheetChoice(values, "shelterPermission", "Разрешение на съёмку", "да", "нет", "не требуется")
+        Field(values, "notes", "Примечания", singleLine = false)
+        Field(values, "specialistName", "ФИО специалиста, проводящего запись")
+        Text("Дата и время сохранения заполняются автоматически.")
+    }
+}
+
+@Composable
+fun SessionQuestionnaireDialog(language: AppLanguage, onDismiss: () -> Unit, onSave: (SessionQuestionnaire) -> Unit) {
+    val values = rememberSaveable(saver = questionnaireValuesSaver) { mutableStateMapOf<String, String>().apply {
+        put("sessionDate", java.time.LocalDate.now().toString())
+        put("videoRequested", "yes")
+    } }
+    var errors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    QuestionnaireDialog(
+        title = tr(language, "Session questionnaire", "Анкета сессии"),
+        subtitle = "Собака связывается с выбранной карточкой. Фактические время и длительность записываются автоматически.",
+        language = language, progress = listOf("sessionLabel", "plannedActivities").count { !values[it].isNullOrBlank() } to 2,
+        errorCount = errors.size, firstErrorKey = errors.keys.firstOrNull(), canDismiss = true, onDismiss = onDismiss,
+        onSave = {
+            val result = values.toSessionQuestionnaire().copy(
+                schemaVersion = 2, savedAtLocal = java.time.LocalDateTime.now().toString(),
+                sessionDate = values.text("sessionDate"), startTime = values.text("startTime"), endTime = values.text("endTime"),
+                durationMinutes = values.sheetDouble("durationMinutes"), plannedActivities = values.list("plannedActivities"),
+                surfaces = values.list("surfaces"), lastMedicationAt = values.text("lastMedicationAt"),
+                notes = values.text("notes"), specialistName = values.text("specialistName"), airTemperatureC = values.sheetDouble("airTemperatureC"),
+            )
+            errors = result.validate().errors
+            if (errors.isEmpty()) onSave(result)
+        },
+    ) {
+        Field(values, "sessionLabel", "Номер сессии *", error = errors["sessionLabel"])
+        Field(values, "sessionDate", "Дата сессии (ГГГГ-ММ-ДД)", error = errors["sessionDate"])
+        Field(values, "startTime", "Время начала записи (ЧЧ:ММ, для импорта)", error = errors["startTime"])
+        Field(values, "endTime", "Время окончания (ЧЧ:ММ, для импорта)", error = errors["endTime"])
+        Field(values, "durationMinutes", "Фактическая продолжительность, мин (для импорта)", KeyboardType.Decimal, errors["durationMinutes"])
+        Field(values, "operatorName", "Кто проводил запись")
+        MultiChoice(values, "plannedActivities", "Что планировалось записывать *", listOf("Аллюр/движение", "Активность", "Покой", "Другое").map { it to it }, errors["plannedActivities"], emptySet())
+        Field(values, "activityDetails", "Формат записи — уточнение (другое)")
+        SheetChoice(values, "location", "Где проходила сессия", "В помещении", "На улице")
+        MultiChoice(values, "surfaces", "Поверхность", listOf("Асфальт", "Бетон", "Плитка", "Грунт", "Трава", "Гравий", "Дерево", "Ламинат", "Ковёр", "Снег", "Другое").map { it to it }, errors["surfaces"], emptySet())
+        Field(values, "surfaceDetails", "Поверхность — уточнение (другое)")
+        Field(values, "airTemperatureC", "Температура воздуха, °C", KeyboardType.Decimal, errors["airTemperatureC"])
+        SheetChoice(values, "sensorPosition", "Положение блока", "Снизу на горле", "Сбоку слева", "Сбоку справа", "Сверху на шее", "Другое")
+        Field(values, "sensorPositionDetails", "Положение блока — уточнение (другое)")
+        SheetChoice(values, "collarTightness", "Насколько затянут ошейник", "Свободно", "Плотно", "Туго")
+        SheetChoice(values, "preMeasurementState", "Состояние животного перед записью", "Спало", "Спокойно лежало не менее 10 минут", "Спокойно бодрствовало", "Гуляло", "Бегало/играло", "Другое")
+        Field(values, "preMeasurementStateDetails", "Состояние перед записью — уточнение (другое)")
+        Field(values, "lastMedicationAt", "Когда последний раз получал препарат (ЧСС/дыхание/активность)")
+        Field(values, "notes", "Примечания", singleLine = false)
+        Field(values, "specialistName", "ФИО специалиста, проводящего запись")
+        Choice(values, "videoRequested", "Записывать видео", yesNo(language))
+    }
+}
+
+@Composable
+private fun SheetChoice(values: MutableMap<String, String>, key: String, title: String, vararg choices: String) {
+    val current = values[key].orEmpty()
+    val options = (listOf("") + choices.toList() + listOf(current).filter { it.isNotBlank() && it !in choices }).distinct()
+    Choice(values, key, title, options.map { it to it.ifBlank { "Не указано" } })
+}
+
+private fun MutableMap<String, String>.sheetInt(key: String): Int? = text(key)?.let { it.toIntOrNull() ?: Int.MIN_VALUE }
+private fun MutableMap<String, String>.sheetDouble(key: String): Double? = text(key)?.let { it.replace(',', '.').toDoubleOrNull() ?: Double.NaN }

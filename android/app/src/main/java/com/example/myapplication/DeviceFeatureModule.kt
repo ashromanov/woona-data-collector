@@ -55,6 +55,7 @@ fun createDeviceFeatureController(
     woonaDatabase: WoonaDatabase? = null,
     snapshotDirectory: File? = null,
     onRecordingChanged: () -> Unit = {},
+    onCaptureLifecycleChanged: (Boolean) -> Unit = {},
     appTextResolver: AppTextResolver = AppTextResolver(context.applicationContext) {
         AppLanguage.defaultFrom()
     },
@@ -62,6 +63,7 @@ fun createDeviceFeatureController(
     val uiStateHolder = DeviceUiStateHolder()
     val mainHandler = Handler(Looper.getMainLooper())
     var deviceFeatureController: DeviceFeatureController? = null
+    var bleSessionController: BleSessionController? = null
     var updateBatcher: PacketProcessingUpdateBatcher? = null
     updateBatcher = PacketProcessingUpdateBatcher(
         dispatchIntervalMillis = UI_PACKET_UPDATE_INTERVAL_MS,
@@ -94,7 +96,8 @@ fun createDeviceFeatureController(
                 onError = { message, throwable ->
                     updateBatcher.clearPending()
                     mainHandler.post {
-                        uiStateHolder.showError(message)
+                        deviceFeatureController?.onSessionError(message) ?: uiStateHolder.showError(message)
+                        bleSessionController?.close()
                     }
                     Log.e("BLE_PROCESSOR", message, throwable)
                 },
@@ -106,7 +109,6 @@ fun createDeviceFeatureController(
         channel = uiStateHolder.uiState.selectedChannel,
     )
 
-    var bleSessionController: BleSessionController? = null
     val submitPacketFragment: (ByteArray, Long, Long) -> PacketSubmitResult = {
             packetFragment,
             receivedAtMillis,
@@ -129,9 +131,9 @@ fun createDeviceFeatureController(
                 val message = appTextResolver.getString(R.string.packet_queue_overflow_stopped)
                 packetCaptureController.stopCapture()
                 mainHandler.post {
-                    uiStateHolder.showError(message)
+                    deviceFeatureController?.onSessionError(message) ?: uiStateHolder.showError(message)
+                    bleSessionController?.close()
                 }
-                bleSessionController?.close()
                 Log.e("BLE_QUEUE", message)
                 submitResult
             }
@@ -277,6 +279,7 @@ fun createDeviceFeatureController(
         schedule = { runnable, delayMillis -> mainHandler.postDelayed(runnable, delayMillis) },
         cancel = mainHandler::removeCallbacks,
         onConnectionAlarm = { quality -> playConnectionAlarm(context, mainHandler, quality) },
+        onCaptureLifecycleChanged = onCaptureLifecycleChanged,
     )
 
     initialTransportProfile?.let { profile ->
@@ -324,6 +327,7 @@ object DeviceFeatureModuleEntryPoint {
         woonaDatabase: WoonaDatabase? = null,
         snapshotDirectory: File? = null,
         onRecordingChanged: () -> Unit = {},
+        onCaptureLifecycleChanged: (Boolean) -> Unit = {},
         appTextResolver: AppTextResolver = AppTextResolver(context.applicationContext) {
             AppLanguage.defaultFrom()
         },
@@ -342,8 +346,49 @@ object DeviceFeatureModuleEntryPoint {
             woonaDatabase = woonaDatabase,
             snapshotDirectory = snapshotDirectory,
             onRecordingChanged = onRecordingChanged,
+            onCaptureLifecycleChanged = onCaptureLifecycleChanged,
             appTextResolver = appTextResolver,
         )
+    }
+}
+
+/** Retains the capture owner when an Activity is recreated while recording. */
+object DeviceFeatureControllerHolder {
+    private var controller: DeviceFeatureController? = null
+
+    @Synchronized
+    fun hasActiveCapture(): Boolean = controller?.isCaptureActive() == true
+
+    fun requestStop() {
+        val activeController = synchronized(this) { controller }
+        Handler(Looper.getMainLooper()).post {
+            activeController?.onDisconnectRequested()
+        }
+    }
+
+    @Synchronized
+    fun obtain(
+        onRecordingChanged: () -> Unit,
+        create: () -> DeviceFeatureController,
+    ): DeviceFeatureController {
+        val existing = controller
+        if (existing != null && existing.isCaptureActive()) {
+            existing.setOnRecordingChanged(onRecordingChanged)
+            return existing
+        }
+
+        existing?.close()
+        return create().also {
+            it.setOnRecordingChanged(onRecordingChanged)
+            controller = it
+        }
+    }
+
+    @Synchronized
+    fun releaseIfInactive(candidate: DeviceFeatureController) {
+        if (controller !== candidate || candidate.isCaptureActive()) return
+        candidate.close()
+        controller = null
     }
 }
 

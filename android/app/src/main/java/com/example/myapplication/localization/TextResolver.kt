@@ -34,11 +34,11 @@ object EnglishTextResolver : TextResolver {
             R.string.background_packet_processing_failed -> "Background packet processing failed"
             R.string.failed_append_validated_packet -> "Failed to append validated packet to output file"
             R.string.failed_persist_diagnostic_log_event -> "Failed to persist diagnostic log event"
-            R.string.capture_queue_overflow -> "Capture queue overflow: depth=%1\$d/%2\$d, fragmentBytes=%3\$d"
+            R.string.capture_queue_overflow -> "Capture queue overflow: dropped=%1\$d, depth=%2\$d/%3\$d, fragmentBytes=%4\$d"
             R.string.capture_queue_pressure ->
                 "Capture queue pressure: depth=%1\$d/%2\$d (%3\$d%%), maxDepth=%4\$d, fragmentBytes=%5\$d"
             R.string.capture_summary ->
-                "Capture summary: packets=%1\$d, lost=%2\$d, rejected=%3\$d, timerRegressionRejects=%4\$d, fragments=%5\$d, rawBytes=%6\$d, queueDepthCurrent=%7\$d, queueDepthMax=%8\$d"
+                "Capture summary: packets=%1\$d, lost=%2\$d, rejected=%3\$d, timerRegressionRejects=%4\$d, fragmentsReceived=%5\$d, fragmentsPersisted=%6\$d, rawBytes=%7\$d, dropped=%8\$d, queueDepthCurrent=%9\$d, queueDepthMax=%10\$d"
             R.string.accepted_packet_message -> "Accepted packet counter=%1\$d, timer=%2\$d, len=%3\$d, meas=%4\$d"
             R.string.gap_detected_message -> "Gap detected: expected=%1\$s, actual=%2\$s, missing=%3\$d"
             R.string.rejected_packet_message -> "Rejected packet: %1\$s"
@@ -54,6 +54,7 @@ object EnglishTextResolver : TextResolver {
             R.string.packet_validation_invalid_start -> "Invalid packet start marker"
             R.string.packet_validation_invalid_length -> "Invalid packet length"
             R.string.packet_validation_invalid_measurement_count -> "Invalid measurement count"
+            R.string.packet_validation_invalid_sensor_blocks -> "Invalid sensor block layout"
             R.string.transport_profile_default -> "Maximum performance"
             R.string.transport_profile_compatibility -> "Compatibility"
             R.string.transport_profile_conservative -> "Conservative"

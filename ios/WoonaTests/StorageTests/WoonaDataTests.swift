@@ -2,6 +2,36 @@ import XCTest
 @testable import Woona
 
 final class WoonaDataTests: XCTestCase {
+    func testSheetQuestionnaireRoundTripAndDogLink() throws {
+        var dog = DogQuestionnaire()
+        dog.schemaVersion = 2
+        dog.animalId = "финик"
+        dog.numberOrName = "Финик"
+        dog.species = "собака"
+        dog.diagnosesDetails = "Дисплазия"
+        XCTAssertTrue(dog.validate().isValid)
+        let data = try WoonaStore.dogQuestionnaireData(dog)
+        XCTAssertEqual(dog, try JSONDecoder().decode(DogQuestionnaire.self, from: data))
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertTrue(json["specialistName"] is NSNull)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try WoonaStore(rootDirectory: directory)
+        let profile = try store.saveProfile(dog)
+        var session = SessionQuestionnaire()
+        session.schemaVersion = 2
+        session.sessionLabel = "2"
+        session.plannedActivities = ["Аллюр/движение"]
+        session.surfaces = ["Асфальт", "Грунт", "Трава"]
+        session.sensorPosition = "Снизу на горле"
+        XCTAssertTrue(session.validate().isValid)
+        let recording = try store.createRecording(profile: profile, source: "live", questionnaire: session)
+        XCTAssertEqual("финик", recording.questionnaire?.animalId)
+        XCTAssertEqual(session.surfaces, recording.questionnaire?.surfaces)
+        dog.weightKg = .nan
+        XCTAssertFalse(dog.validate().isValid)
+    }
+
     func testQuestionnairesMatchAndroidValidationRules() {
         var dog = DogQuestionnaire()
         XCTAssertFalse(dog.validate().isValid)

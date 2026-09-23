@@ -11,6 +11,7 @@ from collections import defaultdict
 from pathlib import Path
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
+from xml.etree import ElementTree
 
 from sqlalchemy import create_engine, text
 
@@ -90,24 +91,44 @@ def app_tasks(database_url: str) -> list[dict]:
     engine = create_engine(database_url, pool_pre_ping=True)
     with engine.connect() as connection:
         rows = connection.execute(text("""
-            SELECT r.id, r.started_at, d.number_or_name, a.file_name,
+            SELECT r.id, r.started_at, r.dog_id, r.dog_profile_version_id,
+                   r.session_questionnaire, v.questionnaire AS dog_questionnaire,
+                   d.number_or_name, i.source_id AS import_source_id, i.source_path, i.provenance,
+                   a.file_name,
                    a.server_relative_path, a.expected_size_bytes, a.sha256
             FROM recordings r JOIN dogs d ON d.id=r.dog_id
+            JOIN dog_profile_versions v ON v.id=r.dog_profile_version_id
+            LEFT JOIN source_imports i ON i.recording_id=r.id
             JOIN artifacts a ON a.recording_id=r.id
             WHERE r.ingest_status='complete' AND a.storage_status='available'
             ORDER BY r.id, a.id
         """)).mappings().all()
+    engine.dispose()
     groups = defaultdict(list)
     for row in rows:
         groups[str(row["id"])].append(row)
     result = []
     for recording_id, members in groups.items():
         first = members[0]
+        questionnaire = first["session_questionnaire"]
+        if questionnaire.get("schemaVersion") != 2 or not set(questionnaire.get("plannedActivities", [])) & {"Аллюр/движение", "Активность"}:
+            continue
+        names = {row["file_name"] for row in members}
+        if not any(name.lower().endswith(".mp4") for name in names) or not any(name.lower().endswith((".bin", ".binlog")) for name in names):
+            continue
         files = [{"name": row["file_name"], "relative": "woona/" + row["server_relative_path"],
                   "size": row["expected_size_bytes"], "sha256": row["sha256"]} for row in members]
         result.append(task("woona:" + recording_id, "Woona recording " + recording_id, files,
                            source="woona-api-v1", dog=first["number_or_name"],
-                           date=first["started_at"].date().isoformat()))
+                            date=first["started_at"].date().isoformat()))
+        result[-1]["data"].update({"recording_id": recording_id, "dog_id": str(first["dog_id"]),
+                                  "dog_profile_version_id": str(first["dog_profile_version_id"]),
+                                  "dog": first["number_or_name"], "session": questionnaire["sessionLabel"]})
+        result[-1]["meta"].update({"dog_questionnaire": first["dog_questionnaire"], "session_questionnaire": questionnaire})
+        if first["import_source_id"]:
+            result[-1]["meta"].update({"import_source_id": first["import_source_id"], "source_path": first["source_path"],
+                                       "drive_files": first["provenance"]["files"],
+                                       "alignment": "unavailable: external video has no camera anchor"})
     return result
 
 
@@ -120,7 +141,8 @@ def request_json(method: str, path: str, payload=None):
         "Content-Type": "application/json",
     })
     with urlopen(request, timeout=60) as response:
-        return json.load(response)
+        body = response.read()
+        return json.loads(body) if body else None
 
 
 def paged(path: str) -> list[dict]:
@@ -142,7 +164,7 @@ def paged(path: str) -> list[dict]:
 
 def ensure_storage(project: int) -> None:
     current = {item["path"] for item in request_json("GET", f"/api/storages/localfiles/?project={project}")}
-    for name in ("woona", "drive"):
+    for name in ("woona",):
         path = "/label-studio/files/" + name
         if path not in current:
             request_json("POST", "/api/storages/localfiles/", {
@@ -159,24 +181,33 @@ def sync() -> dict[str, tuple[int, int]]:
 
 
 def _sync_unlocked() -> dict[str, tuple[int, int]]:
-    existing_projects = {project["title"]: project for project in paged("/api/projects")}
-    sources = historical_tasks(Path(os.environ["LABEL_SNAPSHOT_ROOT"])) + app_tasks(os.environ["DATABASE_URL"])
-    counts = {}
-    for kind, (title, _) in LABELS.items():
-        existing = existing_projects.get(title)
-        project = existing["id"] if existing else request_json(
-            "POST", "/api/projects", {"title": title, "label_config": config(kind)})["id"]
-        ensure_storage(project)
-        expected = [item for item in sources if kind == "source" or "video" in item["data"]]
-        current = {row["data"].get("source_id") for row in paged(f"/api/tasks?project={project}")}
-        missing = [item for item in expected if item["data"]["source_id"] not in current]
-        for offset in range(0, len(missing), 50):
-            request_json("POST", f"/api/projects/{project}/import", missing[offset:offset + 50])
-        actual = {row["data"].get("source_id") for row in paged(f"/api/tasks?project={project}")}
-        if not {item["data"]["source_id"] for item in expected}.issubset(actual):
-            raise RuntimeError(f"import not verified: {title}")
-        counts[kind] = (len(expected), len(actual))
-    return counts
+    project = active_project()
+    project_id = project["id"]
+    ensure_storage(project_id)
+    expected = app_tasks(os.environ["DATABASE_URL"])
+    current = {row["data"].get("source_id") for row in paged(f"/api/tasks?project={project_id}")}
+    missing = [item for item in expected if item["data"]["source_id"] not in current]
+    for offset in range(0, len(missing), 50):
+        request_json("POST", f"/api/projects/{project_id}/import", missing[offset:offset + 50])
+    rows = paged(f"/api/tasks?project={project_id}")
+    actual = [row["data"].get("source_id") for row in rows]
+    if not {item["data"]["source_id"] for item in expected}.issubset(actual):
+        raise RuntimeError("import not verified")
+    if len(actual) != len(set(actual)):
+        raise RuntimeError("duplicate source IDs in labeling project")
+    return {"activity": (len(expected), len(actual))}
+
+
+def active_project() -> dict:
+    """Use the user's project and read its labels; never create/reconfigure it."""
+    project = request_json("GET", f'/api/projects/{int(os.environ.get("LABEL_PROJECT_ID", "21"))}/')
+    root = ElementTree.fromstring(project["label_config"])
+    timelines = root.findall(".//TimelineLabels")
+    videos = root.findall(".//Video")
+    if len(timelines) != 1 or len(videos) != 1 or videos[0].get("value") != "$video" or timelines[0].get("toName") != videos[0].get("name"):
+        raise ValueError("Expected the existing single video timeline project")
+    return {**project, "timeline_name": timelines[0].get("name"),
+            "labels": [label.attrib["value"] for label in timelines[0].findall("Label")]}
 
 
 if __name__ == "__main__":

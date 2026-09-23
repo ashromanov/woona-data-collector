@@ -25,6 +25,7 @@ enum class PacketValidationFailureReason(val description: String) {
     INVALID_START("Invalid packet start marker"),
     INVALID_LENGTH("Invalid packet length"),
     INVALID_MEASUREMENT_COUNT("Invalid measurement count"),
+    INVALID_SENSOR_BLOCKS("Invalid sensor block layout"),
 }
 
 sealed interface PacketValidationResult {
@@ -50,7 +51,10 @@ class PacketValidator(
         }
 
         val declaredLength = decodeLength(packetBytes)
-        if (declaredLength != packetBytes.size) {
+        if (
+            declaredLength != packetBytes.size ||
+            declaredLength !in MIN_PACKET_SIZE..MAX_PACKET_SIZE
+        ) {
             return PacketValidationResult.Rejected(PacketValidationFailureReason.INVALID_LENGTH)
         }
 
@@ -59,13 +63,23 @@ class PacketValidator(
             return PacketValidationResult.Rejected(PacketValidationFailureReason.INVALID_MEASUREMENT_COUNT)
         }
 
+        val parseResult = sensorBlockParser.parseResult(packetBytes)
+        if (
+            parseResult.parsedBlockCount != measurementCount ||
+            parseResult.blocks.size != measurementCount ||
+            parseResult.blocks.any { it.channelSamples.isEmpty() } ||
+            packetBytes.size - parseResult.consumedBytes !in 0..MAX_SENSOR_BLOCK_TRAILER_BYTES
+        ) {
+            return PacketValidationResult.Rejected(PacketValidationFailureReason.INVALID_SENSOR_BLOCKS)
+        }
+
         return PacketValidationResult.Accepted(
             packet = ValidatedPacket(
                 bytes = packetBytes,
                 counter = decodeCounter(packetBytes),
                 timerMillis = decodeTimer(packetBytes),
                 measurementCount = measurementCount,
-                sensorBlocks = sensorBlockParser.parse(packetBytes),
+                sensorBlocks = parseResult.blocks,
             ),
         )
     }
@@ -100,7 +114,9 @@ class PacketValidator(
 
     private companion object {
         const val MIN_PACKET_SIZE = 16
+        const val MAX_PACKET_SIZE = 16_384
         const val MAX_MEASUREMENT_COUNT = 4
+        const val MAX_SENSOR_BLOCK_TRAILER_BYTES = 4
         const val LENGTH_OFFSET = 4
         const val MEASUREMENT_COUNT_OFFSET = 6
         const val COUNTER_OFFSET = 7

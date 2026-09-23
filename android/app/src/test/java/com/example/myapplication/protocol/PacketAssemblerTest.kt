@@ -2,6 +2,7 @@ package com.example.myapplication.protocol
 
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -140,6 +141,7 @@ class PacketAssemblerTest {
             PacketAssemblyFailureReason.OVERLAPPING_PACKET_START,
             (secondChunk.first() as PacketAssemblyResult.Rejected).reason,
         )
+        assertNotNull((secondChunk.first() as PacketAssemblyResult.Rejected).diagnostic)
         val completed = secondChunk.last() as PacketAssemblyResult.Completed
         assertEquals(2L, completed.packet.counter)
         assertArrayEquals(second, completed.packet.bytes)
@@ -173,6 +175,32 @@ class PacketAssemblerTest {
         val completed = overlapRemainder.last() as PacketAssemblyResult.Completed
         assertEquals(2L, completed.packet.counter)
         assertArrayEquals(second, completed.packet.bytes)
+    }
+
+    @Test
+    fun append_recoversWhenNextHeaderAppearsInsideIncompleteNotificationStream() {
+        val assembler = PacketAssembler()
+        val first = testPacket(
+            counter = 10,
+            measurementCount = 1,
+            blocks = listOf(sensorBlock(sensorType = 2, channelSamples = listOf(listOf(1, 2, 3, 4, 5, 6, 7, 8)))),
+        )
+        val second = testPacket(
+            counter = 12,
+            measurementCount = 1,
+            blocks = listOf(sensorBlock(sensorType = 2, channelSamples = listOf(listOf(9, 10)))),
+        )
+        val firstPrefix = first.copyOfRange(0, first.size - 16)
+
+        assertTrue(assembler.append(firstPrefix + second.copyOfRange(0, 16)).isEmpty())
+
+        val results = assembler.append(second.copyOfRange(16, second.size))
+
+        assertEquals(2, results.size)
+        val rejection = results.first() as PacketAssemblyResult.Rejected
+        assertEquals(PacketAssemblyFailureReason.OVERLAPPING_PACKET_START, rejection.reason)
+        assertEquals(16, requireNotNull(rejection.diagnostic).missingBytes)
+        assertEquals(12L, (results.last() as PacketAssemblyResult.Completed).packet.counter)
     }
 
     @Test

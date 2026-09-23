@@ -248,58 +248,59 @@ class AppShellNavigationTest {
             }
         }
 
-        composeRule.onNodeWithText("Dog profile").assertIsDisplayed()
+        composeRule.onNodeWithText("Dog questionnaire").assertIsDisplayed()
         composeRule.onNodeWithText("Cancel").assertDoesNotExist()
         composeRule.onNodeWithText("Validate and save").performClick()
         composeRule.runOnIdle {
             assertEquals(0, savedProfiles)
         }
-        composeRule.onNodeWithText("Answered: 0 of 21").assertIsDisplayed()
-        composeRule.onNodeWithText("21 fields need attention").assertIsDisplayed()
-        composeRule.onNodeWithText("Number or name *").assertIsDisplayed()
-        composeRule.onNodeWithText("Dog profile").assertIsDisplayed()
+        composeRule.onNodeWithText("Answered: 0 of 2").assertIsDisplayed()
+        composeRule.onNodeWithText("2 fields need attention").assertIsDisplayed()
+        composeRule.onNodeWithText("Номер/ID животного *").assertIsDisplayed()
+        composeRule.onNodeWithText("Dog questionnaire").assertIsDisplayed()
     }
 
     @Test
-    fun sessionActivityChange_removesIncompatibleChoice() {
+    fun sheetSession_supportsMultipleRecordingTypes() {
+        var saved: com.example.myapplication.data.SessionQuestionnaire? = null
         composeRule.setContent {
             MaterialTheme {
                 SessionQuestionnaireDialog(
                     language = AppLanguage.ENGLISH,
                     onDismiss = {},
-                    onSave = {},
+                    onSave = { saved = it },
                 )
             }
         }
 
-        composeRule.onNodeWithText("Locomotion").performScrollTo().performClick()
-        composeRule.onAllNodesWithText("Walk").assertCountEquals(2)[0]
-            .performScrollTo()
-            .performClick()
-        composeRule.onNodeWithText("Stationary").performScrollTo().performClick()
-
-        composeRule.onAllNodesWithText("Walk").assertCountEquals(1)
-        composeRule.onNodeWithText("Stand").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Номер сессии *").performTextInput("1")
+        composeRule.onNodeWithText("Аллюр/движение").performScrollTo().performClick()
+        composeRule.onNodeWithText("Активность").performScrollTo().performClick()
+        composeRule.onNodeWithText("Validate and save").performClick()
+        composeRule.runOnIdle { assertEquals(listOf("Аллюр/движение", "Активность"), saved?.plannedActivities) }
     }
 
     @Test
-    fun sessionLocationChange_removesIncompatibleSurface() {
+    fun sheetSession_preservesMultipleSurfacesAcrossLocationChange() {
+        var saved: com.example.myapplication.data.SessionQuestionnaire? = null
         composeRule.setContent {
             MaterialTheme {
                 SessionQuestionnaireDialog(
                     language = AppLanguage.ENGLISH,
                     onDismiss = {},
-                    onSave = {},
+                    onSave = { saved = it },
                 )
             }
         }
 
-        composeRule.onNodeWithText("Outdoors").performScrollTo().performClick()
-        composeRule.onNodeWithText("Grass").performScrollTo().performClick()
-        composeRule.onNodeWithText("Indoors").performScrollTo().performClick()
-
-        composeRule.onAllNodesWithText("Grass").assertCountEquals(0)
-        composeRule.onNodeWithText("Tile").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Номер сессии *").performTextInput("2")
+        composeRule.onNodeWithText("Аллюр/движение").performScrollTo().performClick()
+        composeRule.onNodeWithText("На улице").performScrollTo().performClick()
+        composeRule.onNodeWithText("Асфальт").performScrollTo().performClick()
+        composeRule.onNodeWithText("Трава").performScrollTo().performClick()
+        composeRule.onNodeWithText("В помещении").performScrollTo().performClick()
+        composeRule.onNodeWithText("Validate and save").performClick()
+        composeRule.runOnIdle { assertEquals(listOf("Асфальт", "Трава"), saved?.surfaces) }
     }
 
     @Test
@@ -314,7 +315,7 @@ class AppShellNavigationTest {
                 )
             }
         }
-        composeRule.onNodeWithText("Session label *").performTextInput("Draft session")
+        composeRule.onNodeWithText("Номер сессии *").performTextInput("Draft session")
 
         restoration.emulateSavedInstanceStateRestore()
 

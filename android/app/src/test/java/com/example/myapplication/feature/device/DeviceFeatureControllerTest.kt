@@ -75,6 +75,21 @@ class DeviceFeatureControllerTest {
     }
 
     @Test
+    fun onPause_doesNotStopCaptureOrDisconnectBle() {
+        val ble = FakeBleSessionController()
+        val packetCapture = FakePacketCaptureController()
+        val controller = createController(
+            bleSessionController = ble,
+            packetCaptureController = packetCapture,
+        )
+
+        controller.onPause()
+
+        assertFalse(packetCapture.stopCaptureCalled)
+        assertEquals(0, ble.disconnectCalls)
+    }
+
+    @Test
     fun onCaptureReady_resetsCaptureSessionAndFlushesBufferedTransportDiagnostics() {
         val packetCapture = FakePacketCaptureController()
         val controller = createController(packetCaptureController = packetCapture)

@@ -14,6 +14,7 @@ import com.example.myapplication.data.canonicalJsonSha256
 import com.example.myapplication.data.toJson
 import java.io.File
 import java.security.MessageDigest
+import java.util.UUID
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -56,16 +57,17 @@ class ServerApiClientIntegrationTest {
         assumeTrue("Docker API is not reachable at $baseUrl", runCatching(client::readiness).getOrDefault(false))
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val directory = File(context.cacheDir, "server-e2e").apply { mkdirs() }
-        val dogId = "11000000-0000-0000-0000-000000000001"
-        val profileId = "21000000-0000-0000-0000-000000000001"
-        val recordingId = "31000000-0000-0000-0000-000000000001"
-        val dogJson = completeDog().toJson()
+        val dogId = UUID.randomUUID().toString()
+        val profileId = UUID.randomUUID().toString()
+        val recordingId = UUID.randomUUID().toString()
+        val animalId = "android-e2e-$dogId"
+        val dogJson = completeDog().copy(schemaVersion = 2, animalId = animalId).toJson()
         val profile = ProfileSyncRecord(
             dogId = dogId,
             dogName = "Android E2E",
             expectedRevision = 0,
             profileVersionId = profileId,
-            schemaVersion = 1,
+            schemaVersion = 2,
             validationState = "complete",
             questionnaireJson = dogJson,
             contentSha256 = canonicalJsonSha256(dogJson),
@@ -78,7 +80,7 @@ class ServerApiClientIntegrationTest {
             "diagnostic" to "diagnostic".toByteArray(),
             "sync" to """{"schemaVersion":2}""".toByteArray(),
         )
-        val artifacts = contents.entries.mapIndexed { index, (type, bytes) ->
+        val artifacts = contents.entries.map { (type, bytes) ->
             val extension = when (type) {
                 "packet", "packet_timeline" -> "bin"
                 "raw" -> "binlog"
@@ -87,7 +89,7 @@ class ServerApiClientIntegrationTest {
             }
             val file = File(directory, "$type.$extension").apply { writeBytes(bytes) }
             ArtifactSyncRecord(
-                id = "41000000-0000-0000-0000-${(index + 1).toString().padStart(12, '0')}",
+                id = UUID.randomUUID().toString(),
                 type = type,
                 fileName = file.name,
                 mimeType = when (type) {
@@ -110,9 +112,13 @@ class ServerApiClientIntegrationTest {
             source = "live",
             captureStatus = "completed",
             sessionLabel = "Android server E2E",
-            questionnaireSchemaVersion = 1,
+            questionnaireSchemaVersion = 2,
             questionnaireValidationState = "complete",
-            sessionQuestionnaireJson = completeSession().toJson(),
+            sessionQuestionnaireJson = completeSession().copy(
+                schemaVersion = 2,
+                animalId = animalId,
+                plannedActivities = listOf("Аллюр/движение"),
+            ).toJson(),
             videoRequested = false,
             startedAtUtc = "2026-07-30T20:00:00Z",
             endedAtUtc = "2026-07-30T20:01:00Z",

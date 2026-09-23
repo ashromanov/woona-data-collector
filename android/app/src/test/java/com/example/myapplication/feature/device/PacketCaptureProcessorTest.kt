@@ -183,9 +183,10 @@ class PacketCaptureProcessorTest {
         processor.close()
 
         assertEquals(1L, updates.first().packetsRejected)
-        assertEquals(
-            "New packet start marker found before previous packet completed",
-            updates.first().lastPacketIssue,
+        assertTrue(
+            requireNotNull(updates.first().lastPacketIssue).startsWith(
+                "New packet start marker found before previous packet completed",
+            ),
         )
         assertTrue(
             updates.first().diagnosticEvents.single().message.contains(
@@ -381,6 +382,42 @@ class PacketCaptureProcessorTest {
         assertTrue(updates.any { update ->
             update.diagnosticEvents.any { it.message.contains("Capture queue pressure") }
         })
+    }
+
+    @Test
+    fun submit_overflowIsNonBlockingAndReportedSeparatelyFromPersistedFragments() {
+        val directory = Files.createTempDirectory("packet-processor-overflow").toFile()
+        val firstUpdateEntered = CountDownLatch(1)
+        val releaseFirstUpdate = CountDownLatch(1)
+        val updates = mutableListOf<PacketProcessingUpdate>()
+        val processor = PacketCaptureProcessor(
+            packetFileStore = BlePacketFileStore(directory = directory, timestampProvider = { 51L }),
+            rawFragmentFileStore = BleRawFragmentFileStore(directory = directory, timestampProvider = { 551L }),
+            diagnosticLogFileStore = BleDiagnosticLogFileStore(directory = directory, timestampProvider = { 5551L }),
+            onPacketProcessed = {
+                synchronized(updates) { updates += it }
+                firstUpdateEntered.countDown()
+                releaseFirstUpdate.await(2, TimeUnit.SECONDS)
+            },
+            onError = { message, throwable -> throw AssertionError(message, throwable) },
+            maxPendingFragments = 1,
+        )
+
+        try {
+            assertEquals(PacketSubmitResult.ACCEPTED, processor.submit(validPacket(counter = 1, timerMillis = 10)))
+            assertTrue(firstUpdateEntered.await(1, TimeUnit.SECONDS))
+            assertEquals(PacketSubmitResult.ACCEPTED, processor.submit(validPacket(counter = 2, timerMillis = 20)))
+            assertEquals(PacketSubmitResult.OVERFLOW, processor.submit(validPacket(counter = 3, timerMillis = 30)))
+            releaseFirstUpdate.countDown()
+        } finally {
+            releaseFirstUpdate.countDown()
+            processor.close()
+        }
+
+        val snapshot = synchronized(updates) { updates.toList() }
+        assertTrue(snapshot.any { it.fragmentsDropped > 0L })
+        assertTrue(snapshot.any { it.diagnosticEvents.any { event -> event.message.contains("dropped=") } })
+        assertTrue(snapshot.any { it.fragmentsPersisted >= 1L })
     }
 
     @Test

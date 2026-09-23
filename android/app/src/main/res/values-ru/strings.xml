@@ -1,5 +1,9 @@
 <resources>
     <string name="app_name">Woona</string>
+    <string name="capture_notification_channel">Запись Woona</string>
+    <string name="capture_notification_title">Идёт BLE-запись</string>
+    <string name="capture_notification_text">Запись датчика продолжается в фоне.</string>
+    <string name="capture_notification_stop">Остановить запись</string>
 
     <string name="nav_overview">Обзор</string>
     <string name="nav_charts">Графики</string>
@@ -141,9 +145,9 @@
     <string name="background_packet_processing_failed">Сбой фоновой обработки пакетов</string>
     <string name="failed_append_validated_packet">Не удалось записать подтвержденный пакет в выходной файл</string>
     <string name="failed_persist_diagnostic_log_event">Не удалось сохранить событие диагностического лога</string>
-    <string name="capture_queue_overflow">Переполнение очереди захвата: depth=%1$d/%2$d, fragmentBytes=%3$d</string>
+    <string name="capture_queue_overflow">Переполнение очереди захвата: dropped=%1$d, depth=%2$d/%3$d, fragmentBytes=%4$d</string>
     <string name="capture_queue_pressure">Давление на очередь захвата: depth=%1$d/%2$d (%3$d%%), maxDepth=%4$d, fragmentBytes=%5$d</string>
-    <string name="capture_summary">Сводка захвата: packets=%1$d, lost=%2$d, rejected=%3$d, timerRegressionRejects=%4$d, fragments=%5$d, rawBytes=%6$d, queueDepthCurrent=%7$d, queueDepthMax=%8$d</string>
+    <string name="capture_summary">Сводка захвата: packets=%1$d, lost=%2$d, rejected=%3$d, timerRegressionRejects=%4$d, fragmentsReceived=%5$d, fragmentsPersisted=%6$d, rawBytes=%7$d, dropped=%8$d, queueDepthCurrent=%9$d, queueDepthMax=%10$d</string>
     <string name="accepted_packet_message">Пакет принят counter=%1$d, timer=%2$d, len=%3$d, meas=%4$d</string>
     <string name="gap_detected_message">Обнаружен разрыв: expected=%1$s, actual=%2$s, missing=%3$d</string>
     <string name="rejected_packet_message">Пакет отклонен: %1$s</string>
@@ -158,6 +162,8 @@
     <string name="packet_validation_invalid_start">Некорректный стартовый маркер пакета</string>
     <string name="packet_validation_invalid_length">Некорректная длина пакета</string>
     <string name="packet_validation_invalid_measurement_count">Некорректное количество измерений</string>
+
+    <string name="packet_validation_invalid_sensor_blocks">Некорректная структура блоков датчиков</string>
 
     <string name="ble_missing_connect_permission_scan_result">Для обработки результата сканирования требуется разрешение BLUETOOTH_CONNECT</string>
     <string name="ble_unknown_device">Неизвестно</string>

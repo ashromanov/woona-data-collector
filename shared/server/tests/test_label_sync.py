@@ -44,10 +44,10 @@ class LabelSyncTest(unittest.TestCase):
 
     def test_storage_connections_are_idempotent(self):
         with patch("server.label_sync.request_json", side_effect=[
-            [{"path": "/label-studio/files/woona"}], {"id": 2},
+            [{"path": "/label-studio/files/woona"}],
         ]) as api:
             ensure_storage(1)
-            self.assertEqual("/label-studio/files/drive", api.call_args.args[2]["path"])
+            api.assert_called_once_with("GET", "/api/storages/localfiles/?project=1")
 
     def test_parallel_sync_calls_do_not_create_duplicate_projects(self):
         active = 0

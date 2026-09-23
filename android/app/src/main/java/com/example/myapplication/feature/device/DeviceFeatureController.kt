@@ -64,7 +64,10 @@ class DeviceFeatureController(
     private val schedule: (Runnable, Long) -> Unit = { _, _ -> },
     private val cancel: (Runnable) -> Unit = {},
     private val onConnectionAlarm: (ConnectionQuality) -> Unit = {},
+    private val onCaptureLifecycleChanged: (Boolean) -> Unit = {},
 ) : AutoCloseable {
+    @Volatile
+    private var recordingChangedListener: () -> Unit = onRecordingChanged
     private val exportLock = Any()
     private var pendingTransportDiagnostics = mutableListOf<String>()
     private var awaitingCaptureReady = false
@@ -82,6 +85,12 @@ class DeviceFeatureController(
     private var weakSinceMillis: Long? = null
     private var lastAlarmQuality: ConnectionQuality? = null
     private var manualDisconnectPending = false
+    private var pendingFinalizationStatus: RecordingStatus? = null
+    private val finalizationRetryRunnable = Runnable {
+        val status = pendingFinalizationStatus
+        pendingFinalizationStatus = null
+        if (status != null) finalizeRecording(status)
+    }
     private val linkMonitorRunnable: Runnable = object : Runnable {
         override fun run() {
             if (linkMonitorRunning) {
@@ -99,6 +108,12 @@ class DeviceFeatureController(
         get() = uiStateHolder.uiState
 
     fun isVideoRequested(): Boolean = currentRecording?.videoRequested == true
+
+    fun isCaptureActive(): Boolean = !recordingFinalized || recordingFinalizing
+
+    fun setOnRecordingChanged(listener: () -> Unit) {
+        recordingChangedListener = listener
+    }
 
     fun onStartScanRequested(
         hasPermissions: () -> Boolean,
@@ -135,6 +150,8 @@ class DeviceFeatureController(
     }
 
     fun beginRecordingSession(recording: Recording) {
+        cancel(finalizationRetryRunnable)
+        pendingFinalizationStatus = null
         finalizeRecording(RecordingStatus.INTERRUPTED)
         val staleSnapshot = synchronized(this) {
             currentRecordingId = recording.id
@@ -157,6 +174,7 @@ class DeviceFeatureController(
             persistSyncMetadata()
             if (recording.source == RecordingSource.LIVE) {
                 uiStateHolder.prepareVideo()
+                onCaptureLifecycleChanged(true)
             }
             synchronized(exportLock) {
                 val snapshot = invalidateExportSnapshotLocked()
@@ -165,7 +183,7 @@ class DeviceFeatureController(
             }
         }
         deleteSnapshotFiles(staleSnapshot)
-        onRecordingChanged()
+        notifyRecordingChanged()
     }
 
     fun onDisconnectRequested() {
@@ -299,12 +317,8 @@ class DeviceFeatureController(
     }
 
     fun onPause() {
-        manualDisconnectPending = true
-        stopLinkMonitor()
-        packetReplayController?.stop()
-        finalizeRecording(RecordingStatus.INTERRUPTED)
-        bleSessionController.disconnect()
-        polarSessionManager?.disconnect()
+        // Screen/background lifecycle does not own an active capture. The
+        // foreground capture service and the explicit Stop action own it.
     }
 
     fun onBleStateChanged(state: BleSessionState) {
@@ -468,6 +482,7 @@ class DeviceFeatureController(
         stopLinkMonitor()
         packetReplayController?.close()
         finalizeRecording(RecordingStatus.INTERRUPTED)
+        if (isCaptureActive()) return
         val staleSnapshot = synchronized(exportLock) {
             val snapshot = invalidateExportSnapshotLocked()
             exportSessionStartMillis = null
@@ -487,7 +502,12 @@ class DeviceFeatureController(
             return
         }
         if (!recordingFinalized) {
-            if (currentRecording?.source == RecordingSource.LIVE) {
+            if (synchronizedCaptureStarted) {
+                packetCaptureController.recordDiagnosticEvent(
+                    type = PacketDiagnosticType.INFO,
+                    message = "BLE notifications re-enabled after transport recovery",
+                )
+            } else if (currentRecording?.source == RecordingSource.LIVE) {
                 uiStateHolder.videoReady()
             } else {
                 resetCaptureSession()
@@ -496,7 +516,7 @@ class DeviceFeatureController(
         } else {
             resetCaptureSession()
         }
-        onRecordingChanged()
+        notifyRecordingChanged()
         flushPendingTransportDiagnostics()
         awaitingCaptureReady = false
     }
@@ -511,6 +531,7 @@ class DeviceFeatureController(
             uiState.videoState !in setOf(VideoCaptureState.READY, VideoCaptureState.FAILED)
         ) return
         synchronizedCaptureStarted = true
+        bleSessionController.setCaptureActive(true)
         startLinkMonitor()
         captureSyncMetadata = captureSyncMetadata?.copy(
             sensor = captureClockAnchor("capture_start"),
@@ -524,7 +545,7 @@ class DeviceFeatureController(
             uiStateHolder.videoStarted(0.0)
         }
         startPolarRecording()
-        onRecordingChanged()
+        notifyRecordingChanged()
     }
 
     @Synchronized
@@ -592,6 +613,13 @@ class DeviceFeatureController(
         flushPendingTransportDiagnostics()
         awaitingCaptureReady = false
         uiStateHolder.showError(message)
+        currentRecordingId?.let { recordingId ->
+            woonaDatabase?.markCaptureError(
+                recordingId = recordingId,
+                code = captureErrorCode(message),
+                message = message,
+            )
+        }
         finalizeRecording(RecordingStatus.FAILED)
         if (disconnectedQuality != null) updateConnectionQuality(disconnectedQuality)
     }
@@ -638,7 +666,7 @@ class DeviceFeatureController(
             )
             persistSyncMetadata()
         }
-        onRecordingChanged()
+        notifyRecordingChanged()
     }
 
     fun onReplayCompleted() {
@@ -868,7 +896,7 @@ class DeviceFeatureController(
             packetTimelineFile = timeline,
         )
         currentRecordingId?.let { woonaDatabase?.registerCsv(it, canonicalTarget) }
-        onRecordingChanged()
+        notifyRecordingChanged()
         val targetDirectory = snapshotDirectory ?: source.parentFile
         targetDirectory.mkdirs()
         val sessionBaseName = source.nameWithoutExtension.removeSuffix("_snapshot_packet")
@@ -894,7 +922,18 @@ class DeviceFeatureController(
             stopVideo()
             polarFileStore?.close()
             polarSessionManager?.setRecordingActive(false)
-            packetCaptureController.finishCapture(CAPTURE_FINISH_TIMEOUT_MILLIS)
+            bleSessionController.setCaptureActive(false)
+            val captureDrained = packetCaptureController.finishCapture(CAPTURE_FINISH_TIMEOUT_MILLIS)
+            if (!captureDrained) {
+                packetCaptureController.recordDiagnosticEvent(
+                    type = PacketDiagnosticType.REJECTED,
+                    message = "Capture finalization timed out: drain_timeout",
+                )
+                Log.e("BLE_PROCESSOR", "Capture finalization timed out for recording $recordingId")
+                pendingFinalizationStatus = status
+                schedule(finalizationRetryRunnable, FINALIZATION_RETRY_DELAY_MILLIS)
+                return
+            }
             persistSyncMetadata()
             try {
                 woonaDatabase?.finishRecording(recordingId, status)
@@ -902,10 +941,12 @@ class DeviceFeatureController(
                     recordingFinalized = true
                     synchronizedCaptureStarted = false
                 }
+                pendingFinalizationStatus = null
+                onCaptureLifecycleChanged(false)
             } catch (exception: Exception) {
                 Log.e("WOONA_DATABASE", "Failed to finalize recording $recordingId", exception)
             }
-            onRecordingChanged()
+            notifyRecordingChanged()
         } finally {
             recordingFinalizing = false
         }
@@ -986,7 +1027,7 @@ class DeviceFeatureController(
             return
         }
         runOnUiThread { uiStateHolder.videoFinished() }
-        onRecordingChanged()
+        notifyRecordingChanged()
     }
 
     fun onVideoPermissionDenied() {
@@ -1024,7 +1065,7 @@ class DeviceFeatureController(
         )
         persistSyncMetadata()
         uiStateHolder.videoStarted(offsetNs / 1_000_000.0)
-        onRecordingChanged()
+        notifyRecordingChanged()
     }
 
     @Synchronized
@@ -1038,7 +1079,7 @@ class DeviceFeatureController(
             uiStateHolder.videoFailed(appTextResolver.getString(R.string.video_recording_failed))
         }
         persistSyncMetadata()
-        onRecordingChanged()
+        notifyRecordingChanged()
     }
 
     private fun captureClockAnchor(event: String): SyncClockAnchor {
@@ -1097,6 +1138,23 @@ class DeviceFeatureController(
         )
     }
 
+    private fun notifyRecordingChanged() {
+        recordingChangedListener()
+    }
+
+    private fun captureErrorCode(message: String): String {
+        val normalized = message.lowercase()
+        return when {
+            "notification silence" in normalized || "recovery exhausted" in normalized -> "notification_timeout"
+            ("queue" in normalized && "overflow" in normalized) ||
+                ("очеред" in normalized && "переполн" in normalized) -> "queue_overflow"
+            "persist" in normalized || "flush" in normalized || "storage" in normalized ||
+                "сохран" in normalized || "буфер" in normalized -> "storage_error"
+            "gatt" in normalized || "ble" in normalized -> "gatt_error"
+            else -> "capture_error"
+        }
+    }
+
     private fun startLinkMonitor() {
         weakSinceMillis = null
         lastAlarmQuality = null
@@ -1151,6 +1209,7 @@ class DeviceFeatureController(
     companion object {
         const val PERMISSION_REQUIRED_MESSAGE = "Permissions are required!"
         private const val CAPTURE_FINISH_TIMEOUT_MILLIS = 2_000L
+        private const val FINALIZATION_RETRY_DELAY_MILLIS = 1_000L
         private const val LINK_MONITOR_INTERVAL_MILLIS = 1_000L
         private const val WEAK_ALARM_DELAY_MILLIS = 5_000L
     }

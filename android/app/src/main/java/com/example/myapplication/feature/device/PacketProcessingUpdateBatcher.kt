@@ -86,6 +86,8 @@ class PacketProcessingUpdateBatcher(
         private var timerRegressionRejects = 0L
         private var fragmentsReceived = 0L
         private var rawBytesReceived = 0L
+        private var fragmentsPersisted = 0L
+        private var fragmentsDropped = 0L
         private var lastPacketIssue: String? = null
         private var rejectionBreakdown: String? = null
 
@@ -96,6 +98,8 @@ class PacketProcessingUpdateBatcher(
             timerRegressionRejects = update.timerRegressionRejects
             fragmentsReceived = update.fragmentsReceived
             rawBytesReceived = update.rawBytesReceived
+            fragmentsPersisted = update.fragmentsPersisted
+            fragmentsDropped = update.fragmentsDropped
             if (update.lastPacketIssue != null) {
                 lastPacketIssue = update.lastPacketIssue
             }
@@ -118,6 +122,8 @@ class PacketProcessingUpdateBatcher(
                 timerRegressionRejects = timerRegressionRejects,
                 fragmentsReceived = fragmentsReceived,
                 rawBytesReceived = rawBytesReceived,
+                fragmentsPersisted = fragmentsPersisted,
+                fragmentsDropped = fragmentsDropped,
                 chartSamplesByStream = chartSamplesByStream.mapValues { (_, points) -> points.toList() },
                 lastPacketIssue = lastPacketIssue,
                 rejectionBreakdown = rejectionBreakdown,
