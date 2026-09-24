@@ -8,6 +8,7 @@ import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CaptureRequest
 import android.hardware.display.DisplayManager
+import android.hardware.SensorManager
 import android.media.MediaRecorder
 import android.media.MediaExtractor
 import android.media.MediaFormat
@@ -17,6 +18,7 @@ import android.os.SystemClock
 import android.util.Range
 import android.util.Size
 import android.view.Display
+import android.view.OrientationEventListener
 import android.view.Surface
 import java.io.File
 import java.util.concurrent.CountDownLatch
@@ -56,6 +58,19 @@ class AndroidVideoRecorder(
     private val cameraHandler = Handler(cameraThread.looper)
     private val mainHandler = Handler(appContext.mainLooper)
     private val lock = Any()
+    @Volatile
+    private var deviceOrientationDegrees: Int? = null
+    private val orientationListener = object : OrientationEventListener(appContext, SensorManager.SENSOR_DELAY_NORMAL) {
+        override fun onOrientationChanged(orientation: Int) {
+            if (orientation != ORIENTATION_UNKNOWN) {
+                deviceOrientationDegrees = ((orientation + 45) / 90 * 90) % 360
+            }
+        }
+    }
+
+    init {
+        if (orientationListener.canDetectOrientation()) orientationListener.enable()
+    }
 
     @Volatile
     private var active = false
@@ -461,13 +476,12 @@ class AndroidVideoRecorder(
             Surface.ROTATION_270 -> 270
             else -> 0
         }
-        return if (
-            characteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
-        ) {
-            (sensor + displayDegrees) % 360
-        } else {
-            (sensor - displayDegrees + 360) % 360
-        }
+        val clockwiseOrientation = deviceOrientationDegrees ?: (360 - displayDegrees) % 360
+        return videoRotationDegrees(
+            sensor,
+            characteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT,
+            clockwiseOrientation,
+        )
     }
 
     private fun lensFacing(characteristics: CameraCharacteristics): String {
@@ -500,6 +514,7 @@ class AndroidVideoRecorder(
     }
 
     override fun close() {
+        orientationListener.disable()
         stop()
         setPreviewSurface(null)
         cameraThread.quitSafely()
@@ -509,3 +524,6 @@ class AndroidVideoRecorder(
         const val START_TIMEOUT_MILLIS = 10_000L
     }
 }
+
+internal fun videoRotationDegrees(sensor: Int, front: Boolean, clockwiseOrientation: Int): Int =
+    (sensor + (if (front) clockwiseOrientation else -clockwiseOrientation) + 360) % 360

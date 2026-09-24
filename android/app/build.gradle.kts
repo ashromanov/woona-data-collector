@@ -31,8 +31,8 @@ android {
         applicationId = "com.woona.drivetest"
         minSdk = 31
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.3.0"
+        versionCode = 5
+        versionName = "1.3.1"
 
         buildConfigField("String", "WOONA_SERVER_BASE_URL", woonaServerBaseUrl.get().asBuildConfigString())
         buildConfigField("String", "WOONA_SERVER_TOKEN", woonaServerToken.get().asBuildConfigString())
