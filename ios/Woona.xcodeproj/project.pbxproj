@@ -584,6 +584,7 @@
 				DEVELOPMENT_TEAM = NBM28T989D;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Woona;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Woona uses Bluetooth to connect to the sensor and capture packet notifications.";
 				INFOPLIST_KEY_NSBluetoothPeripheralUsageDescription = "Woona uses Bluetooth to connect to the sensor and capture packet notifications.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Woona records synchronized rear-camera video with sensor sessions.";
@@ -622,6 +623,7 @@
 				DEVELOPMENT_TEAM = NBM28T989D;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Woona;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Woona uses Bluetooth to connect to the sensor and capture packet notifications.";
 				INFOPLIST_KEY_NSBluetoothPeripheralUsageDescription = "Woona uses Bluetooth to connect to the sensor and capture packet notifications.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Woona records synchronized rear-camera video with sensor sessions.";
