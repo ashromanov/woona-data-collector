@@ -1,6 +1,11 @@
 name: Upload iOS to TestFlight
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'ios/**'
+      - '.github/workflows/testflight.yml'
   workflow_dispatch:
     inputs:
       upload:
@@ -10,6 +15,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: testflight-main
+  cancel-in-progress: false
 
 jobs:
   testflight:
@@ -52,7 +61,7 @@ jobs:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
-          UPLOAD: ${{ inputs.upload }}
+          UPLOAD: ${{ github.event_name == 'push' || inputs.upload }}
         run: |
           set -euo pipefail
           : "${ASC_KEY_ID:?Missing ASC_KEY_ID secret}"
@@ -62,6 +71,8 @@ jobs:
           key_path="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8"
           printf '%s' "$ASC_PRIVATE_KEY" > "$key_path"
           trap 'rm -f "$key_path"' EXIT
+          build_number=$((10000 + GITHUB_RUN_NUMBER * 100 + GITHUB_RUN_ATTEMPT))
+          echo "Building Woona $build_number"
           if [[ "$UPLOAD" == 'true' ]]; then destination=upload; else destination=export; fi
           cat > "$RUNNER_TEMP/ExportOptions.plist" <<'PLIST'
           <?xml version="1.0" encoding="UTF-8"?>
@@ -70,6 +81,7 @@ jobs:
             <key>method</key><string>app-store-connect</string>
             <key>destination</key><string>DESTINATION</string>
             <key>signingStyle</key><string>manual</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
             <key>signingCertificate</key><string>Apple Distribution</string>
             <key>provisioningProfiles</key><dict>
               <key>com.woona.apps</key><string>Woona CI App Store Connect</string>
@@ -78,5 +90,5 @@ jobs:
           </dict></plist>
           PLIST
           sed -i '' "s/DESTINATION/$destination/" "$RUNNER_TEMP/ExportOptions.plist"
-          xcodebuild -project ios/Woona.xcodeproj -scheme Woona -configuration Release -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/Woona.xcarchive" CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY='Apple Distribution' PROVISIONING_PROFILE_SPECIFIER='Woona CI App Store Connect' DEVELOPMENT_TEAM=NBM28T989D archive
+          xcodebuild -project ios/Woona.xcodeproj -scheme Woona -configuration Release -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/Woona.xcarchive" CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY='Apple Distribution' PROVISIONING_PROFILE_SPECIFIER='Woona CI App Store Connect' DEVELOPMENT_TEAM=NBM28T989D CURRENT_PROJECT_VERSION="$build_number" archive
           xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/Woona.xcarchive" -exportPath "$RUNNER_TEMP/WoonaExport" -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -allowProvisioningUpdates -authenticationKeyPath "$key_path" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID"

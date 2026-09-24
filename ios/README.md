@@ -33,10 +33,12 @@ upload resume и восстановление Android-записи. Linux не �
 
 ## TestFlight через CI
 
-Перед новым релизом увеличьте `CURRENT_PROJECT_VERSION` в обеих конфигурациях
-`Woona.xcodeproj/project.pbxproj`. Запустите вручную workflow
-`Upload iOS to TestFlight` с `upload=true`. Для проверки подписи и экспорта без
-загрузки используйте `upload=false`.
+Пуш изменений в `ios/` в `main` автоматически запускает workflow
+`Upload iOS to TestFlight`. Номер сборки вычисляется из номера запуска CI и
+его попытки, поэтому вручную менять `CURRENT_PROJECT_VERSION` не нужно.
+Ручной запуск с `upload=false` проверяет подпись и экспорт без загрузки.
+Внешняя группа TestFlight получает новую сборку после отдельного добавления
+сборки в группу и, если требуется, проверки Apple.
 
 Секреты GitHub Actions: `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_PRIVATE_KEY`
 (ключ App Store Connect с ролью Developer), `BUILD_CERTIFICATE_BASE64`,
