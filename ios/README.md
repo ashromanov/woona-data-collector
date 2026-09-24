@@ -30,3 +30,16 @@ HTTPS. Bearer token хранится в Keychain, URL и Wi-Fi policy — в Use
 preview/MP4, 10-с/1/10/30-минутные записи, background/lock/interruption,
 upload resume и восстановление Android-записи. Linux не содержит Swift/Xcode,
 поэтому не доказывает компиляцию или аппаратное поведение.
+
+## TestFlight через CI
+
+Перед новым релизом увеличьте `CURRENT_PROJECT_VERSION` в обеих конфигурациях
+`Woona.xcodeproj/project.pbxproj`. Запустите вручную workflow
+`Upload iOS to TestFlight` с `upload=true`. Для проверки подписи и экспорта без
+загрузки используйте `upload=false`.
+
+Секреты GitHub Actions: `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_PRIVATE_KEY`
+(ключ App Store Connect с ролью Developer), `BUILD_CERTIFICATE_BASE64`,
+`BUILD_PROVISION_PROFILE_BASE64`, `P12_PASSWORD`, `KEYCHAIN_PASSWORD`.
+Сертификат и профиль подписи истекают 24 сентября 2027 года; перед этим
+перевыпустите их и обновите соответствующие секреты.
