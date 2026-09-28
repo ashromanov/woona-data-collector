@@ -37,6 +37,10 @@ final class AppViewModel: ObservableObject {
     @Published private(set) var recentRecordings: [WoonaRecording] = []
     @Published private(set) var serverRecordings: [ServerRecordingSummary] = []
     @Published private(set) var downloadableRecordingIDs: Set<UUID> = []
+    @Published private(set) var exportableRecordingIDs: Set<UUID> = []
+    @Published private(set) var recordingFileCounts: [UUID: (local: Int, total: Int)] = [:]
+    @Published private(set) var recordingSyncErrors: [UUID: String] = [:]
+    @Published private(set) var showingAllRecordings = false
     @Published private(set) var downloadingRecordingID: UUID?
     @Published private(set) var activeRecording: WoonaRecording?
     @Published private(set) var isCaptureReady = false
@@ -571,6 +575,19 @@ final class AppViewModel: ObservableObject {
     }
 
     func prepareExport(_ kind: ExportKind) {
+        guard exportPhase == nil else { return }
+        if kind == .all {
+            guard activeRecording == nil else {
+                showError("Stop and finalize the recording before exporting its ZIP", error: nil)
+                return
+            }
+            guard let recording = recentRecordings.first(where: { exportableRecordingIDs.contains($0.id) }) else {
+                showError("No saved local session files; download a recording first", error: nil)
+                return
+            }
+            shareRecording(recording.id)
+            return
+        }
         Task {
             do {
                 exportPhase = .preparingSnapshots
@@ -578,29 +595,32 @@ final class AppViewModel: ObservableObject {
                 preparedExport = nil
                 await packetProcessor.flush()
                 packetUpdateBatcher.flushNow()
-
+                let recording = activeRecording == nil ? recentRecordings.first(where: { exportableRecordingIDs.contains($0.id) }) : nil
+                let saved = try recording.flatMap { try store?.recordingArchive(recordingID: $0.id) }
+                let currentPacket = await packetProcessor.currentPacketFile()
+                let currentRaw = await packetProcessor.currentRawFile()
+                let currentLog = await packetProcessor.currentLogFile()
                 let snapshot = try snapshotExportArtifacts(
-                    packetFile: await packetProcessor.currentPacketFile(),
-                    rawFile: await packetProcessor.currentRawFile(),
-                    logFile: await packetProcessor.currentLogFile()
+                    packetFile: saved == nil ? currentPacket : saved?.files.first { $0.url.lastPathComponent == "packets.bin" }?.url,
+                    rawFile: saved == nil ? currentRaw : saved?.files.first { $0.url.lastPathComponent == "raw_fragments.binlog" }?.url,
+                    logFile: saved == nil ? currentLog : saved?.files.first { $0.url.lastPathComponent == "diagnostics.log" }?.url
                 )
                 preparedExportSnapshotDirectory = snapshot.directory
 
                 let packetFile = snapshot.packetFile
                 let rawFile = snapshot.rawFile
                 let logFile = snapshot.logFile
+                let savedManifest = try saved.flatMap { try JSONSerialization.jsonObject(with: $0.manifest) as? [String: Any] }
+                let savedStart = (savedManifest?["sessionStartMillis"] as? NSNumber)?.int64Value
                 var urls: [URL] = []
 
                 switch kind {
                 case .all:
-                    urls.append(contentsOf: [packetFile, rawFile, logFile].compactMap { $0 })
-                    if let csv = try await createCsvExport(packetFile: packetFile) {
-                        urls.append(csv)
-                    }
+                    break // Full session ZIP is handled above, using persisted recording metadata.
                 case .packetDump:
                     urls.append(contentsOf: [packetFile].compactMap { $0 })
                 case .channelCsv:
-                    if let csv = try await createCsvExport(packetFile: packetFile) {
+                    if let csv = try await createCsvExport(packetFile: packetFile, sessionStartMillis: savedStart) {
                         urls.append(csv)
                     }
                 case .rawFragments:
@@ -632,6 +652,33 @@ final class AppViewModel: ObservableObject {
         discardPreparedExportSnapshot()
     }
 
+    func shareRecording(_ recordingID: UUID) {
+        guard exportPhase == nil else { return }
+        exportPhase = .preparingSnapshots
+        discardPreparedExportSnapshot()
+        preparedExport = nil
+        Task {
+            do {
+                guard let store else { throw WoonaStoreError.invalidData("Local recording database is unavailable") }
+                let archive = try store.recordingArchive(recordingID: recordingID)
+                let directory = FileManager.default.temporaryDirectory.appendingPathComponent("WoonaExport-\(UUID().uuidString)", isDirectory: true)
+                preparedExportSnapshotDirectory = directory
+                let url = try await Task.detached(priority: .userInitiated) { try archive.create(in: directory) }.value
+                exportPhase = .openingShareSheet
+                preparedExport = PreparedExport(kind: .all, urls: [url])
+            } catch {
+                exportPhase = nil
+                discardPreparedExportSnapshot()
+                showError("Failed to export session ZIP", error: error)
+            }
+        }
+    }
+
+    func showAllRecordings() {
+        showingAllRecordings = true
+        reloadRecentRecordings()
+    }
+
     private func reloadProfiles(selecting preferredID: UUID? = nil) {
         guard let store else { return }
         do {
@@ -646,14 +693,23 @@ final class AppViewModel: ObservableObject {
     }
 
     private func reloadRecentRecordings() {
-        guard let store, let selectedDogProfile else { recentRecordings = []; downloadableRecordingIDs = []; return }
+        guard let store, let selectedDogProfile else {
+            recentRecordings = []; downloadableRecordingIDs = []; exportableRecordingIDs = []; recordingSyncErrors = [:]; recordingFileCounts = [:]
+            return
+        }
         do {
-            recentRecordings = try store.recentRecordings(dogID: selectedDogProfile.id)
-            downloadableRecordingIDs = Set(
-                try recentRecordings.compactMap { recording in
-                    try store.missingArtifacts(recordingID: recording.id).isEmpty ? nil : recording.id
-                }
-            )
+            recentRecordings = try store.recentRecordings(dogID: selectedDogProfile.id, limit: showingAllRecordings ? nil : 10)
+            downloadableRecordingIDs = []; exportableRecordingIDs = []; recordingSyncErrors = [:]; recordingFileCounts = [:]
+            for recording in recentRecordings {
+                let artifacts = try store.artifacts(recordingID: recording.id)
+                let local = artifacts.filter {
+                    FileManager.default.fileExists(atPath: store.rootDirectory.appendingPathComponent($0.relativePath).path)
+                }.count
+                recordingFileCounts[recording.id] = (local, artifacts.count)
+                if local < artifacts.count { downloadableRecordingIDs.insert(recording.id) }
+                if local > 0 && !["preparing", "recording"].contains(recording.status) { exportableRecordingIDs.insert(recording.id) }
+                recordingSyncErrors[recording.id] = try store.recordingSyncError(recordingID: recording.id)
+            }
         }
         catch { showError("Failed to load recordings", error: error) }
     }
@@ -671,7 +727,7 @@ final class AppViewModel: ObservableObject {
             let revision = try await serverClient().upload(profile: profile)
             try store.setServerRevision(dogID: profile.id, revision: revision)
             reloadProfiles(selecting: profile.id)
-        } catch { appendDiagnostic("Profile sync pending: \(error.localizedDescription)") }
+        } catch { showError("Profile upload failed", error: error) }
     }
 
     private func reloadServerRecordings() async {
@@ -759,7 +815,10 @@ final class AppViewModel: ObservableObject {
             try await serverClient().upload(recording: recording, profile: profile, store: store)
             reloadRecentRecordings()
             await reloadServerRecordings()
-        } catch { appendDiagnostic("Recording sync pending: \(error.localizedDescription)") }
+        } catch {
+            reloadRecentRecordings()
+            showError("Recording upload failed", error: error)
+        }
         scheduleBackgroundSync()
     }
 
@@ -1060,13 +1119,13 @@ final class AppViewModel: ObservableObject {
         self.preparedExportSnapshotDirectory = nil
     }
 
-    private func createCsvExport(packetFile: URL?) async throws -> URL? {
+    private func createCsvExport(packetFile: URL?, sessionStartMillis: Int64? = nil) async throws -> URL? {
         guard let packetFile else { return nil }
         exportPhase = .generatingCsv
         let csvURL = packetFile
             .deletingPathExtension()
             .appendingPathExtension("csv")
-        let sessionStart = exportSessionStartMillis(packetFile: packetFile)
+        let sessionStart = sessionStartMillis ?? exportSessionStartMillis(packetFile: packetFile)
         return try CsvExporter().export(
             packetFile: packetFile,
             sessionStartMillis: sessionStart,
@@ -1759,7 +1818,7 @@ enum ExportKind: String, CaseIterable, Identifiable, Equatable {
     private var englishTitle: String {
         switch self {
         case .all:
-            "All artifacts"
+            "Session ZIP (all files)"
         case .packetDump:
             "Packet dump"
         case .channelCsv:
@@ -1774,7 +1833,7 @@ enum ExportKind: String, CaseIterable, Identifiable, Equatable {
     private var russianTitle: String {
         switch self {
         case .all:
-            "Все артефакты"
+            "ZIP сессии (все файлы)"
         case .packetDump:
             "Дамп пакетов"
         case .channelCsv:

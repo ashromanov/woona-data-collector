@@ -57,6 +57,7 @@ struct OverviewView: View {
                     if let errorMessage = appState.errorMessage {
                         Text(errorMessage)
                             .foregroundStyle(.red)
+                            .textSelection(.enabled)
                     }
                 }
 
@@ -128,25 +129,47 @@ struct OverviewView: View {
                 }
 
                 if let profile = appState.selectedDogProfile {
-                    Section(appState.selectedLanguage == .russian ? "Последние записи" : "Recent recordings") {
+                    Section(appState.selectedLanguage == .russian
+                            ? (appState.showingAllRecordings ? "Все записи" : "Последние записи")
+                            : (appState.showingAllRecordings ? "All recordings" : "Recent recordings")) {
                         if appState.recentRecordings.isEmpty && appState.serverRecordings.isEmpty {
                             Text(appState.selectedLanguage == .russian ? "Записей пока нет" : "No recordings yet")
                                 .foregroundStyle(.secondary)
                         }
                         ForEach(appState.recentRecordings) { recording in
-                            HStack {
+                            VStack(alignment: .leading, spacing: 8) {
                                 VStack(alignment: .leading) {
                                     Text(recording.sessionLabel)
+                                    if let date = ISO8601DateFormatter().date(from: recording.startedAtUTC) {
+                                        Text(date.formatted(date: .abbreviated, time: .shortened)).font(.caption)
+                                    }
                                     Text("\(recording.source) · \(recording.status) · \(recording.serverSyncState)")
                                         .font(.caption).foregroundStyle(.secondary)
                                 }
-                                Spacer()
-                                if appState.downloadableRecordingIDs.contains(recording.id) {
-                                    Button(appState.selectedLanguage == .russian ? "Скачать" : "Download") {
-                                        appState.downloadRecording(recording.id)
-                                    }
-                                    .disabled(appState.downloadingRecordingID != nil)
+                                if let error = appState.recordingSyncErrors[recording.id] {
+                                    Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled)
                                 }
+                                if let count = appState.recordingFileCounts[recording.id] {
+                                    Text(appState.selectedLanguage == .russian ? "На устройстве: \(count.local) из \(count.total) файлов" : "On device: \(count.local) of \(count.total) files")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                                HStack {
+                                    Button(appState.selectedLanguage == .russian ? "Поделиться ZIP сессии" : "Share session ZIP") {
+                                        appState.shareRecording(recording.id)
+                                    }
+                                    .disabled(appState.exportPhase != nil || !appState.exportableRecordingIDs.contains(recording.id))
+                                    if appState.downloadableRecordingIDs.contains(recording.id) {
+                                        Button(appState.selectedLanguage == .russian ? "Скачать" : "Download") {
+                                            appState.downloadRecording(recording.id)
+                                        }
+                                        .disabled(appState.downloadingRecordingID != nil)
+                                    }
+                                }
+                            }
+                        }
+                        if !appState.showingAllRecordings && appState.recentRecordings.count == 10 {
+                            Button(appState.selectedLanguage == .russian ? "Показать все записи" : "Show all recordings") {
+                                appState.showAllRecordings()
                             }
                         }
                         ForEach(appState.serverRecordings.filter { remote in !appState.recentRecordings.contains(where: { $0.id == remote.id }) }) { recording in

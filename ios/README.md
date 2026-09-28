@@ -10,6 +10,13 @@
 - несколько собак, immutable profile versions и последние 10 записей;
 - CoreBluetooth scan/connect, live capture и replay старых/новых dump;
 - `BLERAW2`, `packets.bin`, `packet_timeline.bin`, diagnostics и export/share;
+- «Поделиться ZIP сессии» у каждой локальной записи, независимо от серверной
+  выгрузки и перезапуска: видео, все локальные артефакты, `manifest.json`,
+  историческая анкета собаки, анкета сессии и синхронизация; «Показать все записи»
+  открывает записи старше последних десяти. ZIP сохраняется через системное меню
+  в «Файлы» или передаётся AirDrop. Исходники и очередь выгрузки не изменяются.
+  Отсутствующие на устройстве файлы перечислены в `missingFiles`; их можно
+  сначала скачать кнопкой «Скачать». Размер и SHA локальных файлов проверяются.
 - задняя AVCaptureSession camera, H.264 MP4, 16:9 preview и единый Start/Stop;
 - `ios.CMClock.hostTime`, первый video PTS и `sync.json`;
 - SQLite schema v5, Keychain token, общий Android/iOS сервер;
@@ -21,6 +28,7 @@
 ```bash
 xcodebuild -project Woona.xcodeproj -scheme Woona \
   -destination 'platform=iOS Simulator,OS=latest,name=iPhone 16' test
+python3 tools/check-recording-export.py "$HOME/Library/Developer/CoreSimulator/Devices"
 ```
 
 В Debug локальный HTTP разрешён только для local networking; Release ожидает

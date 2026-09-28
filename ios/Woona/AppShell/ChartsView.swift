@@ -8,6 +8,9 @@ struct ChartsView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 10) {
+                if let error = appState.errorMessage {
+                    Text(error).foregroundStyle(.red).textSelection(.enabled)
+                }
                 ChartStatusLine()
                 SensorSelector()
                 ChartControls()

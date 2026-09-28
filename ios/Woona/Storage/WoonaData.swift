@@ -2,6 +2,59 @@ import CryptoKit
 import Foundation
 import SQLite3
 
+struct RecordingArchive: Sendable {
+    struct File: Sendable {
+        let url: URL
+        let size: Int64
+        let sha256: String
+    }
+    let files: [File]
+    let manifest: Data
+    let name: String
+
+    func create(in directory: URL) throws -> URL {
+        let manager = FileManager.default
+        let staging = directory.appendingPathComponent(name, isDirectory: true)
+        let archive = directory.appendingPathComponent(name + ".zip")
+        guard !manager.fileExists(atPath: staging.path), !manager.fileExists(atPath: archive.path) else {
+            throw WoonaStoreError.invalidData("Export destination already exists")
+        }
+        do {
+            try manager.createDirectory(at: staging, withIntermediateDirectories: true)
+            defer { try? manager.removeItem(at: staging) }
+            for file in files {
+                let target = staging.appendingPathComponent(file.url.lastPathComponent)
+                try manager.copyItem(at: file.url, to: target)
+                let handle = try FileHandle(forReadingFrom: target)
+                defer { try? handle.close() }
+                var hash = SHA256()
+                var size: Int64 = 0
+                while let data = try handle.read(upToCount: 65_536), !data.isEmpty {
+                    size += Int64(data.count)
+                    hash.update(data: data)
+                }
+                guard size == file.size, hash.finalize().map({ String(format: "%02x", $0) }).joined() == file.sha256 else {
+                    throw WoonaStoreError.invalidData("Local artifact size or SHA-256 changed: \(file.url.lastPathComponent)")
+                }
+            }
+            try manifest.write(to: staging.appendingPathComponent("manifest.json"), options: .atomic)
+            var coordinationError: NSError?
+            var copyError: Error?
+            NSFileCoordinator().coordinate(readingItemAt: staging, options: .forUploading, error: &coordinationError) { zipped in
+                do { try manager.copyItem(at: zipped, to: archive) }
+                catch { copyError = error }
+            }
+            if let coordinationError { throw coordinationError }
+            if let copyError { throw copyError }
+            guard manager.fileExists(atPath: archive.path) else { throw WoonaStoreError.invalidData("The session archive was not created") }
+            return archive
+        } catch {
+            try? manager.removeItem(at: archive)
+            throw error
+        }
+    }
+}
+
 struct QuestionnaireValidation: Equatable {
     let errors: [String: String]
     var isValid: Bool { errors.isEmpty }
@@ -706,7 +759,7 @@ final class WoonaStore {
         )
     }
 
-    func recentRecordings(dogID: UUID, limit: Int = 10) throws -> [WoonaRecording] {
+    func recentRecordings(dogID: UUID, limit: Int? = 10) throws -> [WoonaRecording] {
         let statement = try prepare(
             """
             SELECT id,dog_id,dog_profile_version_id,source,status,session_label,
@@ -714,7 +767,7 @@ final class WoonaStore {
                    questionnaire_json,relative_directory,server_sync_state
             FROM recordings WHERE dog_id=? ORDER BY started_at_utc DESC LIMIT ?
             """,
-            [.text(dogID.uuidString), .integer(Int64(max(limit, 0)))]
+            [.text(dogID.uuidString), .integer(Int64(limit.map { max($0, 0) } ?? -1))]
         )
         defer { sqlite3_finalize(statement) }
         var result: [WoonaRecording] = []
@@ -854,6 +907,67 @@ final class WoonaStore {
         let statement = try prepare("SELECT sync_json FROM recording_sync WHERE recording_id=?", [.text(recordingID.uuidString)])
         defer { sqlite3_finalize(statement) }
         return sqlite3_step(statement) == SQLITE_ROW ? Data(columnText(statement, 0).utf8) : nil
+    }
+
+    func recordingSyncError(recordingID: UUID) throws -> String? {
+        let statement = try prepare("SELECT last_error_message FROM server_sync_state WHERE recording_id=? AND state IN ('retryable_error','permanent_error')", [.text(recordingID.uuidString)])
+        defer { sqlite3_finalize(statement) }
+        guard sqlite3_step(statement) == SQLITE_ROW, sqlite3_column_type(statement, 0) != SQLITE_NULL else { return nil }
+        return columnText(statement, 0)
+    }
+
+    func recordingArchive(recordingID: UUID) throws -> RecordingArchive {
+        guard let recording = try recording(id: recordingID),
+              let profile = try profile(dogID: recording.dogID, versionID: recording.profileVersionID) else {
+            throw WoonaStoreError.invalidData("Recording or its saved dog questionnaire is missing")
+        }
+        guard !["preparing", "recording"].contains(recording.status) else {
+            throw WoonaStoreError.invalidData("Stop and finalize this recording before exporting")
+        }
+        let artifacts = try artifacts(recordingID: recordingID)
+        let root = rootDirectory.resolvingSymlinksInPath().standardizedFileURL.path + "/"
+        var files: [RecordingArchive.File] = []
+        var entries: [[String: Any]] = []
+        var missing: [String] = []
+        for artifact in artifacts {
+            let file = rootDirectory.appendingPathComponent(artifact.relativePath).resolvingSymlinksInPath().standardizedFileURL
+            guard file.path.hasPrefix(root), artifact.fileName == file.lastPathComponent,
+                  artifact.fileName != "manifest.json", !artifact.fileName.contains("\\") else {
+                throw WoonaStoreError.invalidData("Invalid recording artifact path: \(artifact.fileName)")
+            }
+            guard FileManager.default.fileExists(atPath: file.path) else { missing.append(artifact.fileName); continue }
+            guard !files.contains(where: { $0.url.lastPathComponent == file.lastPathComponent }) else {
+                throw WoonaStoreError.invalidData("Duplicate recording artifact name: \(artifact.fileName)")
+            }
+            files.append(.init(url: file, size: artifact.sizeBytes, sha256: artifact.sha256))
+            entries.append(["name": artifact.fileName, "size": artifact.sizeBytes, "sha256": artifact.sha256, "type": artifact.type])
+        }
+        guard !files.isEmpty else { throw WoonaStoreError.invalidData("No local files for this recording; download its files first") }
+        let statement = try prepare("SELECT questionnaire_json FROM recordings WHERE id=?", [.text(recordingID.uuidString)])
+        defer { sqlite3_finalize(statement) }
+        guard sqlite3_step(statement) == SQLITE_ROW else { throw WoonaStoreError.invalidData("Recording questionnaire is missing") }
+        let questionnaire = try JSONSerialization.jsonObject(with: Data(columnText(statement, 0).utf8))
+        let synchronization: Any = try syncJSON(recordingID: recordingID).map { try JSONSerialization.jsonObject(with: $0) } ?? NSNull()
+        let parser = ISO8601DateFormatter()
+        let started = parser.date(from: recording.startedAtUTC)
+        parser.formatOptions.insert(.withFractionalSeconds)
+        let start = started ?? parser.date(from: recording.startedAtUTC)
+        let manifest: [String: Any] = [
+            "createdAtMillis": Int64(Date().timeIntervalSince1970 * 1_000),
+            "sessionStartMillis": start.map { Int64($0.timeIntervalSince1970 * 1_000) } as Any? ?? NSNull(),
+            "profile": ["id": profile.id.uuidString, "numberOrName": profile.numberOrName,
+                        "questionnaire": try JSONSerialization.jsonObject(with: Self.dogQuestionnaireData(profile.questionnaire))],
+            "recording": ["id": recording.id.uuidString, "source": recording.source, "status": recording.status,
+                          "sessionLabel": recording.sessionLabel, "timezone": recording.timezone,
+                          "startedAtUtc": recording.startedAtUTC, "serverSyncState": recording.serverSyncState,
+                          "questionnaire": questionnaire],
+            "synchronization": synchronization, "files": entries, "missingFiles": missing,
+        ]
+        let label = "woona_\(profile.numberOrName)_\(recording.sessionLabel)".unicodeScalars.map {
+            CharacterSet.alphanumerics.contains($0) || "._-".unicodeScalars.contains($0) ? String($0) : "_"
+        }.joined()
+        return RecordingArchive(files: files, manifest: try JSONSerialization.data(withJSONObject: manifest, options: [.sortedKeys]),
+                                name: String(label.prefix(48)) + "_" + recording.id.uuidString)
     }
 
     func pendingRecordings() throws -> [WoonaRecording] {

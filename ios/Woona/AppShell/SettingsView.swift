@@ -6,6 +6,11 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                if let error = appState.errorMessage {
+                    Section(appState.selectedLanguage == .russian ? "Ошибка" : "Error") {
+                        Text(error).foregroundStyle(.red).textSelection(.enabled)
+                    }
+                }
                 Section(appState.text(.bleTransport)) {
                     LabeledContent(appState.text(.profile)) {
                         Text(appState.currentTransportProfileTitle)
