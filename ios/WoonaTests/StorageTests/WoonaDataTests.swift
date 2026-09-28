@@ -256,6 +256,8 @@ final class WoonaDataTests: XCTestCase {
                            syncJSON: Data("{}".utf8))
         let viewModel = AppViewModel(store: store)
         viewModel.prepareExport(.channelCsv)
+        XCTAssertNotNil(viewModel.exportPhase)
+        viewModel.prepareExport(.packetDump) // A second tap must not replace an export already in progress.
         for _ in 0..<100 where viewModel.preparedExport == nil && viewModel.exportPhase != nil {
             try await Task.sleep(nanoseconds: 50_000_000)
         }

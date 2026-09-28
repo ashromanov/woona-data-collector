@@ -588,9 +588,9 @@ final class AppViewModel: ObservableObject {
             shareRecording(recording.id)
             return
         }
+        exportPhase = .preparingSnapshots
         Task {
             do {
-                exportPhase = .preparingSnapshots
                 discardPreparedExportSnapshot()
                 preparedExport = nil
                 await packetProcessor.flush()
