@@ -26,9 +26,11 @@
 ## Проверка на Mac
 
 ```bash
-xcodebuild -project Woona.xcodeproj -scheme Woona \
+woona_result="/tmp/WoonaTests-$(date +%s).xcresult"
+xcodebuild -project Woona.xcodeproj -scheme Woona -resultBundlePath "$woona_result" \
   -destination 'platform=iOS Simulator,OS=latest,name=iPhone 16' test
-python3 tools/check-recording-export.py "$HOME/Library/Developer/CoreSimulator/Devices"
+xcrun xcresulttool export attachments --path "$woona_result" --output-path "$woona_result-attachments"
+python3 tools/check-recording-export.py "$woona_result-attachments"
 ```
 
 В Debug локальный HTTP разрешён только для local networking; Release ожидает

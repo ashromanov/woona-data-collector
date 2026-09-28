@@ -228,10 +228,11 @@ final class WoonaDataTests: XCTestCase {
         for name in samples.map({ $0.1 }) + ["sync.json", "manifest.json"] {
             XCTAssertNotNil(bytes.range(of: Data(name.utf8)), "ZIP central directory omitted \(name)")
         }
-        // Retain a synthetic acceptance ZIP for independent host-side unzip/SHA verification in CI.
-        let acceptance = FileManager.default.temporaryDirectory.appendingPathComponent("woona-export-acceptance.zip")
-        try? FileManager.default.removeItem(at: acceptance)
-        try FileManager.default.copyItem(at: archive, to: acceptance)
+        // XCTest owns the proof even when Xcode runs in an ephemeral cloned simulator.
+        let acceptance = XCTAttachment(data: bytes, uniformTypeIdentifier: "public.zip-archive")
+        acceptance.name = "woona-export-acceptance.zip"
+        acceptance.lifetime = .keepAlways
+        add(acceptance)
         viewModel.clearPreparedExport()
         XCTAssertFalse(FileManager.default.fileExists(atPath: archive.path))
         XCTAssertEqual("permanent_error", try reopened.recording(id: recording.id)?.serverSyncState)

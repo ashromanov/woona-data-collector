@@ -6,8 +6,8 @@ from pathlib import Path, PurePosixPath
 import sys
 import zipfile
 
-archives = list(Path(sys.argv[1]).rglob("woona-export-acceptance.zip"))
-assert archives, "The simulator did not produce its recording export acceptance ZIP"
+archives = [p for p in Path(sys.argv[1]).rglob("*") if p.is_file() and zipfile.is_zipfile(p)]
+assert archives, "The XCTest result did not contain its recording export acceptance ZIP"
 for archive in archives:
     with zipfile.ZipFile(archive) as z:
         assert z.testzip() is None, "ZIP CRC verification failed"
