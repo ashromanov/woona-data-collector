@@ -6,6 +6,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.isDisplayed
+import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.hasAnySibling
+import androidx.compose.ui.test.isToggleable
+import androidx.test.espresso.Espresso
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -301,8 +305,12 @@ class AppShellNavigationTest {
         }
 
         composeRule.onNodeWithText("Номер сессии *").performTextInput("1")
+        Espresso.closeSoftKeyboard()
         composeRule.onNodeWithText("Аллюр/движение").performScrollTo().performClick()
+        checkbox("Аллюр/движение").assertIsOn()
         composeRule.onNodeWithText("Активность").performScrollTo().performClick()
+        checkbox("Аллюр/движение").assertIsOn()
+        checkbox("Активность").assertIsOn()
         composeRule.onNodeWithText("Validate and save").performClick()
         composeRule.runOnIdle { assertEquals(listOf("Аллюр/движение", "Активность"), saved?.plannedActivities) }
     }
@@ -319,7 +327,9 @@ class AppShellNavigationTest {
             }
         }
         composeRule.onNodeWithText("Номер сессии *").performTextInput("Failure draft")
+        Espresso.closeSoftKeyboard()
         composeRule.onNodeWithText("Аллюр/движение").performScrollTo().performClick()
+        checkbox("Аллюр/движение").assertIsOn()
         composeRule.onNodeWithText("Validate and save").performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onNodeWithText("java.io.IOException: database unavailable").isDisplayed()
@@ -343,11 +353,18 @@ class AppShellNavigationTest {
         }
 
         composeRule.onNodeWithText("Номер сессии *").performTextInput("2")
+        Espresso.closeSoftKeyboard()
         composeRule.onNodeWithText("Аллюр/движение").performScrollTo().performClick()
+        checkbox("Аллюр/движение").assertIsOn()
         composeRule.onNodeWithText("На улице").performScrollTo().performClick()
         composeRule.onNodeWithText("Асфальт").performScrollTo().performClick()
+        checkbox("Асфальт").assertIsOn()
         composeRule.onNodeWithText("Трава").performScrollTo().performClick()
+        checkbox("Асфальт").assertIsOn()
+        checkbox("Трава").assertIsOn()
         composeRule.onNodeWithText("В помещении").performScrollTo().performClick()
+        checkbox("Асфальт").assertIsOn()
+        checkbox("Трава").assertIsOn()
         composeRule.onNodeWithText("Validate and save").performClick()
         composeRule.runOnIdle { assertEquals(listOf("Асфальт", "Трава"), saved?.surfaces) }
     }
@@ -434,6 +451,11 @@ class AppShellNavigationTest {
             }
         }
     }
+
+    private fun checkbox(label: String) = composeRule.onNode(
+        isToggleable() and hasAnySibling(hasText(label)),
+        useUnmergedTree = true,
+    )
 
     private fun navTab(label: String) = composeRule.onNode(
         hasText(label) and SemanticsMatcher.expectValue(
