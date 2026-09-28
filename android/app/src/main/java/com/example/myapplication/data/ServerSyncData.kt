@@ -83,6 +83,7 @@ data class ServerSyncCounts(
     val uploading: Int,
     val synced: Int,
     val failed: Int,
+    val lastErrorMessage: String? = null,
 )
 
 data class RemoteProfileVersion(
@@ -305,11 +306,17 @@ fun WoonaDatabase.hashPendingArtifacts(): Int {
                 message = "Artifact $artifactId is missing",
             )
         } else {
+            val hash = try {
+                sha256(file)
+            } catch (error: Exception) {
+                markRecordingSyncError(recordingId, true, "artifact_read_error", "Cannot read $relativePath: $error")
+                throw error
+            }
             writableDatabase.update(
                 "artifacts",
                 ContentValues().apply {
                     put("size_bytes", file.length())
-                    put("sha256", sha256(file))
+                    put("sha256", hash)
                     put("hash_state", "verified")
                     put("local_presence", "local")
                 },
@@ -541,17 +548,27 @@ fun WoonaDatabase.resetFailedSync() {
 fun WoonaDatabase.serverSyncCounts(): ServerSyncCounts =
     readableDatabase.rawQuery(
         """
+        WITH sync_items AS (
+          SELECT state,last_error_code,last_error_message,updated_at_utc FROM server_sync_state
+          UNION ALL
+          SELECT server_sync_state,last_error_code,last_error_message,client_created_at_utc
+          FROM dog_profile_versions
+        )
         SELECT
           SUM(CASE WHEN state='pending' THEN 1 ELSE 0 END),
           SUM(CASE WHEN state='uploading' THEN 1 ELSE 0 END),
           SUM(CASE WHEN state='synced' THEN 1 ELSE 0 END),
-          SUM(CASE WHEN state IN ('retryable_error','permanent_error') THEN 1 ELSE 0 END)
-        FROM server_sync_state
+          SUM(CASE WHEN state IN ('retryable_error','permanent_error') THEN 1 ELSE 0 END),
+          (SELECT COALESCE(NULLIF(last_error_message,''),last_error_code)
+           FROM sync_items
+           WHERE state IN ('retryable_error','permanent_error')
+           ORDER BY updated_at_utc DESC LIMIT 1)
+        FROM sync_items
         """.trimIndent(),
         null,
     ).use { cursor ->
         cursor.moveToFirst()
-        ServerSyncCounts(cursor.getInt(0), cursor.getInt(1), cursor.getInt(2), cursor.getInt(3))
+        ServerSyncCounts(cursor.getInt(0), cursor.getInt(1), cursor.getInt(2), cursor.getInt(3), cursor.getString(4))
     }
 
 fun WoonaDatabase.restoreServerMetadata(

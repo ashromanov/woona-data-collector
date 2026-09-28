@@ -33,6 +33,60 @@ class WoonaDatabaseTest {
     }
 
     @Test
+    fun profileSyncFailureIsCountedAndCanBeRetriedWithoutRecordings() {
+        val profile = database.saveProfile(completeDogQuestionnaire("Mock profile"))
+        assertEquals(1, database.serverSyncCounts().pending)
+        database.markProfileSyncError(profile.profileVersionId, false, "http_401", "invalid_bearer_token")
+        assertEquals(1, database.serverSyncCounts().failed)
+        assertEquals("invalid_bearer_token", database.serverSyncCounts().lastErrorMessage)
+
+        database.resetFailedSync()
+        assertEquals(1, database.serverSyncCounts().pending)
+        assertEquals(0, database.serverSyncCounts().failed)
+        assertEquals(null, database.serverSyncCounts().lastErrorMessage)
+    }
+
+    @Test
+    fun syncFailureShowsPersistedReasonAndClearsAfterRetry() {
+        val profile = database.saveProfile(completeDogQuestionnaire("Mock dog"))
+        val recording = database.beginRecording(profile.id, RecordingSource.LIVE, completeSessionQuestionnaire())
+        database.finishRecording(recording.id, RecordingStatus.COMPLETED)
+        database.markRecordingSyncError(recording.id, false, "http_401", "Server returned HTTP 401: invalid_bearer_token")
+
+        assertEquals(1, database.serverSyncCounts().failed)
+        assertEquals("Server returned HTTP 401: invalid_bearer_token", database.serverSyncCounts().lastErrorMessage)
+
+        database.markRecordingSyncError(recording.id, true, "network_error", "")
+        assertEquals("network_error", database.serverSyncCounts().lastErrorMessage)
+        database.resetFailedSync()
+        assertEquals(0, database.serverSyncCounts().failed)
+        assertEquals(null, database.serverSyncCounts().lastErrorMessage)
+    }
+
+    @Test
+    fun unreadableArtifactShowsReasonAndCanBeRetried() {
+        val profile = database.saveProfile(completeDogQuestionnaire("Mock unreadable file"))
+        val recording = database.beginRecording(profile.id, RecordingSource.LIVE, completeSessionQuestionnaire())
+        val packet = File(database.recordingDirectory(recording.relativeDirectory), "packets.bin")
+        packet.writeBytes(byteArrayOf(1, 2, 3))
+        database.finishRecording(recording.id, RecordingStatus.COMPLETED)
+        database.writableDatabase.execSQL("UPDATE artifacts SET hash_state='pending' WHERE recording_id=?", arrayOf(recording.id))
+        android.system.Os.chmod(packet.absolutePath, 0)
+        try {
+            val error = runCatching { database.hashPendingArtifacts() }.exceptionOrNull()
+            assertTrue(error is java.io.IOException)
+            assertEquals(1, database.serverSyncCounts().failed)
+            assertTrue(database.serverSyncCounts().lastErrorMessage.orEmpty().contains("EACCES"))
+        } finally {
+            android.system.Os.chmod(packet.absolutePath, 384)
+        }
+        database.resetFailedSync()
+        database.hashPendingArtifacts()
+        assertEquals(0, database.serverSyncCounts().failed)
+        assertTrue(database.pendingRecordingIds().contains(recording.id))
+    }
+
+    @Test
     fun sheetQuestionnairesPreserveIdentitySurfacesAndHistoricalProfile() {
         val dog = DogQuestionnaire(schemaVersion = 2, animalId = "финик", numberOrName = "Финик", species = "собака",
             diseaseCategory = "Суставы", diagnosesDetails = "Дисплазия", specialistName = "Иван")

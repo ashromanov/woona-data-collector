@@ -37,6 +37,7 @@ data class ServerSyncUiState(
     val uploading: Int = 0,
     val synced: Int = 0,
     val failed: Int = 0,
+    val lastErrorMessage: String? = null,
     val restoring: Boolean = false,
 ) {
     val isConfigured: Boolean get() = status != ServerSyncStatus.NOT_CONFIGURED

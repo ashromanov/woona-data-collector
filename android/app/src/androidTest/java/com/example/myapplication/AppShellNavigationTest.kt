@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -37,6 +38,7 @@ import com.example.myapplication.localization.AppTextResolver
 import com.example.myapplication.profile.DogQuestionnaireDialog
 import com.example.myapplication.profile.SessionQuestionnaireDialog
 import com.example.myapplication.sync.ServerSyncUiState
+import com.example.myapplication.sync.ServerSyncStatus
 import com.example.myapplication.ui.theme.AppThemeMode
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -49,6 +51,31 @@ private const val CHART_FULLSCREEN_DIALOG_TEST_TAG = "chart_fullscreen_dialog"
 class AppShellNavigationTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
+
+    @Test
+    fun operationFailureDetailsRemainVisibleAcrossAllTabs() {
+        val details = "Download failed: java.net.SocketTimeoutException: read timed out"
+        setShellContent(uiState = DeviceUiState(errorMessage = details))
+        composeRule.onNodeWithText(details).performScrollTo().assertIsDisplayed()
+        navTab("Charts").performClick()
+        composeRule.onNodeWithText(details).assertIsDisplayed()
+        navTab("Settings").performClick()
+        composeRule.onNodeWithText(details).assertIsDisplayed()
+    }
+
+    @Test
+    fun serverSettingsShowsUploadFailureReason() {
+        val message = "Server returned HTTP 401: invalid_bearer_token"
+        setShellContent(serverSyncState = ServerSyncUiState(
+            status = ServerSyncStatus.NEEDS_ATTENTION,
+            failed = 1,
+            lastErrorMessage = message,
+        ))
+
+        navTab("Settings").performClick()
+        composeRule.onNodeWithText(message).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Retry uploads").performScrollTo().assertIsEnabled()
+    }
 
     @Test
     fun overview_isDefaultDestination() {
@@ -278,6 +305,28 @@ class AppShellNavigationTest {
         composeRule.onNodeWithText("Активность").performScrollTo().performClick()
         composeRule.onNodeWithText("Validate and save").performClick()
         composeRule.runOnIdle { assertEquals(listOf("Аллюр/движение", "Активность"), saved?.plannedActivities) }
+    }
+
+    @Test
+    fun questionnaireSaveFailure_showsDetailsAndKeepsDraftOpen() {
+        composeRule.setContent {
+            MaterialTheme {
+                SessionQuestionnaireDialog(
+                    language = AppLanguage.ENGLISH,
+                    onDismiss = {},
+                    onSave = { throw java.io.IOException("database unavailable") },
+                )
+            }
+        }
+        composeRule.onNodeWithText("Номер сессии *").performTextInput("Failure draft")
+        composeRule.onNodeWithText("Аллюр/движение").performScrollTo().performClick()
+        composeRule.onNodeWithText("Validate and save").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onNodeWithText("java.io.IOException: database unavailable").isDisplayed()
+        }
+        composeRule.onNodeWithText("java.io.IOException: database unavailable").assertIsDisplayed()
+        composeRule.onNodeWithText("Session questionnaire").assertIsDisplayed()
+        composeRule.onNodeWithText("Failure draft").performScrollTo().assertIsDisplayed()
     }
 
     @Test

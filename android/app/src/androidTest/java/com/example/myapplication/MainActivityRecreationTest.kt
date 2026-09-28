@@ -1,5 +1,9 @@
 package com.example.myapplication
 
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -26,11 +30,20 @@ class MainActivityRecreationTest {
     fun openSessionQuestionnaireAndDraft_surviveActivityRecreation() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         AppLanguagePreferences(context).setSelectedLanguage(AppLanguage.ENGLISH)
-        WoonaDatabase(context).use { database ->
+        val profile = WoonaDatabase(context).use { database ->
             database.saveProfile(completeDogQuestionnaire())
         }
+        context.getSharedPreferences("woona_profiles", android.content.Context.MODE_PRIVATE)
+            .edit().putString("last_profile_id", profile.id).commit()
 
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            composeRule.onNode(
+                hasText("Overview") and SemanticsMatcher.expectValue(
+                    androidx.compose.ui.semantics.SemanticsProperties.Role,
+                    androidx.compose.ui.semantics.Role.Tab,
+                ),
+            ).performClick()
+            composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Upload binary (debug)"))
             composeRule
                 .onNodeWithText("Upload binary (debug)")
                 .performScrollTo()

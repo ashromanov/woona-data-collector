@@ -96,7 +96,7 @@ fun createDeviceFeatureController(
                 onError = { message, throwable ->
                     updateBatcher.clearPending()
                     mainHandler.post {
-                        deviceFeatureController?.onSessionError(message) ?: uiStateHolder.showError(message)
+                        deviceFeatureController?.onSessionError(message, throwable) ?: uiStateHolder.showError(message)
                         bleSessionController?.close()
                     }
                     Log.e("BLE_PROCESSOR", message, throwable)
@@ -183,7 +183,7 @@ fun createDeviceFeatureController(
 
             override fun onError(message: String, throwable: Throwable?) {
                 mainHandler.post {
-                    deviceFeatureController?.onSessionError(message) ?: uiStateHolder.showError(message)
+                    deviceFeatureController?.onSessionError(message, throwable) ?: uiStateHolder.showError(message)
                 }
                 Log.e("BLE_SESSION", message, throwable)
             }
@@ -223,7 +223,7 @@ fun createDeviceFeatureController(
         },
         onError = { message, throwable ->
             mainHandler.post {
-                deviceFeatureController?.onReplayError(message) ?: uiStateHolder.showError(message)
+                deviceFeatureController?.onReplayError(message, throwable) ?: uiStateHolder.showError(message)
             }
             Log.e("BLE_REPLAY", message, throwable)
         },
@@ -247,7 +247,7 @@ fun createDeviceFeatureController(
         onEcg = { frame, now -> deviceFeatureController?.onPolarEcg(frame, now) },
         onAcceleration = { frame, now -> deviceFeatureController?.onPolarAcceleration(frame, now) },
         onError = { message, throwable ->
-            mainHandler.post { uiStateHolder.showError(message) }
+            mainHandler.post { deviceFeatureController?.showErrorOnMainThread(message, throwable) ?: uiStateHolder.showError(message) }
             Log.e("POLAR_SESSION", message, throwable)
         },
     )

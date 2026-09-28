@@ -5,6 +5,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.rememberScrollState
@@ -254,6 +255,9 @@ fun DeviceSettingsScreen(
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        if (!uiState.errorMessage.isNullOrBlank()) {
+            item { ErrorCard(message = uiState.errorMessage) }
+        }
         item {
             BleTransportProfileCard(
                 selectedProfile = uiState.transportProfile,
@@ -384,11 +388,13 @@ private fun ErrorCard(message: String) {
             .padding(bottom = 8.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
     ) {
-        Text(
-            text = message,
-            color = MaterialTheme.colorScheme.onErrorContainer,
-            modifier = Modifier.padding(10.dp),
-        )
+        SelectionContainer {
+            Text(
+                text = message,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier.padding(10.dp),
+            )
+        }
     }
 }
 
@@ -776,6 +782,9 @@ private fun ServerSyncSettingsCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
+                state.lastErrorMessage?.let { message ->
+                    ErrorCard(message)
+                }
             }
             if (state.status == ServerSyncStatus.UPLOADING) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())

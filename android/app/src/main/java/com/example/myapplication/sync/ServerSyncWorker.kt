@@ -66,7 +66,7 @@ class ProfileSyncWorker(
                 profileVersionId,
                 retryable,
                 exception.errorCode(),
-                exception.message.orEmpty(),
+                exception.message ?: exception.toString(),
             )
             if (retryable) Result.retry() else Result.failure()
         } finally {
@@ -144,7 +144,7 @@ class RecordingSyncWorker(
                 recordingId,
                 retryable,
                 exception.errorCode(),
-                exception.message.orEmpty(),
+                exception.message ?: exception.toString(),
             )
             if (retryable) Result.retry() else Result.failure()
         } finally {

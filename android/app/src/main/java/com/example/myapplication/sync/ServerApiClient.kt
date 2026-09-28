@@ -123,6 +123,7 @@ class ServerApiClient(
             offset = 0L
         }
         val connection = open("GET", "/v1/artifacts/$artifactId/content").apply {
+            setRequestProperty("Accept-Encoding", "identity")
             if (offset > 0L) setRequestProperty("Range", "bytes=$offset-")
         }
         val status = connection.responseCode

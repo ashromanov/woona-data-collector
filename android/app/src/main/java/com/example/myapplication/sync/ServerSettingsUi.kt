@@ -74,7 +74,7 @@ fun ServerSettingsDialog(
                                     if (language == AppLanguage.RUSSIAN) "Введите токен" else "Enter token"
                                 }
                                 onSave(baseUrl, token)
-                            }.exceptionOrNull()?.message
+                            }.exceptionOrNull()?.toString()
                         },
                         modifier = Modifier.weight(1f),
                     ) {

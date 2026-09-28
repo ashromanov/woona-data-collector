@@ -155,7 +155,7 @@ class MainActivity : ComponentActivity() {
             )
         }.getOrElse {
             Log.e(TAG, "Failed to prepare replay recording", it)
-            toast(if (selectedLanguage == AppLanguage.RUSSIAN) "Не удалось создать replay" else "Failed to create replay")
+            deviceFeatureController.showErrorOnMainThread(if (selectedLanguage == AppLanguage.RUSSIAN) "Не удалось создать replay" else "Failed to create replay", it)
             return@registerForActivityResult
         }
         deviceFeatureController.beginRecordingSession(recording)
@@ -164,9 +164,12 @@ class MainActivity : ComponentActivity() {
             cancellationToken.invokeOnCancellation(cancellationSignal::cancel)
             val descriptor = contentResolver.openAssetFileDescriptor(uri, "r", cancellationSignal)
                 ?: return@startReplay null
-            runCatching { descriptor.createInputStream() }
-                .onFailure { descriptor.close() }
-                .getOrNull()
+            try {
+                descriptor.createInputStream()
+            } catch (error: Exception) {
+                descriptor.close()
+                throw error
+            }
         }
         pendingReplayQuestionnaire = null
     }
@@ -563,7 +566,7 @@ class MainActivity : ComponentActivity() {
             refreshProfilesAndRecordings()
         }.onFailure {
             Log.e(TAG, "Failed to prepare live recording", it)
-            toast(if (selectedLanguage == AppLanguage.RUSSIAN) "Не удалось создать запись" else "Failed to create recording")
+            deviceFeatureController.showErrorOnMainThread(if (selectedLanguage == AppLanguage.RUSSIAN) "Не удалось создать запись" else "Failed to create recording", it)
         }
     }
 
@@ -617,6 +620,7 @@ class MainActivity : ComponentActivity() {
             uploading = counts.uploading,
             synced = counts.synced,
             failed = counts.failed,
+            lastErrorMessage = counts.lastErrorMessage,
             restoring = isServerRestoreInProgress,
         )
     }
@@ -650,12 +654,13 @@ class MainActivity : ComponentActivity() {
                     },
                     onFailure = { error ->
                         Log.e("SERVER_RESTORE", "Restore failed", error)
-                        toast(
+                        deviceFeatureController.showErrorOnMainThread(
                             if (selectedLanguage == AppLanguage.RUSSIAN) {
-                                "Не удалось восстановить данные: ${error.message.orEmpty()}"
+                                "Не удалось восстановить данные"
                             } else {
-                                "Restore failed: ${error.message.orEmpty()}"
+                                "Restore failed"
                             },
+                            error,
                         )
                     },
                 )
@@ -694,12 +699,13 @@ class MainActivity : ComponentActivity() {
                     },
                     onFailure = { error ->
                         Log.e("SERVER_DOWNLOAD", "Download failed", error)
-                        toast(
+                        deviceFeatureController.showErrorOnMainThread(
                             if (selectedLanguage == AppLanguage.RUSSIAN) {
-                                "Не удалось скачать файлы: ${error.message.orEmpty()}"
+                                "Не удалось скачать файлы"
                             } else {
-                                "Download failed: ${error.message.orEmpty()}"
+                                "Download failed"
                             },
+                            error,
                         )
                     },
                 )
@@ -718,10 +724,14 @@ class MainActivity : ComponentActivity() {
 
     private fun prepareShareIntentAsync(createIntent: () -> android.content.Intent?) {
         backgroundExecutor.execute {
-            val intent = runCatching(createIntent).getOrNull()
+            val intent = runCatching(createIntent).onFailure {
+                deviceFeatureController.showErrorOnMainThread("Export failed", it)
+            }.getOrNull()
             runOnUiThread {
                 try {
                     intent?.let(::startActivity)
+                } catch (error: Exception) {
+                    deviceFeatureController.showErrorOnMainThread("Failed to open share sheet", error)
                 } finally {
                     deviceFeatureController.clearExportProgress()
                 }

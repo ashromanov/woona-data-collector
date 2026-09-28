@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -29,6 +29,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -43,6 +44,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.font.FontWeight
@@ -50,6 +54,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
 import com.example.myapplication.data.ACTIVITY_TYPES
 import com.example.myapplication.data.DogProfile
 import com.example.myapplication.data.DogQuestionnaire
@@ -70,6 +75,7 @@ import java.time.format.DateTimeFormatter
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
+import android.view.WindowManager
 
 @Composable
 fun ProfilesOverview(
@@ -852,19 +858,32 @@ private fun QuestionnaireDialog(
     onSave: () -> Unit,
     content: @Composable () -> Unit,
 ) {
+    var operationError by remember { mutableStateOf<String?>(null) }
     Dialog(
         onDismissRequest = { if (canDismiss) onDismiss() },
         properties = DialogProperties(
             dismissOnBackPress = canDismiss,
             dismissOnClickOutside = false,
-            usePlatformDefaultWidth = false,
+            // Use native window bounds; Compose 1.7's custom fullscreen measurement can exceed them.
+            usePlatformDefaultWidth = true,
+            decorFitsSystemWindows = false,
         ),
     ) {
         Surface(
             modifier = Modifier
                 .fillMaxSize()
-                .navigationBarsPadding(),
+                .safeDrawingPadding(),
         ) {
+            val view = LocalView.current
+            val focusManager = LocalFocusManager.current
+            val keyboard = LocalSoftwareKeyboardController.current
+            DisposableEffect(view) {
+                (view.parent as? DialogWindowProvider)?.window?.setLayout(
+                    WindowManager.LayoutParams.MATCH_PARENT,
+                    WindowManager.LayoutParams.MATCH_PARENT,
+                )
+                onDispose {}
+            }
             Column {
                 Column(
                     modifier = Modifier
@@ -899,13 +918,19 @@ private fun QuestionnaireDialog(
                                 Text(tr(language, "Cancel", "Отмена"))
                             }
                         }
-                        Button(onClick = onSave, modifier = Modifier.weight(1f)) {
+                        Button(onClick = {
+                            focusManager.clearFocus()
+                            keyboard?.hide()
+                            operationError = null
+                            runCatching(onSave).onFailure { operationError = it.toString() }
+                        }, modifier = Modifier.weight(1f)) {
                             Text(tr(language, "Validate and save", "Проверить и сохранить"))
                         }
                     }
+                    operationError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxWidth().weight(1f),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {

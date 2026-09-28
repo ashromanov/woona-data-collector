@@ -19,6 +19,18 @@ import java.util.zip.ZipFile
 
 class DeviceFeatureControllerTest {
     @Test
+    fun operationFailureKeepsExceptionDetailsWithoutStoppingCapture() {
+        val ble = FakeBleSessionController()
+        val capture = FakePacketCaptureController()
+        val controller = createController(bleSessionController = ble, packetCaptureController = capture)
+        controller.showErrorOnMainThread("Download failed", java.io.IOException("read timed out"))
+
+        assertEquals("Download failed: java.io.IOException: read timed out", controller.uiState.errorMessage)
+        assertEquals(0, ble.disconnectCalls)
+        assertFalse(capture.stopCaptureCalled)
+    }
+
+    @Test
     fun onPermissionsResult_withDeniedPermissionsShowsError() {
         val controller = createController()
 

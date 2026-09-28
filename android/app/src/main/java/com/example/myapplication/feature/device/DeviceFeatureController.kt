@@ -385,7 +385,7 @@ class DeviceFeatureController(
             showExportPhaseOnMainThread(ExportPhase.OPENING_SHARE_SHEET)
             fileShareIntentFactory.createChooserIntent(context, csvSnapshot)
         } catch (exception: Exception) {
-            showErrorOnMainThread(appTextResolver.getString(R.string.share_file_failed))
+            showErrorOnMainThread(appTextResolver.getString(R.string.share_file_failed), exception)
             Log.e("BLE_SHARE", "Failed to share file", exception)
             null
         }
@@ -400,7 +400,7 @@ class DeviceFeatureController(
             showExportPhaseOnMainThread(ExportPhase.OPENING_SHARE_SHEET)
             fileShareIntentFactory.createChooserIntent(context, archive)
         } catch (exception: Exception) {
-            showErrorOnMainThread(appTextResolver.getString(R.string.share_file_failed))
+            showErrorOnMainThread(appTextResolver.getString(R.string.share_file_failed), exception)
             Log.e("BLE_SHARE", "Failed to share file", exception)
             null
         }
@@ -421,7 +421,7 @@ class DeviceFeatureController(
             )
             fileShareIntentFactory.createChooserIntent(context, archive)
         }.getOrElse { exception ->
-            showErrorOnMainThread(appTextResolver.getString(R.string.share_file_failed))
+            showErrorOnMainThread(appTextResolver.getString(R.string.share_file_failed), exception)
             Log.e("BLE_SHARE", "Failed to share recording archive", exception)
             null
         }
@@ -451,7 +451,7 @@ class DeviceFeatureController(
                     },
             )
         } catch (exception: Exception) {
-            showErrorOnMainThread(appTextResolver.getString(R.string.export_prepare_failed))
+            showErrorOnMainThread(appTextResolver.getString(R.string.export_prepare_failed), exception)
             Log.e("BLE_SHARE", "Failed to prepare session archive", exception)
             null
         }
@@ -604,7 +604,8 @@ class DeviceFeatureController(
         )
     }
 
-    fun onSessionError(message: String) {
+    fun onSessionError(message: String, throwable: Throwable? = null) {
+        val details = if (throwable == null) message else "$message: $throwable"
         val disconnectedQuality = if (synchronizedCaptureStarted && !manualDisconnectPending) {
             connectionQualityTracker.disconnect(monotonicMillis())
         } else {
@@ -612,12 +613,12 @@ class DeviceFeatureController(
         }
         flushPendingTransportDiagnostics()
         awaitingCaptureReady = false
-        uiStateHolder.showError(message)
+        uiStateHolder.showError(details)
         currentRecordingId?.let { recordingId ->
             woonaDatabase?.markCaptureError(
                 recordingId = recordingId,
                 code = captureErrorCode(message),
-                message = message,
+                message = details,
             )
         }
         finalizeRecording(RecordingStatus.FAILED)
@@ -684,8 +685,8 @@ class DeviceFeatureController(
         }
     }
 
-    fun onReplayError(message: String) {
-        uiStateHolder.showError(message)
+    fun onReplayError(message: String, throwable: Throwable? = null) {
+        showErrorOnMainThread(message, throwable)
         finalizeRecording(RecordingStatus.FAILED)
     }
 
@@ -729,15 +730,15 @@ class DeviceFeatureController(
             showExportPhaseOnMainThread(ExportPhase.OPENING_SHARE_SHEET)
             fileShareIntentFactory.createChooserIntent(context, snapshotFile)
         } catch (exception: Exception) {
-            showErrorOnMainThread(appTextResolver.getString(R.string.share_file_failed))
+            showErrorOnMainThread(appTextResolver.getString(R.string.share_file_failed), exception)
             Log.e("BLE_SHARE", "Failed to share file", exception)
             null
         }
     }
 
-    private fun showErrorOnMainThread(message: String) {
+    fun showErrorOnMainThread(message: String, throwable: Throwable? = null) {
         runOnUiThread {
-            uiStateHolder.showError(message)
+            uiStateHolder.showError(if (throwable == null) message else "$message: $throwable")
         }
     }
 
@@ -945,6 +946,7 @@ class DeviceFeatureController(
                 onCaptureLifecycleChanged(false)
             } catch (exception: Exception) {
                 Log.e("WOONA_DATABASE", "Failed to finalize recording $recordingId", exception)
+                showErrorOnMainThread("Failed to finalize recording", exception)
             }
             notifyRecordingChanged()
         } finally {
@@ -988,7 +990,7 @@ class DeviceFeatureController(
             onError = { message, throwable ->
                 Log.e("WOONA_VIDEO", message, throwable)
                 runOnUiThread {
-                    handleVideoFailure()
+                    handleVideoFailure("$message${throwable?.let { ": $it" }.orEmpty()}")
                 }
             },
         )
@@ -1069,14 +1071,13 @@ class DeviceFeatureController(
     }
 
     @Synchronized
-    private fun handleVideoFailure() {
+    private fun handleVideoFailure(message: String = appTextResolver.getString(R.string.video_recording_failed)) {
         if (recordingFinalized) return
         if (synchronizedCaptureStarted) {
-            val message = appTextResolver.getString(R.string.video_recording_failed)
             currentRecordingId?.let { woonaDatabase?.markCaptureError(it, "camera_failed", message) }
             uiStateHolder.videoDegraded(message)
         } else {
-            uiStateHolder.videoFailed(appTextResolver.getString(R.string.video_recording_failed))
+            uiStateHolder.videoFailed(message)
         }
         persistSyncMetadata()
         notifyRecordingChanged()
@@ -1108,6 +1109,7 @@ class DeviceFeatureController(
             woonaDatabase?.writeSyncMetadata(recordingId, metadata)
         } catch (exception: Exception) {
             Log.e("WOONA_DATABASE", "Failed to write synchronization metadata", exception)
+            showErrorOnMainThread("Failed to write synchronization metadata", exception)
         }
     }
 
