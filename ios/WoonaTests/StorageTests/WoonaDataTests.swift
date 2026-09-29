@@ -218,7 +218,8 @@ final class WoonaDataTests: XCTestCase {
         XCTAssertTrue(viewModel.exportableRecordingIDs.contains(recording.id))
         XCTAssertEqual("HTTP 401: invalid_bearer_token", viewModel.recordingSyncErrors[recording.id])
         viewModel.shareRecording(recording.id)
-        for _ in 0..<100 where viewModel.preparedExport == nil && viewModel.exportPhase != nil {
+        // Native file-coordination cold startup on a loaded CI simulator can exceed five seconds.
+        for _ in 0..<600 where viewModel.preparedExport == nil && viewModel.exportPhase != nil {
             try await Task.sleep(nanoseconds: 50_000_000)
         }
         let prepared = try XCTUnwrap(viewModel.preparedExport, viewModel.errorMessage ?? "ZIP did not open the share sheet")
@@ -259,7 +260,7 @@ final class WoonaDataTests: XCTestCase {
         viewModel.prepareExport(.channelCsv)
         XCTAssertNotNil(viewModel.exportPhase)
         viewModel.prepareExport(.packetDump) // A second tap must not replace an export already in progress.
-        for _ in 0..<100 where viewModel.preparedExport == nil && viewModel.exportPhase != nil {
+        for _ in 0..<600 where viewModel.preparedExport == nil && viewModel.exportPhase != nil {
             try await Task.sleep(nanoseconds: 50_000_000)
         }
         let csv = try XCTUnwrap(viewModel.preparedExport?.urls.first, viewModel.errorMessage ?? "CSV not prepared")
@@ -269,7 +270,7 @@ final class WoonaDataTests: XCTestCase {
         viewModel.clearPreparedExport()
         XCTAssertFalse(FileManager.default.fileExists(atPath: csv.path))
         viewModel.prepareExport(.packetDump)
-        for _ in 0..<100 where viewModel.preparedExport == nil && viewModel.exportPhase != nil {
+        for _ in 0..<600 where viewModel.preparedExport == nil && viewModel.exportPhase != nil {
             try await Task.sleep(nanoseconds: 50_000_000)
         }
         let exported = try XCTUnwrap(viewModel.preparedExport?.urls.first)

@@ -1126,11 +1126,9 @@ final class AppViewModel: ObservableObject {
             .deletingPathExtension()
             .appendingPathExtension("csv")
         let sessionStart = sessionStartMillis ?? exportSessionStartMillis(packetFile: packetFile)
-        return try CsvExporter().export(
-            packetFile: packetFile,
-            sessionStartMillis: sessionStart,
-            targetFile: csvURL
-        )
+        return try await Task.detached(priority: .userInitiated) {
+            try CsvExporter().export(packetFile: packetFile, sessionStartMillis: sessionStart, targetFile: csvURL)
+        }.value
     }
 
     private func exportSessionStartMillis(packetFile: URL) -> Int64 {
