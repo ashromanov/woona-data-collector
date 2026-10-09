@@ -55,6 +55,7 @@ struct ServerRecordingDetail: Decodable {
     let videoRequested: Bool
     let sync: JSONValue
     let artifacts: [ServerArtifact]
+    var appVersion: String? = nil
 }
 
 enum JSONValue: Codable {
@@ -304,22 +305,28 @@ final class WoonaServerClient {
     }
 
     func upload(recording: WoonaRecording, profile: DogProfile, store: WoonaStore) async throws {
-        guard recording.questionnaire?.readyForSync != false else { return }
         do {
             try store.applyServerDeletions(try await deletions())
             guard try store.recording(id: recording.id) != nil else { return }
-            guard profile.questionnaire.validate().isValid,
-                  recording.questionnaire?.validate().isValid == true else {
-                throw WoonaStoreError.invalidData("Анкета не прошла локальную проверку")
-            }
             let existing: RecordingUploadStatus?
             do { existing = try await json(method: "GET", path: "/v1/recordings/\(recording.id.uuidString)/sync-status", body: nil, as: RecordingUploadStatus.self) }
             catch ServerSyncError.requestFailed(404, _) { existing = nil }
             let alreadyComplete = existing?.ingestStatus == "complete"
             if alreadyComplete {
-                _ = try await restoreProfiles(into:store)
                 let canonical: ServerRecordingDetail = try await json(method:"GET",path:"/v1/recordings/\(recording.id.uuidString)",body:Optional<Data>.none,as:ServerRecordingDetail.self)
+                try store.acceptServerProfile(dogID: canonical.dogId, version: canonical.profileVersion)
+                _ = try await restoreProfiles(into:store)
                 _ = try store.restoreRemoteRecording(canonical)
+            } else {
+                guard recording.questionnaire?.readyForSync != false else { return }
+                guard profile.questionnaire.validate().isValid,
+                      recording.questionnaire?.validate().isValid == true else {
+                    throw WoonaStoreError.invalidData("Анкета не прошла локальную проверку")
+                }
+            }
+            guard let recording = try store.recording(id: recording.id),
+                  let profile = try store.profile(dogID: recording.dogID, versionID: recording.profileVersionID) else {
+                throw ServerSyncError.responseInvalid
             }
             try store.updateRecordingSync(recording.id, state: "uploading")
             let allArtifacts = try store.artifacts(recordingID: recording.id)
@@ -372,7 +379,7 @@ final class WoonaServerClient {
                     "sessionLabel": recording.sessionLabel,
                     "videoRequested": recording.videoRequested,
                     "sensorHardwareId": NSNull(),
-                    "appVersion": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "ios-dev",
+                    "appVersion": recording.appVersion ?? "unknown",
                     "protocolVersion": "1",
                     "questionnaireSchemaVersion": questionnaire.schemaVersion,
                     "questionnaireValidationState": "complete",
@@ -385,12 +392,13 @@ final class WoonaServerClient {
             ]
             let body = try JSONSerialization.data(withJSONObject: manifest, options: [.sortedKeys, .withoutEscapingSlashes])
             if !alreadyComplete {
-                _ = try await rawRequest(
+                let receipt: ServerProfileReceipt = try await json(
                     method: "PUT",
                     path: "/v1/recordings/\(recording.id.uuidString)",
                     body: body,
-                    contentType: "application/json"
+                    as: ServerProfileReceipt.self
                 )
+                try store.setServerRevision(dogID: profile.id, revision: receipt.dogRevision)
             } else {
                 for payload in artifactPayloads {
                     _ = try await rawRequest(method: "POST", path: "/v1/recordings/\(recording.id.uuidString)/references",

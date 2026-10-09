@@ -396,6 +396,7 @@ struct WoonaRecording: Identifiable, Equatable {
     let questionnaire: SessionQuestionnaire?
     let relativeDirectory: String
     let serverSyncState: String
+    var appVersion: String? = nil
 }
 
 struct LocalArtifact: Identifiable, Equatable {
@@ -540,7 +541,7 @@ final class WoonaStore {
     }
 
     func setServerRevision(dogID: UUID, revision: Int) throws {
-        try execute("UPDATE dogs SET revision=? WHERE id=?", [.integer(Int64(revision)), .text(dogID.uuidString)])
+        try execute("UPDATE dogs SET revision=MAX(revision,?) WHERE id=?", [.integer(Int64(revision)), .text(dogID.uuidString)])
     }
 
     @discardableResult
@@ -667,6 +668,8 @@ final class WoonaStore {
                     .text(started), .text(TimeZone.current.identifier), .text(json), .text(relative),
                 ]
             )
+            try execute("UPDATE recordings SET app_version=? WHERE id=?",
+                        [.text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"), .text(id.uuidString)])
         }
         return try recording(id: id)!
     }
@@ -737,6 +740,9 @@ final class WoonaStore {
                 try execute("UPDATE recording_sync SET sync_json=?,updated_at_utc=? WHERE recording_id=?",
                             [.text(syncJSON),.text(now),.text(remote.id.uuidString)])
             }
+            if let appVersion = remote.appVersion {
+                try execute("UPDATE recordings SET app_version=? WHERE id=?", [.text(appVersion), .text(remote.id.uuidString)])
+            }
             for artifact in remote.artifacts {
                 if let existing = try existingArtifact(id: artifact.id),
                    existing.recordingID != remote.id || existing.sha256 != artifact.sha256 {
@@ -759,6 +765,9 @@ final class WoonaStore {
                         try artifact.referenceMetadata.map { .text(String(decoding: try Self.encoder.encode($0), as: UTF8.self)) } ?? .null,
                     ]
                 )
+                try updateArtifactProgress(artifact.id,
+                                           uploadedBytes: artifact.storageStatus == "available" ? artifact.sizeBytes : 0,
+                                           state: artifact.storageStatus)
             }
             try execute(
                 """
@@ -825,7 +834,7 @@ final class WoonaStore {
             """
             SELECT id,dog_id,dog_profile_version_id,source,status,session_label,
                    video_requested,started_at_utc,ended_at_utc,timezone,
-                   questionnaire_json,relative_directory,server_sync_state
+                   questionnaire_json,relative_directory,server_sync_state,app_version
             FROM recordings WHERE dog_id=? ORDER BY started_at_utc DESC LIMIT ?
             """,
             [.text(dogID.uuidString), .integer(Int64(limit.map { max($0, 0) } ?? -1))]
@@ -913,7 +922,7 @@ final class WoonaStore {
             """
             SELECT id,dog_id,dog_profile_version_id,source,status,session_label,
                    video_requested,started_at_utc,ended_at_utc,timezone,
-                   questionnaire_json,relative_directory,server_sync_state
+                   questionnaire_json,relative_directory,server_sync_state,app_version
             FROM recordings WHERE id=? LIMIT 1
             """,
             [.text(id.uuidString)]
@@ -1098,7 +1107,7 @@ final class WoonaStore {
             "recording": ["id": recording.id.uuidString, "source": recording.source, "status": recording.status,
                           "sessionLabel": recording.sessionLabel, "timezone": recording.timezone,
                           "startedAtUtc": recording.startedAtUTC, "serverSyncState": recording.serverSyncState,
-                          "questionnaire": questionnaire],
+                          "questionnaire": questionnaire, "appVersion": recording.appVersion ?? "unknown"],
             "synchronization": synchronization, "files": entries, "missingFiles": missing,
         ]
         let label = "woona_\(profile.numberOrName)_\(recording.sessionLabel)".unicodeScalars.map {
@@ -1113,7 +1122,7 @@ final class WoonaStore {
             """
             SELECT id,dog_id,dog_profile_version_id,source,status,session_label,
                    video_requested,started_at_utc,ended_at_utc,timezone,
-                   questionnaire_json,relative_directory,server_sync_state
+                   questionnaire_json,relative_directory,server_sync_state,app_version
             FROM recordings
             WHERE status IN ('completed','failed','interrupted')
               AND server_sync_state IN ('pending','retryable_error')
@@ -1192,7 +1201,8 @@ final class WoonaStore {
             timezone: columnText(statement, 9),
             questionnaire: try? JSONDecoder().decode(SessionQuestionnaire.self, from: Data(columnText(statement, 10).utf8)),
             relativeDirectory: columnText(statement, 11),
-            serverSyncState: columnText(statement, 12)
+            serverSyncState: columnText(statement, 12),
+            appVersion: columnOptionalText(statement, 13)
         )
     }
 
@@ -1278,6 +1288,11 @@ final class WoonaStore {
             """
         )
         try ensureReferenceColumn()
+        let columns = try prepare("PRAGMA table_info(recordings)")
+        defer { sqlite3_finalize(columns) }
+        var hasAppVersion = false
+        while sqlite3_step(columns) == SQLITE_ROW { if columnText(columns, 1) == "app_version" { hasAppVersion = true } }
+        if !hasAppVersion { try execute("ALTER TABLE recordings ADD COLUMN app_version TEXT") }
     }
 
     private func ensureReferenceColumn() throws {
