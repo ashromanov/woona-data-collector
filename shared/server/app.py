@@ -17,7 +17,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from jsonschema import Draft202012Validator, ValidationError as SchemaValidationError
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Connection
 
@@ -45,6 +45,9 @@ ARTIFACT_RULES = {
     "video": ({".mp4"}, {"video/mp4"}),
     "sync": ({".json"}, {"application/json"}),
     "imported_source": ({".bin", ".binlog"}, {"application/octet-stream"}),
+    **{kind: ({".csv", ".json", ".txt", ".edf", ".bdf", ".dat", ".bin", ".zip", ".pdf"},
+              {"application/octet-stream", "text/csv", "application/json", "text/plain", "application/pdf", "application/zip"})
+       for kind in ("ecg", "heart_rate", "rr")},
 }
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
@@ -193,6 +196,34 @@ class SyncPayload(StrictModel):
         alias="estimatedDriftPpm", default=None
     )
 
+    @model_validator(mode="after")
+    def consistent_anchors(self):
+        if self.overall_sync_quality in {"arrival_aligned", "callback_estimate"}:
+            if self.first_sensor_packet_monotonic_ns is None or self.video_first_frame_monotonic_ns is None:
+                raise ValueError("Aligned capture requires sensor and camera anchors")
+            if self.video_offset_from_sensor_ns != self.video_first_frame_monotonic_ns - self.first_sensor_packet_monotonic_ns:
+                raise ValueError("Video offset does not match monotonic anchors")
+        if self.camera_clock_quality == "hardware_monotonic" and (
+            not self.video_first_frame_monotonic_ns or self.camera_timestamp_source not in {"realtime", "avfoundation_session_clock"}
+        ):
+            raise ValueError("Hardware camera clock requires a comparable timestamp source")
+        return self
+
+
+class ReferenceMetadata(StrictModel):
+    source: str = Field(min_length=1, max_length=200)
+    started_at_utc: datetime = Field(alias="startedAtUtc")
+    ended_at_utc: datetime = Field(alias="endedAtUtc")
+    offset_from_recording_ms: float | None = Field(alias="offsetFromRecordingMs", default=None, allow_inf_nan=False)
+    notes: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("started_at_utc", "ended_at_utc")
+    @classmethod
+    def explicit_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None:
+            raise ValueError("include a timezone")
+        return value
+
 
 class ArtifactPayload(StrictModel):
     id: uuid.UUID
@@ -205,12 +236,14 @@ class ArtifactPayload(StrictModel):
         "video",
         "sync",
         "imported_source",
+        "ecg", "heart_rate", "rr",
     ]
     file_name: str = Field(alias="fileName", min_length=1, max_length=255)
     mime_type: str = Field(alias="mimeType", min_length=1, max_length=150)
     size_bytes: int = Field(alias="sizeBytes", ge=0)
     sha256: str
     client_created_at_utc: datetime = Field(alias="clientCreatedAtUtc")
+    reference_metadata: ReferenceMetadata | None = Field(alias="referenceMetadata", default=None)
 
     @field_validator("file_name")
     @classmethod
@@ -449,6 +482,10 @@ def apply_profile(
     profile: ProfileVersionPayload,
     device_id: uuid.UUID,
 ) -> int:
+    ensure_not_retired(connection, "dog", dog.id)
+    ensure_not_retired(connection, "profile", profile.id)
+    if profile.schema_version != 2 and not ALLOW_LEGACY_MIGRATION:
+        raise HTTPException(403,detail={"code":"legacy_migration_disabled"})
     existing_profile = connection.execute(
         text("SELECT dog_id,content_sha256,questionnaire FROM dog_profile_versions WHERE id=:id"),
         {"id": profile.id},
@@ -458,11 +495,9 @@ def apply_profile(
     # validated answers; preserve the stored source representation and hash.
     same_existing = existing_profile is not None and (
         existing_profile["dog_id"] == dog.id
-        and existing_profile["content_sha256"] == profile.content_sha256
         and existing_profile["questionnaire"] == profile.questionnaire
     )
-    if sha256_bytes(canonical_json(profile.questionnaire)) != profile.content_sha256 and not same_existing:
-        raise HTTPException(422, detail={"code": "profile_hash_mismatch"})
+    content_hash = existing_profile["content_sha256"] if same_existing else sha256_bytes(canonical_json(profile.questionnaire))
     if profile.validation_state == "complete":
         if profile.schema_version != profile.questionnaire.get("schemaVersion"):
             raise HTTPException(422, detail={"code": "profile_schema_version_mismatch"})
@@ -472,7 +507,7 @@ def apply_profile(
     if existing_profile is not None:
         if (
             existing_profile["dog_id"] != dog.id
-            or existing_profile["content_sha256"] != profile.content_sha256
+            or not same_existing
         ):
             raise HTTPException(409, detail={"code": "immutable_profile_conflict"})
         revision = connection.execute(
@@ -558,7 +593,7 @@ def apply_profile(
             "schema": profile.schema_version,
             "validation_state": profile.validation_state,
             "questionnaire": json.dumps(profile.questionnaire, ensure_ascii=False),
-            "hash": profile.content_sha256,
+            "hash": content_hash,
             "device": device_id,
             "created": profile.client_created_at_utc,
         },
@@ -577,6 +612,21 @@ def apply_profile(
     return revision
 
 
+def ensure_not_retired(connection: Connection, kind: str, identity: uuid.UUID) -> None:
+    retired = connection.execute(text(
+        "SELECT 1 FROM retired_entities WHERE kind=:kind AND id_sha256=:hash"
+    ), {"kind": kind, "hash": sha256_bytes(str(identity).encode())}).first()
+    if retired:
+        raise HTTPException(410, detail={"code": "entity_retired", "kind": kind})
+
+
+@app.get("/v1/deletions")
+def get_deletions(device_id: Annotated[uuid.UUID, Depends(authenticated_device)]) -> dict:
+    with engine.connect() as connection:
+        rows = connection.execute(text("SELECT kind,id_sha256 FROM retired_entities ORDER BY kind,id_sha256")).mappings()
+        return {"entities": [dict(row) for row in rows]}
+
+
 @app.put("/v1/dogs/{dog_id}/profile-versions/{profile_id}")
 def put_profile(
     dog_id: uuid.UUID,
@@ -590,11 +640,18 @@ def put_profile(
         revision = apply_profile(
             connection, payload.dog, payload.profile_version, device_id
         )
+        accepted = connection.execute(text("SELECT id,schema_version,validation_state,questionnaire,content_sha256,client_created_at FROM dog_profile_versions WHERE id=:id"), {"id": profile_id}).mappings().one()
     return {
         "dogId": str(dog_id),
         "dogRevision": revision,
         "currentProfileVersionId": str(profile_id),
         "serverTimestampUtc": utc_isoformat(datetime.now(timezone.utc)),
+        "profileVersion": {
+            "id": str(accepted["id"]), "schemaVersion": accepted["schema_version"],
+            "validationState": accepted["validation_state"], "questionnaire": accepted["questionnaire"],
+            "contentSha256": accepted["content_sha256"],
+            "clientCreatedAtUtc": utc_isoformat(accepted["client_created_at"]),
+        },
     }
 
 
@@ -612,6 +669,63 @@ def required_artifact_types(recording: RecordingPayload) -> set[str]:
     return required
 
 
+REFERENCE_TYPES = {"ecg", "heart_rate", "rr"}
+
+
+def validate_artifact(artifact: ArtifactPayload) -> None:
+    suffixes, mime_types = ARTIFACT_RULES[artifact.type]
+    if (artifact.type not in REFERENCE_TYPES and Path(artifact.file_name).suffix.lower() not in suffixes) or artifact.mime_type not in mime_types:
+        raise HTTPException(422, detail={"code": "artifact_type_mismatch", "artifactId": str(artifact.id)})
+    if artifact.size_bytes > MAX_ARTIFACT_BYTES:
+        raise HTTPException(413, detail={"code": "artifact_too_large", "artifactId": str(artifact.id)})
+    if artifact.type in REFERENCE_TYPES:
+        if artifact.reference_metadata is None or artifact.size_bytes == 0:
+            raise HTTPException(422, detail={"code": "reference_metadata_required"})
+        if artifact.reference_metadata.ended_at_utc < artifact.reference_metadata.started_at_utc:
+            raise HTTPException(422, detail={"code": "reference_ended_before_started"})
+    elif artifact.reference_metadata is not None:
+        raise HTTPException(422, detail={"code": "unexpected_reference_metadata"})
+
+
+def insert_artifact(connection: Connection, recording_id: uuid.UUID, artifact: ArtifactPayload, uploader: uuid.UUID | None = None) -> None:
+    ensure_not_retired(connection, "recording", recording_id)
+    ensure_not_retired(connection, "artifact", artifact.id)
+    connection.execute(text("""
+        INSERT INTO artifacts(id,recording_id,artifact_type,file_name,mime_type,
+            expected_size_bytes,sha256,storage_status,client_created_at,reference_metadata,uploaded_by_device_id)
+        VALUES(:id,:recording,:type,:name,:mime,:size,:hash,'uploading',:created,CAST(:reference AS jsonb),:uploader)
+    """), {"id": artifact.id, "recording": recording_id, "type": artifact.type,
+        "name": artifact.file_name, "mime": artifact.mime_type, "size": artifact.size_bytes,
+        "hash": artifact.sha256, "created": artifact.client_created_at_utc,
+        "reference": artifact.reference_metadata.model_dump_json(by_alias=True) if artifact.reference_metadata else None, "uploader": uploader})
+
+
+@app.post("/v1/recordings/{recording_id}/references")
+def add_reference(recording_id: uuid.UUID, artifact: ArtifactPayload,
+                  device_id: Annotated[uuid.UUID, Depends(authenticated_device)]) -> dict[str, str]:
+    if artifact.type not in REFERENCE_TYPES:
+        raise HTTPException(422, detail={"code": "reference_type_required"})
+    validate_artifact(artifact)
+    with engine.begin() as connection:
+        ensure_not_retired(connection, "recording", recording_id)
+        recording = connection.execute(text("SELECT capture_device_id FROM recordings WHERE id=:id FOR UPDATE"),
+                                       {"id": recording_id}).mappings().first()
+        if recording is None:
+            raise HTTPException(404, detail={"code": "recording_not_found"})
+        existing = connection.execute(text("SELECT * FROM artifacts WHERE id=:id OR (recording_id=:recording AND file_name=:name)"),
+                                      {"id": artifact.id, "recording": recording_id, "name": artifact.file_name}).mappings().first()
+        if existing:
+            reference = json.loads(artifact.reference_metadata.model_dump_json(by_alias=True))
+            if (existing["id"] != artifact.id or existing["recording_id"] != recording_id
+                    or existing["artifact_type"] != artifact.type or existing["file_name"] != artifact.file_name
+                    or existing["sha256"] != artifact.sha256 or existing["expected_size_bytes"] != artifact.size_bytes
+                    or existing["reference_metadata"] != reference):
+                raise HTTPException(409, detail={"code": "immutable_artifact_conflict"})
+        else:
+            insert_artifact(connection, recording_id, artifact, device_id)
+    return {"recordingId": str(recording_id), "artifactId": str(artifact.id)}
+
+
 @app.put("/v1/recordings/{recording_id}")
 def put_recording(
     recording_id: uuid.UUID,
@@ -620,6 +734,8 @@ def put_recording(
 ) -> dict[str, Any]:
     if manifest.capture_device_id != device_id:
         raise HTTPException(403, detail={"code": "wrong_capture_device"})
+    if manifest.recording.questionnaire_schema_version != 2 and not ALLOW_LEGACY_MIGRATION:
+        raise HTTPException(403,detail={"code":"legacy_migration_disabled"})
     if manifest.recording.ended_at_utc is not None and (
         manifest.recording.ended_at_utc < manifest.recording.started_at_utc
     ):
@@ -654,22 +770,10 @@ def put_recording(
     ):
         raise HTTPException(422, detail={"code": "duplicate_artifact_name"})
     for artifact in manifest.artifacts:
-        suffixes, mime_types = ARTIFACT_RULES[artifact.type]
-        if (
-            Path(artifact.file_name).suffix.lower() not in suffixes
-            or artifact.mime_type not in mime_types
-        ):
-            raise HTTPException(
-                422,
-                detail={"code": "artifact_type_mismatch", "artifactId": str(artifact.id)},
-            )
-        if artifact.size_bytes > MAX_ARTIFACT_BYTES:
-            raise HTTPException(
-                413,
-                detail={"code": "artifact_too_large", "artifactId": str(artifact.id)},
-            )
+        validate_artifact(artifact)
 
     with engine.begin() as connection:
+        ensure_not_retired(connection, "recording", recording_id)
         existing = connection.execute(
             text(
                 """
@@ -737,33 +841,12 @@ def put_recording(
             )
             insert_sync(connection, recording_id, manifest.sync)
             for artifact in manifest.artifacts:
-                connection.execute(
-                    text(
-                        """
-                        INSERT INTO artifacts(
-                            id,recording_id,artifact_type,file_name,mime_type,
-                            expected_size_bytes,sha256,storage_status,client_created_at
-                        ) VALUES(
-                            :id,:recording,:type,:name,:mime,:size,:hash,'uploading',:created
-                        )
-                        """
-                    ),
-                    {
-                        "id": artifact.id,
-                        "recording": recording_id,
-                        "type": artifact.type,
-                        "name": artifact.file_name,
-                        "mime": artifact.mime_type,
-                        "size": artifact.size_bytes,
-                        "hash": artifact.sha256,
-                        "created": artifact.client_created_at_utc,
-                    },
-                )
+                insert_artifact(connection, recording_id, artifact)
         else:
             rows = connection.execute(
                 text(
                     """
-                    SELECT id,sha256,expected_size_bytes,stored_size_bytes,storage_status
+                    SELECT id,sha256,expected_size_bytes,stored_size_bytes,storage_status,reference_metadata,artifact_type,file_name
                     FROM artifacts WHERE recording_id=:recording
                     """
                 ),
@@ -772,10 +855,20 @@ def put_recording(
             existing_artifacts = {row["id"]: row for row in rows}
             for artifact in manifest.artifacts:
                 row = existing_artifacts.get(artifact.id)
+                if row is None and artifact.type in REFERENCE_TYPES:
+                    conflict = connection.execute(text("SELECT id FROM artifacts WHERE id=:id OR (recording_id=:recording AND file_name=:name)"),
+                        {"id": artifact.id, "recording": recording_id, "name": artifact.file_name}).first()
+                    if conflict:
+                        raise HTTPException(409, detail={"code": "immutable_artifact_conflict"})
+                    insert_artifact(connection, recording_id, artifact)
+                    continue
                 if (
                     row is None
                     or row["sha256"] != artifact.sha256
                     or row["expected_size_bytes"] != artifact.size_bytes
+                    or row["artifact_type"] != artifact.type
+                    or row["file_name"] != artifact.file_name
+                    or row["reference_metadata"] != (json.loads(artifact.reference_metadata.model_dump_json(by_alias=True)) if artifact.reference_metadata else None)
                 ):
                     raise HTTPException(
                         409, detail={"code": "immutable_artifact_conflict"}
@@ -821,11 +914,12 @@ def insert_sync(
 def artifact_row(
     connection: Connection, artifact_id: uuid.UUID, for_update: bool = False
 ):
+    ensure_not_retired(connection, "artifact", artifact_id)
     suffix = " FOR UPDATE" if for_update else ""
     return connection.execute(
         text(
             """
-            SELECT a.*,r.capture_device_id
+            SELECT a.*,COALESCE(a.uploaded_by_device_id,r.capture_device_id) AS capture_device_id
             FROM artifacts a JOIN recordings r ON r.id=a.recording_id
             WHERE a.id=:id
             """
@@ -1057,6 +1151,7 @@ def complete_recording(
     device_id: Annotated[uuid.UUID, Depends(authenticated_device)],
 ) -> dict[str, Any]:
     with engine.begin() as connection:
+        ensure_not_retired(connection, "recording", recording_id)
         recording = connection.execute(
             text(
                 """
@@ -1072,7 +1167,7 @@ def complete_recording(
             text(
                 """
                 SELECT id,artifact_type,expected_size_bytes,sha256,storage_status
-                FROM artifacts WHERE recording_id=:id ORDER BY id
+                FROM artifacts WHERE recording_id=:id AND artifact_type NOT IN ('ecg','heart_rate','rr') ORDER BY id
                 """
             ),
             {"id": recording_id},
@@ -1181,6 +1276,7 @@ def get_dog(
     device_id: Annotated[uuid.UUID, Depends(authenticated_device)],
 ) -> dict[str, Any]:
     with engine.connect() as connection:
+        ensure_not_retired(connection, "dog", dog_id)
         row = connection.execute(
             text(
                 """
@@ -1246,6 +1342,7 @@ def get_dog_recordings(
 ) -> dict[str, Any]:
     limit = min(max(limit, 1), 200)
     with engine.connect() as connection:
+        ensure_not_retired(connection, "dog", dog_id)
         rows = connection.execute(
             text(
                 """
@@ -1290,6 +1387,7 @@ def get_recording(
     device_id: Annotated[uuid.UUID, Depends(authenticated_device)],
 ) -> dict[str, Any]:
     with engine.connect() as connection:
+        ensure_not_retired(connection, "recording", recording_id)
         recording = connection.execute(
             text(
                 """
@@ -1313,7 +1411,7 @@ def get_recording(
             text(
                 """
                 SELECT id,artifact_type,file_name,mime_type,expected_size_bytes,
-                       sha256,storage_status
+                       sha256,storage_status,reference_metadata
                 FROM artifacts WHERE recording_id=:id ORDER BY id
                 """
             ),
@@ -1346,6 +1444,7 @@ def get_recording(
             "questionnaire_validation_state"
         ],
         "sessionQuestionnaire": recording["session_questionnaire"],
+        "alignment": sync.get("alignment"),
         "videoRequested": recording["video_requested"],
         "sensorHardwareId": recording["sensor_hardware_id"],
         "appVersion": recording["app_version"],
@@ -1397,6 +1496,7 @@ def get_recording(
                 "sizeBytes": row["expected_size_bytes"],
                 "sha256": row["sha256"],
                 "storageStatus": row["storage_status"],
+                "referenceMetadata": row["reference_metadata"],
             }
             for row in artifacts
         ],
@@ -1409,6 +1509,7 @@ def get_recording_status(
     device_id: Annotated[uuid.UUID, Depends(authenticated_device)],
 ) -> dict[str, Any]:
     with engine.connect() as connection:
+        ensure_not_retired(connection, "recording", recording_id)
         row = connection.execute(
             text(
                 """
@@ -1460,7 +1561,7 @@ def download_artifact(
     headers = {
         "Accept-Ranges": "bytes",
         "ETag": f'"{row["sha256"]}"',
-        "Content-Disposition": f'attachment; filename="{row["file_name"]}"',
+        "Content-Disposition": FileResponse(path, filename=row["file_name"]).headers["content-disposition"],
     }
     range_header = request.headers.get("range")
     if not range_header:

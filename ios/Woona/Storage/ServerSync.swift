@@ -25,6 +25,7 @@ struct ServerArtifact: Decodable, Identifiable {
     let sizeBytes: Int64
     let sha256: String
     let storageStatus: String
+    var referenceMetadata: ReferenceMetadata? = nil
 }
 
 struct ServerProfileVersion: Decodable, Identifiable {
@@ -92,6 +93,12 @@ enum JSONValue: Codable {
 
 struct ServerProfileReceipt: Decodable {
     let dogRevision: Int
+    var profileVersion: ServerProfileVersion? = nil
+}
+
+struct ServerDeletion: Decodable {
+    let kind: String
+    let id_sha256: String
 }
 
 enum ServerSyncError: LocalizedError {
@@ -183,7 +190,8 @@ final class WoonaServerClient {
         return try await json(method: "GET", path: "/v1/me", body: Optional<Data>.none, as: Me.self).deviceId
     }
 
-    func upload(profile: DogProfile) async throws -> Int {
+    func upload(profile: DogProfile, store: WoonaStore) async throws -> Int {
+        try store.applyServerDeletions(try await deletions())
         let questionnaire = try JSONSerialization.jsonObject(with: WoonaStore.dogQuestionnaireData(profile.questionnaire))
         let payload: [String: Any] = [
             "dog": [
@@ -207,7 +215,13 @@ final class WoonaServerClient {
             body: body,
             as: ServerProfileReceipt.self
         )
+        if let accepted = receipt.profileVersion { try store.acceptServerProfile(dogID: profile.id, version: accepted) }
         return receipt.dogRevision
+    }
+
+    func deletions() async throws -> [ServerDeletion] {
+        struct Result: Decodable { let entities: [ServerDeletion] }
+        return try await json(method: "GET", path: "/v1/deletions", body: Optional<Data>.none, as: Result.self).entities
     }
 
     func restoreProfiles(into store: WoonaStore) async throws -> [DogProfile] {
@@ -246,6 +260,7 @@ final class WoonaServerClient {
             }
             cursor = page.nextCursor
         } while cursor != nil
+        try store.applyServerDeletions(try await deletions())
         return try store.profiles()
     }
 
@@ -290,10 +305,27 @@ final class WoonaServerClient {
     }
 
     func upload(recording: WoonaRecording, profile: DogProfile, store: WoonaStore) async throws {
+        guard recording.questionnaire?.readyForSync != false else { return }
         do {
+            try store.applyServerDeletions(try await deletions())
+            guard try store.recording(id: recording.id) != nil else { return }
+            guard profile.questionnaire.validate().isValid,
+                  recording.questionnaire?.validate().isValid == true else {
+                throw WoonaStoreError.invalidData("Анкета не прошла локальную проверку")
+            }
+            let existing: RecordingUploadStatus?
+            do { existing = try await json(method: "GET", path: "/v1/recordings/\(recording.id.uuidString)/sync-status", body: nil, as: RecordingUploadStatus.self) }
+            catch ServerSyncError.requestFailed(404, _) { existing = nil }
+            let alreadyComplete = existing?.ingestStatus == "complete"
+            if alreadyComplete {
+                _ = try await restoreProfiles(into:store)
+                let canonical: ServerRecordingDetail = try await json(method:"GET",path:"/v1/recordings/\(recording.id.uuidString)",body:Optional<Data>.none,as:ServerRecordingDetail.self)
+                _ = try store.restoreRemoteRecording(canonical)
+            }
             try store.updateRecordingSync(recording.id, state: "uploading")
-            let artifacts = try store.artifacts(recordingID: recording.id)
-            guard !artifacts.isEmpty,
+            let allArtifacts = try store.artifacts(recordingID: recording.id)
+            let artifacts = alreadyComplete ? allArtifacts.filter { ["ecg", "heart_rate", "rr"].contains($0.type) && $0.uploadState != "available" } : allArtifacts
+            guard (!allArtifacts.isEmpty),
                   let syncData = try store.syncJSON(recordingID: recording.id),
                   var sync = try JSONSerialization.jsonObject(with: syncData) as? [String: Any] else {
                 throw ServerSyncError.responseInvalid
@@ -304,6 +336,18 @@ final class WoonaServerClient {
             let sessionJSON = try JSONSerialization.jsonObject(with: WoonaStore.sessionQuestionnaireData(questionnaire))
             let captureErrorCode = sync.removeValue(forKey: "captureErrorCode")
             let captureErrorMessage = sync.removeValue(forKey: "captureErrorMessage")
+            let artifactPayloads = try artifacts.map { artifact in
+                [
+                    "id": artifact.id.uuidString,
+                    "type": artifact.type,
+                    "fileName": artifact.fileName,
+                    "mimeType": artifact.mimeType,
+                    "sizeBytes": artifact.sizeBytes,
+                    "sha256": artifact.sha256,
+                    "clientCreatedAtUtc": recording.endedAtUTC ?? recording.startedAtUTC,
+                    "referenceMetadata": try artifact.referenceMetadata.map { try JSONSerialization.jsonObject(with: JSONEncoder().encode($0)) } ?? NSNull(),
+                ] as [String: Any]
+            }
             let manifest: [String: Any] = [
                 "schemaVersion": 1,
                 "captureDeviceId": captureDeviceID.uuidString,
@@ -338,26 +382,22 @@ final class WoonaServerClient {
                     "captureErrorMessage": captureErrorMessage ?? NSNull(),
                 ],
                 "sync": sync,
-                "artifacts": artifacts.map { artifact in
-                    [
-                        "id": artifact.id.uuidString,
-                        "type": artifact.type,
-                        "fileName": artifact.fileName,
-                        "mimeType": artifact.mimeType,
-                        "sizeBytes": artifact.sizeBytes,
-                        "sha256": artifact.sha256,
-                        "clientCreatedAtUtc": recording.endedAtUTC ?? recording.startedAtUTC,
-                    ] as [String: Any]
-                },
+                "artifacts": artifactPayloads,
             ]
             let body = try JSONSerialization.data(withJSONObject: manifest, options: [.sortedKeys, .withoutEscapingSlashes])
-            _ = try await rawRequest(
-                method: "PUT",
-                path: "/v1/recordings/\(recording.id.uuidString)",
-                body: body,
-                contentType: "application/json"
-            )
-
+            if !alreadyComplete {
+                _ = try await rawRequest(
+                    method: "PUT",
+                    path: "/v1/recordings/\(recording.id.uuidString)",
+                    body: body,
+                    contentType: "application/json"
+                )
+            } else {
+                for payload in artifactPayloads {
+                    _ = try await rawRequest(method: "POST", path: "/v1/recordings/\(recording.id.uuidString)/references",
+                        body: try JSONSerialization.data(withJSONObject: payload), contentType: "application/json")
+                }
+            }
             for artifact in artifacts {
                 let file = store.rootDirectory.appendingPathComponent(artifact.relativePath)
                 let offset = try await uploadOffset(artifact.id)
@@ -391,17 +431,22 @@ final class WoonaServerClient {
                 )
                 try store.updateArtifactProgress(artifact.id, uploadedBytes: artifact.sizeBytes, state: "available")
             }
-            _ = try await rawRequest(
-                method: "POST",
-                path: "/v1/recordings/\(recording.id.uuidString)/complete",
-                body: Data("{}".utf8),
-                contentType: "application/json"
-            )
+            if !alreadyComplete {
+                _ = try await rawRequest(
+                    method: "POST",
+                    path: "/v1/recordings/\(recording.id.uuidString)/complete",
+                    body: Data("{}".utf8),
+                    contentType: "application/json"
+                )
+            }
+            let accepted: ServerRecordingDetail = try await json(method: "GET", path: "/v1/recordings/\(recording.id.uuidString)", body: Optional<Data>.none, as: ServerRecordingDetail.self)
+            try store.acceptServerProfile(dogID: accepted.dogId, version: accepted.profileVersion)
+            try store.acceptServerSession(recordingID: accepted.id, questionnaire: accepted.sessionQuestionnaire)
             try store.updateRecordingSync(recording.id, state: "synced")
         } catch {
             let state: String
             if case ServerSyncError.requestFailed(let status, _) = error,
-               [400, 401, 403, 404, 413, 422].contains(status) {
+               [400, 401, 403, 404, 409, 410, 413, 422].contains(status) {
                 state = "permanent_error"
             } else {
                 state = "retryable_error"
@@ -502,4 +547,8 @@ final class WoonaServerClient {
             throw ServerSyncError.requestFailed(response.statusCode, message ?? HTTPURLResponse.localizedString(forStatusCode: response.statusCode))
         }
     }
+}
+
+private struct RecordingUploadStatus: Decodable {
+    let ingestStatus: String
 }

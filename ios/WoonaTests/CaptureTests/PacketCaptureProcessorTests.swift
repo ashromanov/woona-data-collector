@@ -2,6 +2,36 @@ import XCTest
 @testable import Woona
 
 final class PacketCaptureProcessorTests: XCTestCase {
+    func testSubmitterOverflowStillPersistsReceivedBytes() async throws {
+        let harness = try makeHarness()
+        let submitter = PacketFragmentSubmitter(packetProcessor: harness.processor,maxPendingFragments:0,onOverflow:{})
+        let packet = makeTestPacket(counter:1,timerMillis:100,measurementCount:1,blocks:[makeSensorBlock(sensorType:1,channelSamples:[[10]])])
+        submitter.enqueue(packet,receivedAtMonotonicNs:1_000)
+        await submitter.finishCaptureProcessing()
+        let rawURL = await harness.processor.currentRawFile()
+        let raw = try XCTUnwrap(rawURL)
+        XCTAssertEqual(Array(try Data(contentsOf: raw).suffix(packet.count)),packet)
+    }
+
+    func testAcceptedTimingUsesCompletionFragmentAndResets() async throws {
+        let harness = try makeHarness()
+        let packet = makeTestPacket(counter: 1, timerMillis: 100, measurementCount: 1,
+                                    blocks: [makeSensorBlock(sensorType: 1, channelSamples: [[10]])])
+        await harness.processor.submit(Array(packet.prefix(8)), receivedAtMonotonicNs: 1_000)
+        await harness.processor.flush()
+        let incomplete = await harness.processor.acceptedPacketTiming()
+        XCTAssertNil(incomplete)
+        await harness.processor.submit(Array(packet.dropFirst(8)), receivedAtMonotonicNs: 4_000)
+        await harness.processor.finishCaptureSession()
+        let timing = await harness.processor.acceptedPacketTiming()
+        XCTAssertEqual(timing?.first, 4_000)
+        XCTAssertEqual(timing?.last, 4_000)
+        XCTAssertEqual(timing?.deviceTimer, 100)
+        await harness.processor.resetSession()
+        let reset = await harness.processor.acceptedPacketTiming()
+        XCTAssertNil(reset)
+    }
+
     func testSubmitWritesRawFragmentBeforeAcceptedPacket() async throws {
         let harness = try makeHarness()
         let packet = makeTestPacket(

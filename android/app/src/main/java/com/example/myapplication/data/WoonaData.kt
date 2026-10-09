@@ -98,6 +98,8 @@ data class SessionQuestionnaire(
     val lastMedicationAt: String? = null,
     val notes: String? = null,
     val specialistName: String? = null,
+    val sessionKind: String? = null,
+    val heartQuestionnaire: HeartQuestionnaire? = null,
 )
 
 data class QuestionnaireValidation(
@@ -289,6 +291,9 @@ enum class ArtifactType(val value: String) {
     VIDEO("video"),
     SYNC("sync"),
     IMPORTED_SOURCE("imported_source"),
+    ECG("ecg"),
+    HEART_RATE("heart_rate"),
+    RR("rr"),
 }
 
 data class SyncClockAnchor(
@@ -370,6 +375,7 @@ data class Artifact(
     val uploadState: String,
     val uploadedBytes: Long,
     val createdAtUtc: String,
+    val referenceMetadataJson: String? = null,
 )
 
 data class Recording(
@@ -521,6 +527,8 @@ fun SessionQuestionnaire.toJson(): String = JSONObject().apply {
     putNullable("measurementAtUtc", measurementAtUtc)
     put("videoRequested", videoRequested)
     if (schemaVersion == 2) {
+        sessionKind?.let { put("sessionKind", it) }
+        heartQuestionnaire?.let { put("heartQuestionnaire", it.toJson()) }
         putNullable("animalId", animalId)
         putNullable("savedAtLocal", savedAtLocal)
         putNullable("sessionDate", sessionDate)
@@ -637,6 +645,8 @@ fun sessionQuestionnaireFromJson(json: String): SessionQuestionnaire {
         lastMedicationAt = value.nullableString("lastMedicationAt"),
         notes = value.nullableString("notes"),
         specialistName = value.nullableString("specialistName"),
+        sessionKind = value.nullableString("sessionKind"),
+        heartQuestionnaire = value.optJSONObject("heartQuestionnaire")?.let(HeartQuestionnaire::fromJson),
     )
 }
 
@@ -698,6 +708,15 @@ class WoonaDatabase(
         if (oldVersion < 3) migrateV2ToV3(db)
         if (oldVersion < 4) repairLegacySyncRows(db)
         if (oldVersion < 5) repairCanonicalProfileHashes(db)
+        if (oldVersion < 6) {
+            db.execSQL("ALTER TABLE artifacts RENAME TO artifacts_v5")
+            db.execSQL("DROP INDEX IF EXISTS artifacts_recording")
+            createArtifactsTable(db)
+            val columns = "id,recording_id,type,file_name,mime_type,relative_path,size_bytes,sha256,hash_state,local_presence,upload_state,uploaded_bytes,server_relative_path,server_verified_at_utc,last_error_code,last_error_message,created_at_utc"
+            db.execSQL("INSERT INTO artifacts($columns) SELECT $columns FROM artifacts_v5")
+            db.execSQL("DROP TABLE artifacts_v5")
+            db.execSQL("CREATE INDEX artifacts_recording ON artifacts(recording_id)")
+        }
     }
 
     private fun createSchema(db: SQLiteDatabase) {
@@ -1038,7 +1057,7 @@ class WoonaDatabase(
         val normalized = questionnaire.copy(numberOrName = name)
         val questionnaireJson = normalized.toJson()
         val contentSha256 = canonicalJsonSha256(questionnaireJson)
-        if (existing != null && canonicalJsonSha256(existing.questionnaire.toJson()) == contentSha256) {
+        if (existing != null && existing.questionnaire.copy(savedAtLocal = null) == normalized.copy(savedAtLocal = null)) {
             return existing
         }
         writableDatabase.beginTransaction()
@@ -1157,7 +1176,7 @@ class WoonaDatabase(
             put("started_at_utc", startedAt.toString())
             putNull("ended_at_utc")
             put("timezone", timezone)
-            put("app_version", "android")
+            put("app_version", com.example.myapplication.BuildConfig.VERSION_NAME)
             if (linkedQuestionnaire == null) putNull("questionnaire_json") else put("questionnaire_json", linkedQuestionnaire.toJson())
             put("relative_directory", relativeDirectory)
             put("client_created_at_utc", now.toString())
@@ -1234,6 +1253,50 @@ class WoonaDatabase(
 
     fun registerCsv(recordingId: String, file: File, now: Instant = Instant.now()) {
         registerArtifact(recordingId, ArtifactType.CSV, file, now)
+    }
+
+    fun saveHeartQuestionnaire(recordingId: String, heart: HeartQuestionnaire) {
+        require(heart.validate().isValid)
+        val recording = requireNotNull(recording(recordingId))
+        require(recording.endedAtUtc != null && recording.questionnaire?.sessionKind == "heart")
+        require(recording.questionnaire.heartQuestionnaire == null) { "Анкета уже сохранена" }
+        val questionnaire = recording.questionnaire.copy(heartQuestionnaire = heart)
+        val sync = File(recordingDirectory(recording.relativeDirectory), "sync.json")
+        if (sync.isFile) {
+            val temporary = File(sync.parentFile, "sync.json.tmp")
+            temporary.writeText(JSONObject(sync.readText()).put("sessionQuestionnaire", JSONObject(questionnaire.toJson())).toString())
+            Files.move(temporary.toPath(), sync.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+        }
+        writableDatabase.beginTransaction()
+        try {
+            writableDatabase.update("recordings", ContentValues().apply { put("questionnaire_json", questionnaire.toJson()) }, "id=?", arrayOf(recordingId))
+            if (sync.isFile) insertArtifact(recordingId, ArtifactType.SYNC, sync, Instant.now())
+            writableDatabase.setTransactionSuccessful()
+        } finally { writableDatabase.endTransaction() }
+    }
+
+    fun attachReference(recordingId: String, type: ArtifactType, name: String, input: java.io.InputStream, metadata: ReferenceMetadata) {
+        require(type in setOf(ArtifactType.ECG, ArtifactType.HEART_RATE, ArtifactType.RR) && metadata.validate().isValid)
+        val recording = requireNotNull(recording(recordingId))
+        require(recording.endedAtUtc != null)
+        val cleanName = name.map { if (it == '/' || it == '\\' || it.isISOControl()) '_' else it }.joinToString("").ifBlank { "data.bin" }
+        val safeName = String(cleanName.toByteArray(Charsets.UTF_8).takeLast(180).toByteArray(), Charsets.UTF_8)
+        val target = File(recordingDirectory(recording.relativeDirectory), "reference-${UUID.randomUUID()}-$safeName")
+        val temporary = File(target.parentFile, "${target.name}.part")
+        try {
+            input.use { source -> temporary.outputStream().use { source.copyTo(it) } }
+            require(temporary.length() > 0) { "Контрольный файл пуст" }
+            Files.move(temporary.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE)
+            writableDatabase.beginTransaction()
+            try {
+                insertArtifact(recordingId, type, target, Instant.now())
+                writableDatabase.update("artifacts", ContentValues().apply { put("reference_metadata_json", metadata.toJson()); put("mime_type", "application/octet-stream") },
+                    "recording_id=? AND file_name=?", arrayOf(recordingId, target.name))
+                writableDatabase.update("server_sync_state", ContentValues().apply { put("state", "pending") }, "recording_id=?", arrayOf(recordingId))
+                writableDatabase.setTransactionSuccessful()
+            } finally { writableDatabase.endTransaction() }
+        } catch (error: Exception) { target.delete(); throw error }
+        finally { temporary.delete() }
     }
 
     fun registerArtifact(
@@ -1414,6 +1477,7 @@ class WoonaDatabase(
                             uploadState = cursor.getString(9),
                             uploadedBytes = cursor.getLong(10),
                             createdAtUtc = cursor.getString(11),
+                            referenceMetadataJson = if (cursor.isNull(12)) null else cursor.getString(12),
                         ),
                     )
                 }
@@ -1500,7 +1564,7 @@ class WoonaDatabase(
             CREATE TABLE artifacts (
                 id TEXT PRIMARY KEY,
                 recording_id TEXT NOT NULL REFERENCES recordings(id) ON DELETE CASCADE,
-                type TEXT NOT NULL CHECK(type IN ('packet','packet_timeline','raw','diagnostic','csv','video','sync','imported_source')),
+                type TEXT NOT NULL CHECK(type IN ('packet','packet_timeline','raw','diagnostic','csv','video','sync','imported_source','ecg','heart_rate','rr')),
                 file_name TEXT NOT NULL,
                 mime_type TEXT NOT NULL,
                 relative_path TEXT,
@@ -1516,6 +1580,7 @@ class WoonaDatabase(
                 last_error_code TEXT,
                 last_error_message TEXT,
                 created_at_utc TEXT NOT NULL,
+                reference_metadata_json TEXT,
                 UNIQUE(recording_id, relative_path)
             )
             """.trimIndent(),
@@ -1618,7 +1683,7 @@ class WoonaDatabase(
     )
 
     companion object {
-        private const val DATABASE_VERSION = 5
+        private const val DATABASE_VERSION = 6
         private val RECORDING_COLUMNS = arrayOf(
             "id",
             "dog_id",
@@ -1646,6 +1711,7 @@ class WoonaDatabase(
             "upload_state",
             "uploaded_bytes",
             "created_at_utc",
+            "reference_metadata_json",
         )
         private val TERMINAL_STATUSES = setOf(
             RecordingStatus.COMPLETED,

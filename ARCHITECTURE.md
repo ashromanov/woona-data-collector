@@ -30,7 +30,7 @@ PostgreSQL хранит анкеты, версии, связи, состояни
 - `feature/device/` — единый lifecycle датчика, камеры, replay и экспорта.
 - `storage/` — packet/raw/timeline/diagnostic/CSV/ZIP форматы.
 - `video/` — Camera2 preview и MediaRecorder.
-- `data/` — SQLite v5, анкеты, immutable profile versions, записи, sync и
+- `data/` — SQLite v6 на Android, анкеты, immutable profile versions, записи, sync и
   artifacts.
 - `sync/` — настройки сервера, Keystore-токен, HTTP upload/download и
   WorkManager.
@@ -41,7 +41,7 @@ PostgreSQL хранит анкеты, версии, связи, состояни
 ## Локальная модель
 
 `filesDir/Woona/woona.sqlite` на Android и Application Support
-`Woona/woona.sqlite` на iOS используют schema version 5:
+`Woona/woona.sqlite` на iOS используют совместимые модели (Android schema version 6; iOS version 5 с добавленным столбцом метаданных контрольных файлов):
 
 - `dogs`;
 - `dog_profile_versions`;

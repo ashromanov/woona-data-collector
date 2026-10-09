@@ -73,6 +73,7 @@ final class CameraRecorder: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
     private var height = 1_080
     private var isRecording = false
     private var writerFailure: CameraRecorderError?
+    private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
 
     func prepare() async throws {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
@@ -110,6 +111,8 @@ final class CameraRecorder: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
                         ]
                     )
                     input.expectsMediaDataInRealTime = true
+                    let angle = self.rotationCoordinator?.videoRotationAngleForHorizonLevelCapture ?? 0
+                    input.transform = CGAffineTransform(rotationAngle: angle * .pi / 180)
                     guard writer.canAdd(input) else { throw CameraRecorderError.cannotConfigure }
                     writer.add(input)
                     self.writer = writer
@@ -140,13 +143,17 @@ final class CameraRecorder: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
             queue.async {
                 guard self.isRecording else {
                     if let writerFailure = self.writerFailure {
-                        self.writer?.cancelWriting()
-                        if let outputURL = self.outputURL { try? FileManager.default.removeItem(at: outputURL) }
+                        let pendingWriter = self.writer
+                        if pendingWriter?.status == .writing { self.writerInput?.markAsFinished() }
                         self.writer = nil
                         self.writerInput = nil
                         self.outputURL = nil
                         self.writerFailure = nil
-                        continuation.resume(throwing: writerFailure)
+                        if let pendingWriter, pendingWriter.status == .writing {
+                            pendingWriter.finishWriting { continuation.resume(throwing: writerFailure) }
+                        } else {
+                            continuation.resume(throwing: writerFailure)
+                        }
                     } else {
                         continuation.resume(returning: nil)
                     }
@@ -158,7 +165,6 @@ final class CameraRecorder: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
                     return
                 }
                 guard writer.status != .unknown else {
-                    if let outputURL = self.outputURL { try? FileManager.default.removeItem(at: outputURL) }
                     self.writer = nil
                     self.writerInput = nil
                     self.outputURL = nil
@@ -183,6 +189,9 @@ final class CameraRecorder: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
                         }
                         let first = self.firstPresentationTime.map(HostClock.nanoseconds) ?? 0
                         let last = self.lastPresentationTime.map(HostClock.nanoseconds) ?? first
+                        let storedPts: UInt64
+                        do { storedPts = try self.firstStoredVideoPtsUs(outputURL) }
+                        catch { continuation.resume(throwing: error); return }
                         continuation.resume(
                             returning: CameraCaptureInfo(
                                 requestedMonotonicNs: self.requestedMonotonicNs,
@@ -190,7 +199,7 @@ final class CameraRecorder: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
                                 firstFrameMonotonicNs: self.firstFrameMonotonicNs,
                                 firstFrameCameraTimestampNs: self.firstFrameCameraTimestampNs,
                                 firstFrameCallbackMonotonicNs: self.firstFrameCallbackMonotonicNs,
-                                firstVideoSamplePtsUs: self.firstVideoSamplePtsUs,
+                                firstVideoSamplePtsUs: storedPts,
                                 timestampSource: self.timestampSource,
                                 clockQuality: self.clockQuality,
                                 width: self.width,
@@ -207,6 +216,23 @@ final class CameraRecorder: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
 
     func stopPreview() {
         queue.async { if self.session.isRunning { self.session.stopRunning() } }
+    }
+
+    private func firstStoredVideoPtsUs(_ url: URL) throws -> UInt64 {
+        let asset = AVURLAsset(url: url)
+        guard let track = asset.tracks(withMediaType: .video).first else {
+            throw CameraRecorderError.writer("Saved video has no track")
+        }
+        let reader = try AVAssetReader(asset: asset)
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
+        reader.add(output)
+        guard reader.startReading(), let sample = output.copyNextSampleBuffer() else {
+            throw CameraRecorderError.writer("Saved video has no sample")
+        }
+        defer { reader.cancelReading() }
+        let seconds = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sample))
+        guard seconds.isFinite, seconds >= 0 else { throw CameraRecorderError.writer("Invalid saved video PTS") }
+        return UInt64((seconds * 1_000_000).rounded())
     }
 
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
@@ -257,6 +283,7 @@ final class CameraRecorder: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
             throw CameraRecorderError.unavailable
         }
         let input = try AVCaptureDeviceInput(device: camera)
+        rotationCoordinator = AVCaptureDevice.RotationCoordinator(device: camera, previewLayer: previewLayer)
         session.beginConfiguration()
         defer { session.commitConfiguration() }
         session.sessionPreset = session.canSetSessionPreset(.hd1920x1080) ? .hd1920x1080 : .high

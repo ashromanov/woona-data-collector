@@ -109,7 +109,11 @@ class AndroidVideoRecorder(
             this.onError = onError
         }
         file.parentFile?.mkdirs()
-        if (file.exists()) file.delete()
+        if (file.exists() && file.length() > 0L) {
+            synchronized(lock) { active = false }
+            onError?.invoke("Video file already exists; start a new recording", null)
+            return false
+        }
         cameraHandler.post {
             val openedCamera = camera
             if (openedCamera == null) {
@@ -389,7 +393,6 @@ class AndroidVideoRecorder(
         releaseSession()
         val firstVideoSamplePtsUs = outputFile?.let(::firstVideoSamplePtsUs)
         validVideo = validVideo && firstVideoSamplePtsUs != null
-        if (!validVideo) outputFile?.delete()
         val startedAt = firstFrameMonotonicNs
         synchronized(lock) {
             active = false
@@ -405,7 +408,6 @@ class AndroidVideoRecorder(
 
     private fun fail(message: String, throwable: Throwable?) {
         releaseSession()
-        outputFile?.delete()
         synchronized(lock) {
             active = false
             stopRequested = false

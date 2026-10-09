@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.database.sqlite.SQLiteDatabase
 import java.io.File
 import java.time.Instant
+import java.security.MessageDigest
 
 data class ProfileSyncRecord(
     val dogId: String,
@@ -52,6 +53,7 @@ data class ArtifactSyncRecord(
     val uploadedBytes: Long,
     val uploadState: String,
     val clientCreatedAtUtc: String,
+    val referenceMetadataJson: String? = null,
 )
 
 data class RecordingSyncRecord(
@@ -112,6 +114,7 @@ data class RemoteArtifact(
     val sizeBytes: Long,
     val sha256: String,
     val storageStatus: String,
+    val referenceMetadataJson: String? = null,
 )
 
 data class RemoteRecording(
@@ -266,7 +269,10 @@ fun WoonaDatabase.pendingRecordingIds(): List<String> =
         null,
     ).use { cursor ->
         buildList {
-            while (cursor.moveToNext()) add(cursor.getString(0))
+            while (cursor.moveToNext()) {
+                val id = cursor.getString(0)
+                if (recording(id)?.questionnaire?.readyForSync() != false) add(id)
+            }
         }
     }
 
@@ -412,6 +418,7 @@ fun WoonaDatabase.recordingSyncRecord(recordingId: String): RecordingSyncRecord?
             "uploaded_bytes",
             "upload_state",
             "created_at_utc",
+            "reference_metadata_json",
         ),
         "recording_id=? AND local_presence IN ('local','both')",
         arrayOf(recordingId),
@@ -433,6 +440,7 @@ fun WoonaDatabase.recordingSyncRecord(recordingId: String): RecordingSyncRecord?
                         uploadedBytes = cursor.getLong(7),
                         uploadState = cursor.getString(8),
                         clientCreatedAtUtc = cursor.getString(9),
+                        referenceMetadataJson = cursor.nullableString(10),
                     ),
                 )
             }
@@ -466,6 +474,70 @@ fun WoonaDatabase.recordingSyncRecord(recordingId: String): RecordingSyncRecord?
 
 fun WoonaDatabase.artifactFile(artifact: ArtifactSyncRecord): File =
     resolveRelativePath(artifact.relativePath)
+
+fun WoonaDatabase.acceptServerProfile(dogId: String, profile: RemoteProfileVersion) {
+    writableDatabase.update("dog_profile_versions", ContentValues().apply {
+        put("questionnaire_json", profile.questionnaireJson)
+        put("content_sha256", profile.contentSha256)
+        put("validation_state", profile.validationState)
+    }, "id=? AND dog_id=?", arrayOf(profile.id, dogId))
+}
+
+fun WoonaDatabase.acceptServerRecording(recording: RemoteRecording) {
+    acceptServerProfile(recording.dogId, recording.profile)
+    writableDatabase.update("recordings", ContentValues().apply {
+        put("questionnaire_json", recording.sessionQuestionnaireJson)
+        put("questionnaire_validation_state", recording.questionnaireValidationState)
+    }, "id=? AND dog_id=? AND dog_profile_version_id=?",
+        arrayOf(recording.id, recording.dogId, recording.profile.id))
+}
+
+fun WoonaDatabase.applyServerDeletions(entities: List<Pair<String, String>>): Int {
+    fun retired(kind: String, id: String): Boolean {
+        val hash = MessageDigest.getInstance("SHA-256").digest(id.lowercase().toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        return (kind to hash) in entities
+    }
+    val directories = mutableListOf<File>()
+    val ids = mutableListOf<String>()
+    writableDatabase.rawQuery("SELECT id,dog_id,status,relative_directory FROM recordings", null).use { cursor ->
+        while (cursor.moveToNext()) {
+            if (cursor.getString(2) in setOf("preparing", "recording")) continue
+            if (retired("recording", cursor.getString(0)) || retired("dog", cursor.getString(1))) {
+                ids += cursor.getString(0)
+                directories += recordingDirectory(cursor.getString(3))
+            }
+        }
+    }
+    directories.forEach { directory -> check(directory.deleteRecursively() || !directory.exists()) { "Could not remove retired recording files" } }
+    writableDatabase.beginTransaction()
+    try {
+        ids.forEach { writableDatabase.delete("recordings", "id=?", arrayOf(it)) }
+        val artifacts = mutableListOf<Pair<String,File>>()
+        writableDatabase.rawQuery("SELECT id,relative_path FROM artifacts WHERE recording_id NOT IN (SELECT id FROM recordings WHERE status IN ('preparing','recording'))",null).use { cursor ->
+            while (cursor.moveToNext()) if (retired("artifact",cursor.getString(0))) artifacts += cursor.getString(0) to resolveRelativePath(cursor.getString(1))
+        }
+        artifacts.forEach { (id,file) ->
+            check(file.delete() || !file.exists()) { "Could not remove retired artifact" }
+            writableDatabase.delete("artifacts","id=?",arrayOf(id))
+        }
+        val profiles = mutableListOf<String>()
+        writableDatabase.rawQuery("SELECT id,dog_id FROM dog_profile_versions WHERE id NOT IN (SELECT dog_profile_version_id FROM recordings)", null).use { cursor ->
+            while (cursor.moveToNext()) {
+                val current = writableDatabase.rawQuery("SELECT 1 FROM dog_profile_versions WHERE id=? AND superseded_at_utc IS NULL",arrayOf(cursor.getString(0))).use { it.moveToFirst() }
+                if ((!current && retired("profile", cursor.getString(0))) || retired("dog", cursor.getString(1))) profiles += cursor.getString(0)
+            }
+        }
+        profiles.forEach { writableDatabase.delete("dog_profile_versions", "id=?", arrayOf(it)) }
+        val dogs = mutableListOf<String>()
+        writableDatabase.rawQuery("SELECT id FROM dogs WHERE id NOT IN (SELECT dog_id FROM recordings) AND id NOT IN (SELECT dog_id FROM dog_profile_versions)", null).use { cursor ->
+            while (cursor.moveToNext()) if (retired("dog", cursor.getString(0))) dogs += cursor.getString(0)
+        }
+        dogs.forEach { writableDatabase.delete("dogs", "id=?", arrayOf(it)) }
+        writableDatabase.setTransactionSuccessful()
+    } finally { writableDatabase.endTransaction() }
+    return ids.size
+}
 
 fun WoonaDatabase.markRecordingUploading(recordingId: String) {
     writableDatabase.execSQL(
@@ -514,6 +586,11 @@ fun WoonaDatabase.markRecordingSynced(
         "recording_id=?",
         arrayOf(recordingId),
     )
+    writableDatabase.execSQL("""
+        UPDATE server_sync_state SET state='pending' WHERE recording_id=? AND EXISTS (
+            SELECT 1 FROM artifacts WHERE recording_id=? AND local_presence IN ('local','both') AND upload_state<>'available'
+        )
+    """.trimIndent(), arrayOf(recordingId, recordingId))
 }
 
 fun WoonaDatabase.markRecordingSyncError(
@@ -662,6 +739,12 @@ fun WoonaDatabase.restoreServerMetadata(
         }
 
         recordings.forEach { recording ->
+            val mismatched = recording.artifacts.any { artifact ->
+                database.rawQuery("SELECT sha256 FROM artifacts WHERE id=?",arrayOf(artifact.id)).use { cursor ->
+                    cursor.moveToFirst() && cursor.getString(0) != artifact.sha256
+                }
+            }
+            if (mismatched) { conflicts++; return@forEach }
             insertRemoteProfileVersion(
                 database,
                 recording.dogId,
@@ -705,6 +788,16 @@ fun WoonaDatabase.restoreServerMetadata(
             if (inserted != -1L) {
                 restoredRecordings++
                 insertRemoteSync(database, recording)
+            } else if (recording.receiptSha256 != null) {
+                database.update("recordings",ContentValues().apply {
+                    put("dog_id",recording.dogId)
+                    put("dog_profile_version_id",recording.profile.id)
+                    put("questionnaire_json",recording.sessionQuestionnaireJson)
+                    put("questionnaire_schema_version",recording.questionnaireSchemaVersion)
+                    put("questionnaire_validation_state",recording.questionnaireValidationState)
+                },"id=?",arrayOf(recording.id))
+                database.delete("recording_sync","recording_id=?",arrayOf(recording.id))
+                insertRemoteSync(database,recording)
             }
             database.insertWithOnConflict(
                 "server_sync_state",
@@ -782,6 +875,7 @@ fun WoonaDatabase.restoreServerMetadata(
                         put("id", artifact.id)
                         put("recording_id", recording.id)
                         put("type", artifact.type)
+                        put("reference_metadata_json", artifact.referenceMetadataJson)
                         put("file_name", artifact.fileName)
                         put("mime_type", artifact.mimeType)
                         put("relative_path", relativePath)

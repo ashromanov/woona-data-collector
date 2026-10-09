@@ -281,7 +281,7 @@ class ServerApiClientIntegrationTest {
                 cameraTimestampSource = null,
                 cameraClockQuality = "unavailable",
                 sensorClockQuality = "first_packet_arrival",
-                overallSyncQuality = "arrival_aligned",
+                overallSyncQuality = "unavailable",
                 calibrationOffsetNs = 0,
                 estimatedDriftPpm = null,
             ),
@@ -358,7 +358,7 @@ class ServerApiClientIntegrationTest {
         }
         InstrumentationRegistry.getArguments().getString("serverSecondaryToken")?.let { secondary ->
             val secondaryClient = ServerApiClient(ServerSettings(baseUrl, secondary, "unused", false))
-            expectFailure(403, "recording_not_owned") { secondaryClient.uploadRecording(recording, { id -> File(artifacts.first { it.id == id }.relativePath) }, { _, _, _ -> }) }
+            secondaryClient.uploadRecording(recording, { error("Completed capture must not be uploaded again") }, { _, _, _ -> error("Unexpected capture upload") })
         }
         val snapshot = client.fetchRestoreSnapshot()
         assertTrue(snapshot.dogs.any { it.id == dogId })
@@ -405,6 +405,24 @@ class ServerApiClientIntegrationTest {
                 assertArrayEquals(contents.getValue(artifact.type.value), destination.readBytes())
             }
             assertTrue(database.remoteArtifacts(recordingId).isEmpty())
+            val targetBytes = "utc,bpm,rr_ms\n2026-07-30T20:00:30Z,120,500\n".toByteArray()
+            val targetFile = File(directory, "polar-rr.csv").apply { writeBytes(targetBytes) }
+            val referenceMetadata = com.example.myapplication.data.ReferenceMetadata("Polar H10", recording.startedAtUtc, requireNotNull(recording.endedAtUtc)).toJson()
+            val reference = artifacts.first().copy(id = UUID.randomUUID().toString(), type = "rr", fileName = targetFile.name,
+                relativePath = targetFile.absolutePath, sizeBytes = targetBytes.size.toLong(), sha256 = sha256(targetBytes), referenceMetadataJson = referenceMetadata)
+            val secondary = InstrumentationRegistry.getArguments().getString("serverSecondaryToken") ?: token
+            val referenceClient = ServerApiClient(ServerSettings(baseUrl, secondary, "unused", false))
+            val captureReceipt = client.uploadRecording(recording, { error("Unexpected capture read") }, { _, _, _ -> })
+            val referenceReceipt = referenceClient.uploadRecording(recording.copy(artifacts = listOf(reference)),
+                { assertEquals(reference.id, it); targetFile }, { id, _, _ -> assertEquals(reference.id, id) })
+            assertEquals(captureReceipt.receiptSha256, referenceReceipt.receiptSha256)
+            val updated = referenceClient.fetchRestoreSnapshot().recordings.single { it.id == recordingId }
+            assertEquals(canonicalJsonSha256(referenceMetadata), canonicalJsonSha256(requireNotNull(updated.artifacts.single { it.id == reference.id }.referenceMetadataJson)))
+            database.restoreServerMetadata(listOf(remoteDog), listOf(updated))
+            val restoredReference = database.remoteArtifacts(recordingId).single { it.id == reference.id }
+            val referenceDestination = database.artifactDownloadTarget(restoredReference)
+            referenceClient.downloadArtifact(reference.id, reference.sizeBytes, reference.sha256, referenceDestination)
+            assertArrayEquals(targetBytes, referenceDestination.readBytes())
             Log.i("WOONA_E2E", "PASS recording=$recordingId artifactTypes=${contents.keys} rawBytes=${raw.sizeBytes} resumedOffset=$resumedOffset invalidAuth=401 missing=422 hash=422 sqliteRestoreTwice=PASS downloadAll=PASS")
         } finally {
             database.close()

@@ -16,6 +16,26 @@ import org.json.JSONObject
 
 @RunWith(AndroidJUnit4::class)
 class WoonaDatabaseTest {
+    @Test
+    fun unchangedAnswersDoNotCreateAnotherProfileVersion() {
+        val original = database.saveProfile(completeDogQuestionnaire("Unchanged"))
+        val saved = database.saveProfile(original.questionnaire.copy(savedAtLocal = "2026-10-09T12:00:00"),original.id)
+        assertEquals(original.profileVersionId,saved.profileVersionId)
+    }
+
+    @Test
+    fun questionnairesMatchSharedServerFixtures() {
+        val assets = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().context.assets
+        val cases = org.json.JSONArray(assets.open("questionnaires-v2.json").bufferedReader().use { it.readText() })
+        repeat(cases.length()) { index ->
+            val item = cases.getJSONObject(index)
+            val json = item.getJSONObject("questionnaire").toString()
+            val valid = if (item.getString("kind") == "dog") dogQuestionnaireFromJson(json).validate().isValid
+                else sessionQuestionnaireFromJson(json).validate().isValid
+            assertEquals(item.getBoolean("valid"), valid)
+        }
+    }
+
     private lateinit var root: File
     private lateinit var database: WoonaDatabase
 
@@ -30,6 +50,47 @@ class WoonaDatabaseTest {
     fun tearDown() {
         database.close()
         root.deleteRecursively()
+    }
+
+    @Test
+    fun heartSessionWaitsForAnswersAndKeepsReferencesAfterRestart() {
+        val profile = database.saveProfile(completeDogQuestionnaire("Heart dog"))
+        val session = SessionQuestionnaire(schemaVersion = 2, sessionLabel = "Heart", sessionKind = "heart", videoRequested = false)
+        val recording = database.beginRecording(profile.id, RecordingSource.LIVE, session)
+        database.finishRecording(recording.id, RecordingStatus.COMPLETED)
+        assertTrue(database.pendingRecordingIds().isEmpty())
+        val heart = HeartQuestionnaire(
+            answers = HEART_OPTIONS.keys.filter { it != "acuteHeartRateFactors" }.associateWith { "unknown" },
+            acuteHeartRateFactors = listOf("unknown"),
+        )
+        database.saveHeartQuestionnaire(recording.id, heart)
+        assertEquals(listOf(recording.id), database.pendingRecordingIds())
+        val bytes = "utc,bpm\n2026-10-05T12:00:00Z,120\n".toByteArray()
+        val metadata = ReferenceMetadata("Polar H10", "2026-10-05T12:00:00Z", "2026-10-05T12:01:00Z", 0.0)
+        database.attachReference(recording.id, ArtifactType.HEART_RATE, "hr.csv", bytes.inputStream(), metadata)
+        database.hashPendingArtifacts()
+        database.close()
+        database = WoonaDatabase(ApplicationProvider.getApplicationContext(), root)
+        val restored = requireNotNull(database.recording(recording.id))
+        assertEquals(heart.answers.filterKeys { it != "acuteHeartRateFactors" }, restored.questionnaire?.heartQuestionnaire?.answers)
+        val reference = restored.artifacts.single { it.type == ArtifactType.HEART_RATE }
+        assertEquals(metadata.toJson(), reference.referenceMetadataJson)
+        assertTrue(database.resolveRelativePath(reference.relativePath).readBytes().contentEquals(bytes))
+        val serialized = JSONObject(restored.questionnaire!!.toJson()).getJSONObject("heartQuestionnaire")
+        assertEquals("Неизвестно", serialized.getJSONObject("referenceMethod").getString("text"))
+    }
+
+    @Test
+    fun serverDeletionRemovesOnlyRetiredUnitAndIsIdempotent() {
+        val profile = database.saveProfile(completeDogQuestionnaire("Delete test"))
+        val retired = database.beginRecording(profile.id, RecordingSource.LIVE, completeSessionQuestionnaire())
+        database.finishRecording(retired.id, RecordingStatus.COMPLETED)
+        val keep = database.beginRecording(profile.id, RecordingSource.LIVE, completeSessionQuestionnaire())
+        val hash = java.security.MessageDigest.getInstance("SHA-256").digest(retired.id.toByteArray()).joinToString("") { "%02x".format(it) }
+        assertEquals(1, database.applyServerDeletions(listOf("recording" to hash)))
+        assertEquals(null, database.recording(retired.id))
+        assertTrue(database.recording(keep.id) != null)
+        assertEquals(0, database.applyServerDeletions(listOf("recording" to hash)))
     }
 
     @Test

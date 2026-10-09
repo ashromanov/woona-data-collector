@@ -1,0 +1,591 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "woona-heart-questionnaire-v1",
+  "title": "Анкета по активности и сердцебиению",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "knownHeartCondition",
+    "heartRelevantMedication",
+    "preRecordingState",
+    "actualActivity",
+    "acuteHeartRateFactors",
+    "referenceMethod"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "knownHeartCondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "text"
+      ],
+      "oneOf": [
+        {
+          "properties": {
+            "key": {
+              "const": "no"
+            },
+            "text": {
+              "const": "Нет"
+            }
+          }
+        },
+        {
+          "properties": {
+            "key": {
+              "const": "yes"
+            },
+            "text": {
+              "const": "Да"
+            }
+          }
+        },
+        {
+          "properties": {
+            "key": {
+              "const": "unknown"
+            },
+            "text": {
+              "const": "Неизвестно"
+            }
+          }
+        }
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "heartRelevantMedication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "text"
+      ],
+      "oneOf": [
+        {
+          "properties": {
+            "key": {
+              "const": "no"
+            },
+            "text": {
+              "const": "Нет"
+            }
+          }
+        },
+        {
+          "properties": {
+            "key": {
+              "const": "yes"
+            },
+            "text": {
+              "const": "Да"
+            }
+          }
+        },
+        {
+          "properties": {
+            "key": {
+              "const": "unknown"
+            },
+            "text": {
+              "const": "Неизвестно"
+            }
+          }
+        }
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "preRecordingState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "text"
+      ],
+      "oneOf": [
+        {
+          "properties": {
+            "key": {
+              "const": "sleeping"
+            },
+            "text": {
+              "const": "Спала"
+            }
+          }
+        },
+        {
+          "properties": {
+            "key": {
+              "const": "lying_calm"
+            },
+            "text": {
+              "const": "Спокойно лежала"
+            }
+          }
+        },
+        {
+          "properties": {
+            "key": {
+              "const": "awake_calm"
+            },
+            "text": {
+              "const": "Спокойно бодрствовала"
+            }
+          }
+        },
+        {
+          "properties": {
+            "key": {
+              "const": "active"
+            },
+            "text": {
+              "const": "Гуляла, бегала или играла"
+            }
+          }
+        },
+        {
+          "properties": {
+            "key": {
+              "const": "unknown"
+            },
+            "text": {
+              "const": "Неизвестно"
+            }
+          }
+        }
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "actualActivity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "text"
+      ],
+      "oneOf": [
+        {
+          "properties": {
+            "key": {
+              "const": "rest"
+            },
+            "text": {
+              "const": "Спала или находилась в покое"
+            }
+          }
+        },
+        {
+          "properties": {
+            "key": {
+              "const": "walking"
+            },
+            "text": {
+              "const": "Ходила"
+            }
+          }
+        },
+        {
+          "properties": {
+            "key": {
+              "const": "running_playing"
+            },
+            "text": {
+              "const": "Бегала или играла"
+            }
+          }
+        },
+        {
+          "properties": {
+            "key": {
+              "const": "changing"
+            },
+            "text": {
+              "const": "Активность менялась"
+            }
+          }
+        },
+        {
+          "properties": {
+            "key": {
+              "const": "unknown"
+            },
+            "text": {
+              "const": "Неизвестно"
+            }
+          }
+        }
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "acuteHeartRateFactors": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "text"
+        ],
+        "oneOf": [
+          {
+            "properties": {
+              "key": {
+                "const": "none"
+              },
+              "text": {
+                "const": "Нет"
+              }
+            }
+          },
+          {
+            "properties": {
+              "key": {
+                "const": "stress"
+              },
+              "text": {
+                "const": "Стресс или испуг"
+              }
+            }
+          },
+          {
+            "properties": {
+              "key": {
+                "const": "pain"
+              },
+              "text": {
+                "const": "Боль"
+              }
+            }
+          },
+          {
+            "properties": {
+              "key": {
+                "const": "overheating"
+              },
+              "text": {
+                "const": "Перегрев"
+              }
+            }
+          },
+          {
+            "properties": {
+              "key": {
+                "const": "unknown"
+              },
+              "text": {
+                "const": "Неизвестно"
+              }
+            }
+          }
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "referenceMethod": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "text"
+      ],
+      "oneOf": [
+        {
+          "properties": {
+            "key": {
+              "const": "ecg"
+            },
+            "text": {
+              "const": "ЭКГ с временными метками"
+            }
+          }
+        },
+        {
+          "properties": {
+            "key": {
+              "const": "polar_rr"
+            },
+            "text": {
+              "const": "Polar с интервалами между ударами и временными метками"
+            }
+          }
+        },
+        {
+          "properties": {
+            "key": {
+              "const": "bpm_only"
+            },
+            "text": {
+              "const": "Только число ЧСС, измеренное вручную или прибором"
+            }
+          }
+        },
+        {
+          "properties": {
+            "key": {
+              "const": "none"
+            },
+            "text": {
+              "const": "Нет"
+            }
+          }
+        },
+        {
+          "properties": {
+            "key": {
+              "const": "unknown"
+            },
+            "text": {
+              "const": "Неизвестно"
+            }
+          }
+        }
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "knownHeartConditionDetails": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 2000
+    },
+    "heartRelevantMedicationDetails": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 2000
+    },
+    "referenceArtifact": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 2000
+    },
+    "referenceBpm": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "bpm",
+        "measuredAtUtc"
+      ],
+      "properties": {
+        "bpm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "measuredAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "knownHeartCondition": {
+            "properties": {
+              "key": {
+                "enum": [
+                  "yes"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "knownHeartConditionDetails": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "heartRelevantMedication": {
+            "properties": {
+              "key": {
+                "enum": [
+                  "yes"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "heartRelevantMedicationDetails": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "referenceMethod": {
+            "properties": {
+              "key": {
+                "enum": [
+                  "ecg",
+                  "polar_rr"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "referenceArtifact": {
+            "type": "null"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "referenceArtifact"
+        ],
+        "properties": {
+          "referenceArtifact": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "referenceMethod": {
+            "properties": {
+              "key": {
+                "enum": [
+                  "bpm_only"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "referenceBpm": {
+            "type": "null"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "referenceBpm"
+        ],
+        "properties": {
+          "referenceBpm": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "bpm",
+              "measuredAtUtc"
+            ],
+            "properties": {
+              "bpm": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "measuredAtUtc": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "acuteHeartRateFactors": {
+            "contains": {
+              "properties": {
+                "key": {
+                  "enum": [
+                    "none",
+                    "unknown"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "acuteHeartRateFactors": {
+            "maxItems": 1
+          }
+        }
+      }
+    }
+  ]
+}

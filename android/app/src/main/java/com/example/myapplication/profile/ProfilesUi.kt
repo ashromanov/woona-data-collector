@@ -61,6 +61,9 @@ import com.example.myapplication.data.DogQuestionnaire
 import com.example.myapplication.data.Recording
 import com.example.myapplication.data.SURFACES
 import com.example.myapplication.data.SessionQuestionnaire
+import com.example.myapplication.data.HeartQuestionnaire
+import com.example.myapplication.data.HEART_OPTIONS
+import com.example.myapplication.data.readyForSync
 import com.example.myapplication.data.validate
 import com.example.myapplication.feature.device.VideoCaptureState
 import com.example.myapplication.feature.device.DeviceListItem
@@ -100,6 +103,8 @@ fun ProfilesOverview(
     onPolarScan: () -> Unit = {},
     onPolarConnect: (DeviceListItem) -> Unit = {},
     onPolarDisconnect: () -> Unit = {},
+    onHeartQuestionnaire: (String) -> Unit = {},
+    onAddReference: (String) -> Unit = {},
 ) {
     val selected = profiles.firstOrNull { it.id == selectedProfileId }
     if (videoState != VideoCaptureState.IDLE) {
@@ -185,6 +190,12 @@ fun ProfilesOverview(
                 val localArtifacts = recording.artifacts.filter { it.localPresence in setOf("local", "both") }
                 val remoteArtifacts = recording.artifacts.filter { it.localPresence == "remote_only" }
                 val dataLabels = recordingDataLabels(recording, language)
+                if (recording.endedAtUtc != null) {
+                    if (recording.questionnaire?.sessionKind == "heart" && !recording.questionnaire.readyForSync()) {
+                        Button(onClick = { onHeartQuestionnaire(recording.id) }) { Text("Заполнить анкету по сердцебиению") }
+                    }
+                    OutlinedButton(onClick = { onAddReference(recording.id) }) { Text("Добавить ЭКГ / ЧСС / интервалы") }
+                }
                 Text(
                     "${recording.sessionLabel} · ${recordingDisplayTime(recording.startedAtUtc)}",
                     fontWeight = FontWeight.Medium,
@@ -408,6 +419,10 @@ internal fun recordingDisplayTime(value: String, zoneId: ZoneId = ZoneId.systemD
 
 internal fun recordingDataLabels(recording: Recording, language: AppLanguage): List<String> = buildList {
     val names = recording.artifacts.map { it.fileName }.toSet()
+    val types = recording.artifacts.map { it.type.value }.toSet()
+    if ("ecg" in types) add("ЭКГ")
+    if ("heart_rate" in types) add("ЧСС")
+    if ("rr" in types) add("Интервалы между ударами")
     if (names.any { it in setOf("packets.bin", "raw_fragments.binlog", "channel.csv") }) {
         add(tr(language, "collar", "ошейник"))
     }
@@ -1473,12 +1488,13 @@ fun SessionQuestionnaireDialog(language: AppLanguage, onDismiss: () -> Unit, onS
     val values = rememberSaveable(saver = questionnaireValuesSaver) { mutableStateMapOf<String, String>().apply {
         put("sessionDate", java.time.LocalDate.now().toString())
         put("videoRequested", "yes")
+        put("sessionKind", "activity")
     } }
     var errors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     QuestionnaireDialog(
         title = tr(language, "Session questionnaire", "Анкета сессии"),
         subtitle = "Собака связывается с выбранной карточкой. Фактические время и длительность записываются автоматически.",
-        language = language, progress = listOf("sessionLabel", "plannedActivities").count { !values[it].isNullOrBlank() } to 2,
+        language = language, progress = listOf("sessionLabel", if (values["sessionKind"] == "heart") "sessionKind" else "plannedActivities").count { !values[it].isNullOrBlank() } to 2,
         errorCount = errors.size, firstErrorKey = errors.keys.firstOrNull(), canDismiss = true, onDismiss = onDismiss,
         onSave = {
             val result = values.toSessionQuestionnaire().copy(
@@ -1487,12 +1503,18 @@ fun SessionQuestionnaireDialog(language: AppLanguage, onDismiss: () -> Unit, onS
                 durationMinutes = values.sheetDouble("durationMinutes"), plannedActivities = values.list("plannedActivities"),
                 surfaces = values.list("surfaces"), lastMedicationAt = values.text("lastMedicationAt"),
                 notes = values.text("notes"), specialistName = values.text("specialistName"), airTemperatureC = values.sheetDouble("airTemperatureC"),
+                sessionKind = values["sessionKind"] ?: "activity",
             )
             errors = result.validate().errors
             if (errors.isEmpty()) onSave(result)
         },
     ) {
+        Choice(values, "sessionKind", "Вид сессии", listOf("activity" to "Активность", "heart" to "Сердцебиение"), onChange = { if (it == "heart") values["videoRequested"] = "no" })
         Field(values, "sessionLabel", "Номер сессии *", error = errors["sessionLabel"])
+        if (values["sessionKind"] == "heart") {
+            Text("Анкета по сердцебиению заполняется после записи. Контрольные файлы можно добавить позже.")
+            Choice(values, "videoRequested", "Записывать видео (необязательно)", yesNo(language))
+        } else {
         Field(values, "sessionDate", "Дата сессии (ГГГГ-ММ-ДД)", error = errors["sessionDate"])
         Field(values, "startTime", "Время начала записи (ЧЧ:ММ, для импорта)", error = errors["startTime"])
         Field(values, "endTime", "Время окончания (ЧЧ:ММ, для импорта)", error = errors["endTime"])
@@ -1513,6 +1535,53 @@ fun SessionQuestionnaireDialog(language: AppLanguage, onDismiss: () -> Unit, onS
         Field(values, "notes", "Примечания", singleLine = false)
         Field(values, "specialistName", "ФИО специалиста, проводящего запись")
         Choice(values, "videoRequested", "Записывать видео", yesNo(language))
+        }
+    }
+}
+
+@Composable
+fun HeartQuestionnaireDialog(language: AppLanguage, initial: HeartQuestionnaire? = null, onDismiss: () -> Unit, onSave: (HeartQuestionnaire) -> Unit) {
+    val values = rememberSaveable(saver = questionnaireValuesSaver) { mutableStateMapOf<String, String>().apply {
+        initial?.answers?.let { putAll(it) }
+        initial?.referenceArtifact?.let { put("referenceArtifact", it) }
+        initial?.referenceBpm?.let { put("referenceBpm", it.toString()) }
+        initial?.referenceMeasuredAtUtc?.let { put("referenceMeasuredAtUtc", it) }
+    } }
+    var errors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    QuestionnaireDialog("Анкета по активности и сердцебиению",
+        "Опишите состояние собаки и условия записи. Анкета не ставит диагноз и не изменяет карточку собаки. Заполните все обязательные вопросы; если ответ неизвестен, выберите «Неизвестно».",
+        language, HEART_OPTIONS.keys.count { !values[it].isNullOrBlank() } to 6, errors.size, errors.keys.firstOrNull(), true, onDismiss, {
+            val result = HeartQuestionnaire(
+                answers = values.toMap(), acuteHeartRateFactors = values.list("acuteHeartRateFactors"),
+                knownHeartConditionDetails = values.text("knownHeartConditionDetails"),
+                heartRelevantMedicationDetails = values.text("heartRelevantMedicationDetails"),
+                referenceArtifact = values.text("referenceArtifact"), referenceBpm = values.sheetDouble("referenceBpm"),
+                referenceMeasuredAtUtc = values.text("referenceMeasuredAtUtc"),
+            )
+            errors = result.validate().errors
+            if (errors.isEmpty()) onSave(result)
+        }) {
+        Text("1. Сведения о сердце и препаратах", fontWeight = FontWeight.SemiBold)
+        Choice(values, "knownHeartCondition", "1.1. Диагностировал ли ветеринар заболевание сердца или нарушение ритма? *", HEART_OPTIONS.getValue("knownHeartCondition"), errors["knownHeartCondition"])
+        if (values["knownHeartCondition"] == "yes") Field(values, "knownHeartConditionDetails", "Какой диагноз? (необязательно)")
+        Choice(values, "heartRelevantMedication", "1.2. Принимала ли собака препараты, которые могут повлиять на частоту сердечных сокращений (ЧСС)? *", HEART_OPTIONS.getValue("heartRelevantMedication"), errors["heartRelevantMedication"])
+        if (values["heartRelevantMedication"] == "yes") Field(values, "heartRelevantMedicationDetails", "Название препарата и время последнего приёма (необязательно)")
+        Text("Если оператор не знает, не нужно оценивать препарат самостоятельно — выберите «Неизвестно».")
+        Text("2. Условия записи", fontWeight = FontWeight.SemiBold)
+        Choice(values, "preRecordingState", "2.1. Что собака делала непосредственно перед началом записи? *", HEART_OPTIONS.getValue("preRecordingState"), errors["preRecordingState"])
+        Choice(values, "actualActivity", "2.2. Что собака фактически делала во время записи? *", HEART_OPTIONS.getValue("actualActivity"), errors["actualActivity"])
+        MultiChoice(values, "acuteHeartRateFactors", "2.3. Были ли во время записи факторы, способные изменить ЧСС? *", HEART_OPTIONS.getValue("acuteHeartRateFactors"), errors["acuteHeartRateFactors"], setOf("none", "unknown"))
+        Text("«Нет» и «Неизвестно» нельзя сочетать с другими вариантами.")
+        Text("3. Контрольное измерение", fontWeight = FontWeight.SemiBold)
+        Choice(values, "referenceMethod", "3.1. Есть ли независимое измерение сердцебиения за тот же период? *", HEART_OPTIONS.getValue("referenceMethod"), errors["referenceMethod"])
+        when (values["referenceMethod"]) {
+            "ecg", "polar_rr" -> Field(values, "referenceArtifact", "Файл или идентификатор контрольной записи и её временная привязка *", error = errors["referenceArtifact"])
+            "bpm_only" -> {
+                Field(values, "referenceBpm", "Измеренная ЧСС, уд/мин *", KeyboardType.Decimal, errors["referenceBpm"])
+                Field(values, "referenceMeasuredAtUtc", "Время измерения (UTC, ГГГГ-ММ-ДДTЧЧ:ММ:ССZ) *", error = errors["referenceMeasuredAtUtc"])
+            }
+        }
+        Text("Файл ЭКГ или интервалы с временными метками нужны для проверки отдельных ударов. Одиночное значение ЧСС подходит только для сравнения среднего темпа. По ответам анкеты нельзя делать заключение об аритмии.")
     }
 }
 
@@ -1525,3 +1594,24 @@ private fun SheetChoice(values: MutableMap<String, String>, key: String, title: 
 
 private fun MutableMap<String, String>.sheetInt(key: String): Int? = text(key)?.let { it.toIntOrNull() ?: Int.MIN_VALUE }
 private fun MutableMap<String, String>.sheetDouble(key: String): Double? = text(key)?.let { it.replace(',', '.').toDoubleOrNull() ?: Double.NaN }
+
+@Composable
+fun ReferenceAttachmentDialog(language: AppLanguage, fileName: String, onDismiss: () -> Unit,
+    onSave: (com.example.myapplication.data.ArtifactType, com.example.myapplication.data.ReferenceMetadata) -> Unit) {
+    val values = rememberSaveable(saver = questionnaireValuesSaver) { mutableStateMapOf<String, String>() }
+    var errors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    QuestionnaireDialog("Добавить контрольную запись", fileName, language, 0 to 4, errors.size, errors.keys.firstOrNull(), true, onDismiss, {
+        val metadata = com.example.myapplication.data.ReferenceMetadata(values["source"].orEmpty(), values["startedAtUtc"].orEmpty(),
+            values["endedAtUtc"].orEmpty(), values.sheetDouble("offsetFromRecordingMs"), values.text("notes"))
+        errors = metadata.validate().errors + if (values["type"] == null) mapOf("type" to "Выберите тип данных") else emptyMap()
+        if (errors.isEmpty()) onSave(com.example.myapplication.data.ArtifactType.entries.first { it.value == values["type"] }, metadata)
+    }) {
+        Choice(values, "type", "Тип данных *", listOf("ecg" to "ЭКГ", "heart_rate" to "ЧСС", "rr" to "Интервалы между ударами (Polar и др.)"), errors["type"])
+        Field(values, "source", "Устройство / источник *", error = errors["source"])
+        Field(values, "startedAtUtc", "Начало контрольной записи UTC * (ГГГГ-ММ-ДДTЧЧ:ММ:ССZ)", error = errors["startedAtUtc"])
+        Field(values, "endedAtUtc", "Окончание контрольной записи UTC *", error = errors["endedAtUtc"])
+        Field(values, "offsetFromRecordingMs", "Поправка к UTC таргета, мс (добавляется к его меткам, если известна)", KeyboardType.Decimal, errors["offsetFromRecordingMs"])
+        Field(values, "notes", "Временная привязка / примечания", error = errors["notes"], singleLine = false)
+        Text("Оригинальный файл сохраняется без преобразований. ЧСС без интервалов подходит только для сравнения среднего темпа.")
+    }
+}

@@ -20,6 +20,7 @@ val woonaServerToken = providers.gradleProperty("woonaServerToken")
 fun String.asBuildConfigString(): String = "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""
 
 android {
+    sourceSets.getByName("androidTest").assets.srcDir(rootProject.file("../shared/testdata"))
     namespace = "com.example.myapplication"
     compileSdk {
         version = release(36) {
@@ -31,8 +32,8 @@ android {
         applicationId = "com.woona.drivetest"
         minSdk = 31
         targetSdk = 36
-        versionCode = 6
-        versionName = "1.3.2"
+        versionCode = 7
+        versionName = "1.3.4"
 
         buildConfigField("String", "WOONA_SERVER_BASE_URL", woonaServerBaseUrl.get().asBuildConfigString())
         buildConfigField("String", "WOONA_SERVER_TOKEN", woonaServerToken.get().asBuildConfigString())

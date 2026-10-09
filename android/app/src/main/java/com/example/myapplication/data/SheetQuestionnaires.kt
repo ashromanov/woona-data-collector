@@ -33,7 +33,9 @@ fun SessionQuestionnaire.validateSheet(): QuestionnaireValidation {
         Triple("preMeasurementStateDetails", preMeasurementStateDetails, 500), Triple("notes", notes, 2000),
         Triple("lastMedicationAt", lastMedicationAt, 2000), Triple("specialistName", specialistName, 2000),
     )) if (value != null && value.length > max) errors[key] = "Максимум $max символов"
-    if (plannedActivities.isEmpty() || plannedActivities.any { it.isBlank() } || plannedActivities.distinct().size != plannedActivities.size) errors["plannedActivities"] = "Выберите формат записи"
+    if (sessionKind !in setOf(null, "activity", "heart")) errors["sessionKind"] = "Выберите вид сессии"
+    heartQuestionnaire?.validate()?.errors?.let { errors.putAll(it) }
+    if (sessionKind != "heart" && (plannedActivities.isEmpty() || plannedActivities.any { it.isBlank() } || plannedActivities.distinct().size != plannedActivities.size)) errors["plannedActivities"] = "Выберите формат записи"
     if (surfaces.any { it.isBlank() } || surfaces.distinct().size != surfaces.size) errors["surfaces"] = "Проверьте поверхности"
     if (airTemperatureC != null && (!airTemperatureC.isFinite() || airTemperatureC !in -60.0..70.0)) errors["airTemperatureC"] = "Температура: −60…70 °C"
     if (durationMinutes != null && (!durationMinutes.isFinite() || durationMinutes < 0)) errors["durationMinutes"] = "Продолжительность должна быть ≥0"

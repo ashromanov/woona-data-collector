@@ -2,9 +2,11 @@
 
 import argparse
 import fcntl
+import hashlib
 import html
 import json
 import logging
+import math
 import os
 import time
 from collections import defaultdict
@@ -12,8 +14,6 @@ from pathlib import Path
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree
-
-from sqlalchemy import create_engine, text
 
 LABELS = {
     "source": ("Woona · Проверка исходных записей v1", ["Комплект пригоден", "Брак / неполный комплект", "Требует проверки"]),
@@ -57,6 +57,19 @@ def file_url(relative: str) -> str:
     return "/data/local-files/?d=" + quote(relative, safe="/")
 
 
+def annotation_frame_rate(project: dict, task: dict) -> float:
+    node = ElementTree.fromstring(project['label_config']).find('.//Video')
+    value = node.get('frameRate', node.get('framerate', '24'))
+    value = task['data'][value[1:]] if value.startswith('$') else value
+    fps = float(value)
+    if not math.isfinite(fps) or fps <= 0:
+        raise ValueError('Invalid annotation frame rate')
+    frozen = task.get('meta', {}).get('annotation_coordinates', {}).get('frame_rate')
+    if frozen is not None and float(frozen) != fps:
+        raise ValueError('Annotation FPS changed; migrate existing ranges before export')
+    return fps
+
+
 def task(source_id: str, title: str, files: list[dict], *, source: str, dog: str, date: str) -> dict:
     links = "".join(
         f'<li><a href="{html.escape(file_url(item["relative"]), quote=True)}" target="_blank">'
@@ -88,19 +101,24 @@ def historical_tasks(snapshot: Path) -> list[dict]:
 
 
 def app_tasks(database_url: str) -> list[dict]:
+    from sqlalchemy import create_engine, text
+
     engine = create_engine(database_url, pool_pre_ping=True)
     with engine.connect() as connection:
         rows = connection.execute(text("""
             SELECT r.id, r.started_at, r.dog_id, r.dog_profile_version_id,
                    r.session_questionnaire, v.questionnaire AS dog_questionnaire,
                    d.number_or_name, i.source_id AS import_source_id, i.source_path, i.provenance,
-                   a.file_name,
+                   rs.overall_sync_quality, a.file_name,
                    a.server_relative_path, a.expected_size_bytes, a.sha256
             FROM recordings r JOIN dogs d ON d.id=r.dog_id
             JOIN dog_profile_versions v ON v.id=r.dog_profile_version_id
+            JOIN recording_sync rs ON rs.recording_id=r.id
             LEFT JOIN source_imports i ON i.recording_id=r.id
             JOIN artifacts a ON a.recording_id=r.id
-            WHERE r.ingest_status='complete' AND a.storage_status='available'
+            WHERE r.ingest_status='complete' AND r.capture_status='completed' AND r.capture_error_code IS NULL AND a.storage_status='available'
+              AND a.artifact_type NOT IN ('ecg','heart_rate','rr')
+              AND a.file_name NOT IN ('polar_hr.csv','polar_ecg.csv')
             ORDER BY r.id, a.id
         """)).mappings().all()
     engine.dispose()
@@ -111,7 +129,7 @@ def app_tasks(database_url: str) -> list[dict]:
     for recording_id, members in groups.items():
         first = members[0]
         questionnaire = first["session_questionnaire"]
-        if questionnaire.get("schemaVersion") != 2 or not set(questionnaire.get("plannedActivities", [])) & {"Аллюр/движение", "Активность"}:
+        if questionnaire.get("sessionKind") == "heart" or questionnaire.get("schemaVersion") != 2 or not set(questionnaire.get("plannedActivities", [])) & {"Аллюр/движение", "Активность"}:
             continue
         names = {row["file_name"] for row in members}
         if not any(name.lower().endswith(".mp4") for name in names) or not any(name.lower().endswith((".bin", ".binlog")) for name in names):
@@ -129,6 +147,10 @@ def app_tasks(database_url: str) -> list[dict]:
             result[-1]["meta"].update({"import_source_id": first["import_source_id"], "source_path": first["source_path"],
                                        "drive_files": first["provenance"]["files"],
                                        "alignment": "unavailable: external video has no camera anchor"})
+            camera = first['provenance'].get('original_sync', {}).get('video')
+            if camera:
+                result[-1]['meta'].update({'original_camera_anchor': camera,
+                    'alignment': first['overall_sync_quality'] + ': native camera anchor; sensor arrival timing is not calibration'})
     return result
 
 
@@ -187,6 +209,11 @@ def _sync_unlocked() -> dict[str, tuple[int, int]]:
     expected = app_tasks(os.environ["DATABASE_URL"])
     current = {row["data"].get("source_id") for row in paged(f"/api/tasks?project={project_id}")}
     missing = [item for item in expected if item["data"]["source_id"] not in current]
+    for item in missing:
+        item['meta']['annotation_coordinates'] = {
+            'frame_rate': annotation_frame_rate(project, item), 'frame_origin': 1, 'end_inclusive': True,
+            'config_sha256': hashlib.sha256(project['label_config'].encode()).hexdigest(),
+        }
     for offset in range(0, len(missing), 50):
         request_json("POST", f"/api/projects/{project_id}/import", missing[offset:offset + 50])
     rows = paged(f"/api/tasks?project={project_id}")

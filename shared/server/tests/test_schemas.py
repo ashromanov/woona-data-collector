@@ -3,7 +3,7 @@ import json
 import unittest
 from pathlib import Path
 
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, ValidationError as SchemaValidationError
 
 from pydantic import ValidationError
 
@@ -20,6 +20,13 @@ ROOT = Path(__file__).parents[2]
 
 
 class QuestionnaireSchemaTest(unittest.TestCase):
+    def test_questionnaires_match_shared_client_fixtures(self):
+        from server.questionnaires import validate_sheet
+        for case in json.loads((ROOT / 'testdata/questionnaires-v2.json').read_text()):
+            if case['valid']:
+                validate_sheet(case['kind'],case['questionnaire'])
+            else:
+                with self.assertRaises((SchemaValidationError,ValueError)): validate_sheet(case['kind'],case['questionnaire'])
     @classmethod
     def setUpClass(cls):
         model_directory = ROOT / "docs" / "target-server-plan" / "models"
@@ -97,6 +104,9 @@ class QuestionnaireSchemaTest(unittest.TestCase):
             {
                 "schemaVersion": 2,
                 "monotonicClock": "ios.CMClock.hostTime",
+                "firstSensorPacketMonotonicNs": 1,
+                "videoFirstFrameMonotonicNs": 2,
+                "videoOffsetFromSensorNs": 1,
                 "sessionZeroAtUtc": "2026-08-17T00:00:00Z",
                 "sessionZeroWallClockMs": 1786924800000,
                 "sessionZeroMonotonicNs": 1,

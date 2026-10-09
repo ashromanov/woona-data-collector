@@ -238,6 +238,8 @@ struct SessionQuestionnaire: Codable, Equatable {
     var lastMedicationAt: String?
     var notes: String?
     var specialistName: String?
+    var sessionKind: String?
+    var heartQuestionnaire: HeartQuestionnaire?
 
     func validate() -> QuestionnaireValidation {
         if schemaVersion == 2 { return validateSheet() }
@@ -349,7 +351,9 @@ extension SessionQuestionnaire {
             if let value, value.count > limit { errors[key] = "Максимум \(limit) символов" }
         }
         let activities = plannedActivities ?? []
-        if activities.isEmpty || activities.contains(where: { $0.isEmpty }) || Set(activities).count != activities.count { errors["plannedActivities"] = "Выберите формат записи" }
+        if sessionKind != "heart" && (activities.isEmpty || activities.contains(where: { $0.isEmpty }) || Set(activities).count != activities.count) { errors["plannedActivities"] = "Выберите формат записи" }
+        if let sessionKind, !["heart", "activity"].contains(sessionKind) { errors["sessionKind"] = "Выберите вид сессии" }
+        if let heartQuestionnaire { errors.merge(heartQuestionnaire.validate().errors) { _, new in new } }
         let selectedSurfaces = surfaces ?? []
         if selectedSurfaces.contains(where: { $0.isEmpty }) || Set(selectedSurfaces).count != selectedSurfaces.count { errors["surfaces"] = "Проверьте поверхности" }
         if let airTemperatureC, !airTemperatureC.isFinite || !(-60...70).contains(airTemperatureC) { errors["airTemperatureC"] = "Температура: −60…70 °C" }
@@ -404,6 +408,8 @@ struct LocalArtifact: Identifiable, Equatable {
     let sizeBytes: Int64
     let sha256: String
     let uploadedBytes: Int64
+    var referenceMetadata: ReferenceMetadata? = nil
+    var uploadState = "pending"
 }
 
 enum WoonaStoreError: LocalizedError {
@@ -430,6 +436,7 @@ final class WoonaStore {
             throw WoonaStoreError.sqlite("Unable to open woona.sqlite")
         }
         try execute("PRAGMA foreign_keys=ON")
+        sqlite3_busy_timeout(database, 5_000)
         try migrate()
     }
 
@@ -496,6 +503,13 @@ final class WoonaStore {
     func saveProfile(_ questionnaire: DogQuestionnaire, replacing profile: DogProfile? = nil) throws -> DogProfile {
         let validation = questionnaire.validate()
         guard validation.isValid else { throw WoonaStoreError.invalidData("Dog questionnaire is incomplete") }
+        if let profile {
+            var previous = profile.questionnaire
+            var proposed = questionnaire
+            previous.savedAtLocal = nil
+            proposed.savedAtLocal = nil
+            if previous == proposed { return profile }
+        }
         let dogID = profile?.id ?? UUID()
         let versionID = UUID()
         let now = Self.iso8601(Date())
@@ -664,7 +678,7 @@ final class WoonaStore {
         }
         let existingRecording = try recording(id: remote.id)
         if let existingRecording,
-           existingRecording.dogID != remote.dogId || existingRecording.profileVersionID != remote.profileVersion.id {
+           remote.ingestStatus != "complete" && (existingRecording.dogID != remote.dogId || existingRecording.profileVersionID != remote.profileVersion.id) {
             throw WoonaStoreError.invalidData("Remote recording conflicts with local metadata")
         }
         let didExist = existingRecording != nil
@@ -717,6 +731,12 @@ final class WoonaStore {
                 "INSERT OR IGNORE INTO recording_sync(recording_id,sync_json,updated_at_utc) VALUES(?,?,?)",
                 [.text(remote.id.uuidString), .text(syncJSON), .text(now)]
             )
+            if existingRecording != nil && remote.ingestStatus == "complete" {
+                try execute("UPDATE recordings SET dog_id=?,dog_profile_version_id=?,questionnaire_json=? WHERE id=?",
+                            [.text(remote.dogId.uuidString),.text(remote.profileVersion.id.uuidString),.text(sessionJSON),.text(remote.id.uuidString)])
+                try execute("UPDATE recording_sync SET sync_json=?,updated_at_utc=? WHERE recording_id=?",
+                            [.text(syncJSON),.text(now),.text(remote.id.uuidString)])
+            }
             for artifact in remote.artifacts {
                 if let existing = try existingArtifact(id: artifact.id),
                    existing.recordingID != remote.id || existing.sha256 != artifact.sha256 {
@@ -727,8 +747,8 @@ final class WoonaStore {
                     """
                     INSERT OR IGNORE INTO artifacts(
                       id,recording_id,type,file_name,relative_path,mime_type,
-                      size_bytes,sha256,upload_state,uploaded_bytes,created_at_utc
-                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?)
+                      size_bytes,sha256,upload_state,uploaded_bytes,created_at_utc,reference_metadata_json
+                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
                     """,
                     [
                         .text(artifact.id.uuidString), .text(remote.id.uuidString), .text(artifact.type),
@@ -736,6 +756,7 @@ final class WoonaStore {
                         .integer(artifact.sizeBytes), .text(artifact.sha256), .text(artifact.storageStatus),
                         .integer(artifact.storageStatus == "available" ? artifact.sizeBytes : 0),
                         .text(remote.startedAtUtc),
+                        try artifact.referenceMetadata.map { .text(String(decoding: try Self.encoder.encode($0), as: UTF8.self)) } ?? .null,
                     ]
                 )
             }
@@ -759,6 +780,46 @@ final class WoonaStore {
         )
     }
 
+    func saveHeartQuestionnaire(recordingID: UUID, heart: HeartQuestionnaire) throws {
+        guard heart.validate().isValid, let recording = try recording(id: recordingID), recording.endedAtUTC != nil,
+              var questionnaire = recording.questionnaire, questionnaire.sessionKind == "heart", questionnaire.heartQuestionnaire == nil else {
+            throw WoonaStoreError.invalidData("Анкета не заполнена или уже сохранена")
+        }
+        questionnaire.heartQuestionnaire = heart.normalized()
+        let json = String(data: try Self.sessionQuestionnaireData(questionnaire), encoding: .utf8)!
+        try execute("UPDATE recordings SET questionnaire_json=? WHERE id=?", [.text(json), .text(recordingID.uuidString)])
+    }
+
+    func attachReference(recordingID: UUID, type: String, sourceURL: URL, metadata: ReferenceMetadata) throws {
+        guard ["ecg", "heart_rate", "rr"].contains(type), metadata.validate().isValid,
+              let recording = try recording(id: recordingID), recording.endedAtUTC != nil else {
+            throw WoonaStoreError.invalidData("Укажите контрольную запись и временную привязку")
+        }
+        let access = sourceURL.startAccessingSecurityScopedResource()
+        defer { if access { sourceURL.stopAccessingSecurityScopedResource() } }
+        let name = "reference-\(UUID().uuidString)-" + String(decoding: sourceURL.lastPathComponent.utf8.suffix(180), as: UTF8.self)
+        let target = directory(for: recording).appendingPathComponent(name)
+        let temporary = target.appendingPathExtension("part")
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        do {
+            try FileManager.default.copyItem(at: sourceURL, to: temporary)
+            let size = (try FileManager.default.attributesOfItem(atPath: temporary.path)[.size] as? NSNumber)?.int64Value ?? 0
+            guard size > 0 else { throw WoonaStoreError.invalidData("Контрольный файл пуст") }
+            let hash = try Self.sha256File(temporary)
+            try FileManager.default.moveItem(at: temporary, to: target)
+            let reference = String(data: try Self.encoder.encode(metadata), encoding: .utf8)!
+            try transaction {
+                try execute("""
+                    INSERT INTO artifacts(id,recording_id,type,file_name,relative_path,mime_type,size_bytes,sha256,created_at_utc,reference_metadata_json)
+                    VALUES(?,?,?,?,?,'application/octet-stream',?,?,?,?)
+                """, [.text(UUID().uuidString), .text(recordingID.uuidString), .text(type), .text(name),
+                    .text(recording.relativeDirectory + "/" + name), .integer(size), .text(hash), .text(Self.iso8601(Date())), .text(reference)])
+                try execute("UPDATE recordings SET server_sync_state='pending' WHERE id=?", [.text(recordingID.uuidString)])
+                try execute("UPDATE server_sync_state SET state='pending',last_error_message=NULL WHERE recording_id=?", [.text(recordingID.uuidString)])
+            }
+        } catch { try? FileManager.default.removeItem(at: target); throw error }
+    }
+
     func recentRecordings(dogID: UUID, limit: Int? = 10) throws -> [WoonaRecording] {
         let statement = try prepare(
             """
@@ -773,6 +834,78 @@ final class WoonaStore {
         var result: [WoonaRecording] = []
         while sqlite3_step(statement) == SQLITE_ROW { result.append(try decodeRecording(statement)) }
         return result
+    }
+
+    func acceptServerProfile(dogID: UUID, version: ServerProfileVersion) throws {
+        let json = String(decoding: try Self.dogQuestionnaireData(version.questionnaire), as: UTF8.self)
+        try execute("UPDATE dog_profile_versions SET questionnaire_json=?,content_sha256=? WHERE id=? AND dog_id=?",
+                    [.text(json), .text(version.contentSha256), .text(version.id.uuidString), .text(dogID.uuidString)])
+    }
+
+    func acceptServerSession(recordingID: UUID, questionnaire: JSONValue) throws {
+        let json = String(decoding: try Self.encoder.encode(questionnaire), as: UTF8.self)
+        try execute("UPDATE recordings SET questionnaire_json=? WHERE id=?", [.text(json), .text(recordingID.uuidString)])
+    }
+
+    @discardableResult
+    func applyServerDeletions(_ entities: [ServerDeletion]) throws -> Int {
+        func retired(_ kind: String, _ id: String) -> Bool {
+            let hash = Self.sha256(Data(id.lowercased().utf8))
+            return entities.contains { $0.kind == kind && $0.id_sha256 == hash }
+        }
+        let statement = try prepare("SELECT id,dog_id,status,relative_directory FROM recordings")
+        var ids: [String] = []
+        var paths: [URL] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            if ["preparing", "recording"].contains(columnText(statement, 2)) { continue }
+            if retired("recording", columnText(statement, 0)) || retired("dog", columnText(statement, 1)) {
+                ids.append(columnText(statement, 0))
+                let path = rootDirectory.appendingPathComponent(columnText(statement, 3)).resolvingSymlinksInPath().standardizedFileURL
+                guard path.path.hasPrefix(rootDirectory.resolvingSymlinksInPath().standardizedFileURL.path + "/") else {
+                    sqlite3_finalize(statement)
+                    throw WoonaStoreError.invalidData("Invalid retired recording path")
+                }
+                paths.append(path)
+            }
+        }
+        sqlite3_finalize(statement)
+        for path in paths where FileManager.default.fileExists(atPath: path.path) { try FileManager.default.removeItem(at: path) }
+        try transaction {
+            for id in ids { try execute("DELETE FROM recordings WHERE id=?", [.text(id)]) }
+            let artifacts = try prepare("SELECT id,relative_path FROM artifacts WHERE recording_id NOT IN (SELECT id FROM recordings WHERE status IN ('preparing','recording'))")
+            var deletedArtifacts: [(String,URL)] = []
+            while sqlite3_step(artifacts) == SQLITE_ROW {
+                if retired("artifact",columnText(artifacts,0)) {
+                    let path=rootDirectory.appendingPathComponent(columnText(artifacts,1)).resolvingSymlinksInPath().standardizedFileURL
+                    guard path.path.hasPrefix(rootDirectory.resolvingSymlinksInPath().standardizedFileURL.path+"/") else {
+                        sqlite3_finalize(artifacts);throw WoonaStoreError.invalidData("Invalid retired artifact path")
+                    }
+                    deletedArtifacts.append((columnText(artifacts,0),path))
+                }
+            }
+            sqlite3_finalize(artifacts)
+            for (id,path) in deletedArtifacts {
+                if FileManager.default.fileExists(atPath:path.path) { try FileManager.default.removeItem(at:path) }
+                try execute("DELETE FROM artifacts WHERE id=?",[.text(id)])
+            }
+            let current = try prepare("SELECT current_profile_version_id FROM dogs")
+            var currentVersions = Set<String>()
+            while sqlite3_step(current) == SQLITE_ROW { currentVersions.insert(columnText(current,0)) }
+            sqlite3_finalize(current)
+            let versions = try prepare("SELECT id,dog_id FROM dog_profile_versions WHERE id NOT IN (SELECT dog_profile_version_id FROM recordings)")
+            var deletedVersions: [String] = []
+            while sqlite3_step(versions) == SQLITE_ROW {
+                if retired("dog", columnText(versions, 1)) || (retired("profile",columnText(versions,0)) && !currentVersions.contains(columnText(versions,0))) { deletedVersions.append(columnText(versions, 0)) }
+            }
+            sqlite3_finalize(versions)
+            for id in deletedVersions { try execute("DELETE FROM dog_profile_versions WHERE id=?", [.text(id)]) }
+            let dogs = try prepare("SELECT id FROM dogs WHERE id NOT IN (SELECT dog_id FROM recordings) AND id NOT IN (SELECT dog_id FROM dog_profile_versions)")
+            var deletedDogs: [String] = []
+            while sqlite3_step(dogs) == SQLITE_ROW { if retired("dog", columnText(dogs, 0)) { deletedDogs.append(columnText(dogs, 0)) } }
+            sqlite3_finalize(dogs)
+            for id in deletedDogs { try execute("DELETE FROM dogs WHERE id=?", [.text(id)]) }
+        }
+        return ids.count
     }
 
     func recording(id: UUID) throws -> WoonaRecording? {
@@ -823,7 +956,8 @@ final class WoonaStore {
                 let relative = rootDirectory.standardizedFileURL.path == url.deletingLastPathComponent().standardizedFileURL.path
                     ? url.lastPathComponent
                     : url.path.replacingOccurrences(of: rootDirectory.path + "/", with: "")
-                let data = try Data(contentsOf: url, options: .mappedIfSafe)
+                let size = (try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.int64Value ?? 0
+                let hash = try Self.sha256File(url)
                 try execute(
                     """
                     INSERT INTO artifacts(
@@ -837,7 +971,7 @@ final class WoonaStore {
                     [
                         .text(UUID().uuidString), .text(recording.id.uuidString), .text(type),
                         .text(url.lastPathComponent), .text(relative), .text(mime),
-                        .integer(Int64(data.count)), .text(Self.sha256(data)), .text(now),
+                        .integer(size), .text(hash), .text(now),
                     ]
                 )
             }
@@ -872,7 +1006,7 @@ final class WoonaStore {
 
     func artifacts(recordingID: UUID) throws -> [LocalArtifact] {
         let statement = try prepare(
-            "SELECT id,recording_id,type,file_name,relative_path,mime_type,size_bytes,sha256,uploaded_bytes FROM artifacts WHERE recording_id=? ORDER BY created_at_utc,relative_path",
+            "SELECT id,recording_id,type,file_name,relative_path,mime_type,size_bytes,sha256,uploaded_bytes,reference_metadata_json,upload_state FROM artifacts WHERE recording_id=? ORDER BY created_at_utc,relative_path",
             [.text(recordingID.uuidString)]
         )
         defer { sqlite3_finalize(statement) }
@@ -890,7 +1024,9 @@ final class WoonaStore {
                     mimeType: columnText(statement, 5),
                     sizeBytes: sqlite3_column_int64(statement, 6),
                     sha256: columnText(statement, 7),
-                    uploadedBytes: sqlite3_column_int64(statement, 8)
+                    uploadedBytes: sqlite3_column_int64(statement, 8),
+                    referenceMetadata: try? JSONDecoder().decode(ReferenceMetadata.self, from: Data(columnText(statement, 9).utf8)),
+                    uploadState: columnText(statement, 10)
                 )
             )
         }
@@ -984,7 +1120,10 @@ final class WoonaStore {
         )
         defer { sqlite3_finalize(statement) }
         var values: [WoonaRecording] = []
-        while sqlite3_step(statement) == SQLITE_ROW { values.append(try decodeRecording(statement)) }
+        while sqlite3_step(statement) == SQLITE_ROW {
+            let recording = try decodeRecording(statement)
+            if recording.questionnaire?.readyForSync != false { values.append(recording) }
+        }
         return values
     }
 
@@ -996,6 +1135,8 @@ final class WoonaStore {
     }
 
     func updateRecordingSync(_ id: UUID, state: String, error: Error? = nil) throws {
+        let hasPendingArtifacts = try artifacts(recordingID: id).contains { $0.uploadState != "available" }
+        let state = state == "synced" && hasPendingArtifacts ? "pending" : state
         let now = Self.iso8601(Date())
         try transaction {
             try execute(
@@ -1134,6 +1275,15 @@ final class WoonaStore {
             )
             """
         )
+        try ensureReferenceColumn()
+    }
+
+    private func ensureReferenceColumn() throws {
+        let statement = try prepare("PRAGMA table_info(artifacts)")
+        defer { sqlite3_finalize(statement) }
+        var exists = false
+        while sqlite3_step(statement) == SQLITE_ROW { if columnText(statement, 1) == "reference_metadata_json" { exists = true } }
+        if !exists { try execute("ALTER TABLE artifacts ADD COLUMN reference_metadata_json TEXT") }
     }
 
     private func transaction(_ body: () throws -> Void) throws {
@@ -1217,6 +1367,110 @@ final class WoonaStore {
     }()
     static func iso8601(_ date: Date) -> String { ISO8601DateFormatter().string(from: date) }
     static func sha256(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
+    static func sha256File(_ url: URL) throws -> String {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        var hash = SHA256()
+        while let data = try handle.read(upToCount: 65_536), !data.isEmpty { hash.update(data: data) }
+        return hash.finalize().map { String(format: "%02x", $0) }.joined()
+    }
 }
 
 private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
+
+struct HeartAnswer: Codable, Equatable, Hashable {
+    let key: String
+    let text: String
+}
+
+struct HeartBpm: Codable, Equatable {
+    var bpm: Double
+    var measuredAtUtc: String
+}
+
+struct HeartQuestionnaire: Codable, Equatable {
+    var schemaVersion = 1
+    var knownHeartCondition: HeartAnswer?
+    var heartRelevantMedication: HeartAnswer?
+    var preRecordingState: HeartAnswer?
+    var actualActivity: HeartAnswer?
+    var acuteHeartRateFactors: [HeartAnswer] = []
+    var referenceMethod: HeartAnswer?
+    var knownHeartConditionDetails: String?
+    var heartRelevantMedicationDetails: String?
+    var referenceArtifact: String?
+    var referenceBpm: HeartBpm?
+
+    static let options: [String: [HeartAnswer]] = [
+        "knownHeartCondition": [.init(key: "no", text: "Нет"), .init(key: "yes", text: "Да"), .init(key: "unknown", text: "Неизвестно")],
+        "heartRelevantMedication": [.init(key: "no", text: "Нет"), .init(key: "yes", text: "Да"), .init(key: "unknown", text: "Неизвестно")],
+        "preRecordingState": [.init(key: "sleeping", text: "Спала"), .init(key: "lying_calm", text: "Спокойно лежала"), .init(key: "awake_calm", text: "Спокойно бодрствовала"), .init(key: "active", text: "Гуляла, бегала или играла"), .init(key: "unknown", text: "Неизвестно")],
+        "actualActivity": [.init(key: "rest", text: "Спала или находилась в покое"), .init(key: "walking", text: "Ходила"), .init(key: "running_playing", text: "Бегала или играла"), .init(key: "changing", text: "Активность менялась"), .init(key: "unknown", text: "Неизвестно")],
+        "acuteHeartRateFactors": [.init(key: "none", text: "Нет"), .init(key: "stress", text: "Стресс или испуг"), .init(key: "pain", text: "Боль"), .init(key: "overheating", text: "Перегрев"), .init(key: "unknown", text: "Неизвестно")],
+        "referenceMethod": [.init(key: "ecg", text: "ЭКГ с временными метками"), .init(key: "polar_rr", text: "Polar с интервалами между ударами и временными метками"), .init(key: "bpm_only", text: "Только число ЧСС, измеренное вручную или прибором"), .init(key: "none", text: "Нет"), .init(key: "unknown", text: "Неизвестно")],
+    ]
+
+    func validate() -> QuestionnaireValidation {
+        var errors: [String: String] = [:]
+        let answers = ["knownHeartCondition": knownHeartCondition, "heartRelevantMedication": heartRelevantMedication,
+            "preRecordingState": preRecordingState, "actualActivity": actualActivity, "referenceMethod": referenceMethod]
+        for (key, answer) in answers {
+            if answer == nil || !Self.options[key]!.contains(answer!) { errors[key] = "Выберите ответ" }
+        }
+        let keys = acuteHeartRateFactors.map(\.key)
+        if keys.isEmpty || Set(keys).count != keys.count || acuteHeartRateFactors.contains(where: { !Self.options["acuteHeartRateFactors"]!.contains($0) }) ||
+            (keys.count > 1 && keys.contains(where: { ["none", "unknown"].contains($0) })) {
+            errors["acuteHeartRateFactors"] = "Выберите факторы; Нет и Неизвестно выбираются отдельно"
+        }
+        if ["ecg", "polar_rr"].contains(referenceMethod?.key ?? ""), (referenceArtifact ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            errors["referenceArtifact"] = "Укажите запись и временную привязку"
+        }
+        if referenceMethod?.key == "bpm_only" {
+            if referenceBpm == nil || !referenceBpm!.bpm.isFinite || referenceBpm!.bpm <= 0 { errors["referenceBpm"] = "Введите положительную ЧСС" }
+            if ReferenceMetadata.date(referenceBpm?.measuredAtUtc ?? "") == nil { errors["referenceMeasuredAtUtc"] = "Введите время UTC" }
+        }
+        for detail in [knownHeartConditionDetails, heartRelevantMedicationDetails, referenceArtifact].compactMap({ $0 }) {
+            if detail.count > 2000 { errors["details"] = "Максимум 2000 символов" }
+        }
+        return QuestionnaireValidation(errors: errors)
+    }
+
+    func normalized() -> Self {
+        var result = self
+        if knownHeartCondition?.key != "yes" { result.knownHeartConditionDetails = nil }
+        if heartRelevantMedication?.key != "yes" { result.heartRelevantMedicationDetails = nil }
+        if !["ecg", "polar_rr"].contains(referenceMethod?.key ?? "") { result.referenceArtifact = nil }
+        if referenceMethod?.key != "bpm_only" { result.referenceBpm = nil }
+        return result
+    }
+}
+
+struct ReferenceMetadata: Codable, Equatable, Sendable {
+    var source = ""
+    var startedAtUtc = ""
+    var endedAtUtc = ""
+    var offsetFromRecordingMs: Double?
+    var notes: String?
+
+    static func date(_ value: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.date(from: value) ?? ISO8601DateFormatter().date(from: value)
+    }
+
+    func validate() -> QuestionnaireValidation {
+        var errors: [String: String] = [:]
+        if source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || source.count > 200 { errors["source"] = "Укажите устройство/источник (до 200 символов)" }
+        let start = Self.date(startedAtUtc), end = Self.date(endedAtUtc)
+        if start == nil { errors["startedAtUtc"] = "Введите время начала UTC" }
+        if end == nil || (start != nil && end! < start!) { errors["endedAtUtc"] = "Введите окончание не раньше начала" }
+        if let offsetFromRecordingMs, !offsetFromRecordingMs.isFinite { errors["offsetFromRecordingMs"] = "Введите число или оставьте пустым" }
+        if let notes, notes.count > 2000 { errors["notes"] = "Максимум 2000 символов" }
+        return QuestionnaireValidation(errors: errors)
+    }
+}
+
+extension SessionQuestionnaire {
+    var readyForSync: Bool { sessionKind != "heart" || heartQuestionnaire?.validate().isValid == true }
+}

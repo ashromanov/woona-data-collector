@@ -1,16 +1,17 @@
-"""Read-only, Label Studio-authenticated overview of recordings and labeling."""
+"""Label Studio-authenticated recording overview and reference uploads."""
 
 import html
 import json
 import os
 import stat
+import uuid
 from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
 from string import Template
 from typing import Literal
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 from urllib.request import Request as UrlRequest, urlopen
 from zoneinfo import ZoneInfo
 
@@ -65,12 +66,12 @@ def records_from_sources() -> tuple[list[dict], dict]:
                    d.number_or_name, v.id AS profile_id, v.validation_state AS profile_state,
                    v.questionnaire AS profile_questionnaire,
                    a.artifact_type, a.file_name, a.expected_size_bytes,
-                   a.server_relative_path, a.storage_status
+                   a.server_relative_path, a.storage_status, a.reference_metadata
             FROM recordings r JOIN dogs d ON d.id=r.dog_id
             JOIN dog_profile_versions v ON v.id=r.dog_profile_version_id
             LEFT JOIN artifacts a ON a.recording_id=r.id
             WHERE r.session_questionnaire->>'schemaVersion'='2'
-              AND (r.session_questionnaire->'plannedActivities') ?| ARRAY['Аллюр/движение','Активность']
+              AND ((r.session_questionnaire->'plannedActivities') ?| ARRAY['Аллюр/движение','Активность'] OR r.session_questionnaire->>'sessionKind'='heart')
             ORDER BY r.started_at DESC, a.id
         """)).mappings().all()
         survey_counts = {
@@ -86,6 +87,7 @@ def records_from_sources() -> tuple[list[dict], dict]:
         record = app_records.setdefault(source_id, {
             "source_id": source_id, "origin": "Woona", "dog": row["number_or_name"],
             "date": row["started_at"].date().isoformat(), "files": [],
+            "recording_id": str(row["id"]), "session_kind": row["session_questionnaire"].get("sessionKind", "activity"),
             "ingest_status": row["ingest_status"], "capture_status": row["capture_status"],
             "profile": {"version_id": str(row["profile_id"]), "state": row["profile_state"],
                         "answers": row["profile_questionnaire"]},
@@ -99,6 +101,7 @@ def records_from_sources() -> tuple[list[dict], dict]:
                                     (relative or ""),
                                     "size": row["expected_size_bytes"],
                                     "type": row["artifact_type"],
+                                    "reference_metadata": row["reference_metadata"],
                                     "available": row["storage_status"] == "available" and
                                     path is not None and STORAGE_ROOT in path.parents and
                                     available_file(path, row["expected_size_bytes"])})
@@ -141,7 +144,7 @@ def summarize(records: list[dict], projects: list[dict], tasks_by_kind: dict, an
         record["ble"] = any(f.get("type") in ("packet", "packet_timeline", "raw", "imported_source")
                             or f["name"].lower().endswith((".bin", ".binlog")) for f in files)
         record["bytes"] = sum(f["size"] for f in files)
-        record["reference_files"] = sum("annotat" in f["name"].lower() or "размет" in f["name"].lower()
+        record["reference_files"] = sum(f.get("type") in ("ecg", "heart_rate", "rr") or "annotat" in f["name"].lower() or "размет" in f["name"].lower()
                                         for f in files)
         record["tasks"] = {kind: {"id": task_maps[kind][record["source_id"]]["id"],
                                    "labeled": bool(task_maps[kind][record["source_id"]].get("is_labeled"))}
@@ -151,7 +154,7 @@ def summarize(records: list[dict], projects: list[dict], tasks_by_kind: dict, an
         record["annotated_all"] = all(record["tasks"][kind] and record["tasks"][kind]["labeled"]
                                       for kind in VIDEO_KINDS)
     records.sort(key=lambda r: (r["date"], r["source_id"]), reverse=True)
-    video_ble = [r for r in records if r["video"] and r["ble"]]
+    video_ble = [r for r in records if r["video"] and r["ble"] and r.get("session_kind") != "heart"]
     return {"updated_at": datetime.now(ZoneInfo("Europe/Moscow")).isoformat(timespec="seconds"),
             "totals": {"groups": len(records), "video_ble": len(video_ble),
                        "annotated_any": sum(r["annotated_any"] for r in video_ble),
@@ -160,7 +163,7 @@ def summarize(records: list[dict], projects: list[dict], tasks_by_kind: dict, an
                        "files": sum(len(r["files"]) for r in records),
                        "available_files": sum(f["available"] for r in records for f in r["files"]),
                        "bytes": sum(r["bytes"] for r in records),
-                        "pending_import": sum(not r["tasks"]["activity"] for r in records),
+                        "pending_import": sum(not r["tasks"]["activity"] and r.get("session_kind") != "heart" for r in records),
                        **extra},
             "ingest": dict(Counter(r["ingest_status"] for r in records)),
             "categories": category, "records": records}
@@ -273,6 +276,11 @@ def render(data: dict, query: str, status: str = "all", ble: str = "all", page: 
                  "Нет пары видео + BLE" if not (record["video"] and record["ble"]) else
                  "Видео размечено" if record["annotated_all"] else "В процессе" if record["annotated_any"] else
                  "Ожидает разметки")
+        if record.get("session_kind") == "heart":
+            state = "Сердцебиение · хранение без разметки"
+            dots = ""
+        if record.get("recording_id"):
+            action += f'<br><a class="action" href="/dashboard/recordings/{record["recording_id"]}/references">Добавить ЭКГ / ЧСС</a>'
         rows.append(f'<tr><td><code class="source-id" title="{escape(source_id, quote=True)}">{escape(short_id)}</code>'
                     f'<div class="sub">{escape(record["dog"])} · {escape(record["date"])} · {escape(record["origin"])}</div></td>'
                     f'<td><span class="pill {"ok" if record["video"] else "neutral"}">Видео: {"есть" if record["video"] else "нет"}</span> '
@@ -332,3 +340,118 @@ def dashboard(q: str = Query("", max_length=100),
 @router.get("/data", dependencies=[Depends(require_label_user)])
 def dashboard_data():
     return JSONResponse(load_dashboard(), headers={"Cache-Control": "no-store"})
+
+
+def require_upload_origin(request: Request) -> None:
+    # Custom header + same-origin check prevent writes via another site's forms.
+    origin = urlsplit(request.headers.get("origin", ""))
+    if request.headers.get("x-woona-upload") != "1" or origin.netloc != request.headers.get("host") or origin.scheme not in ("http", "https"):
+        raise HTTPException(403, "Upload requires a same-origin request")
+
+
+def reference_owner(artifact_id: uuid.UUID) -> uuid.UUID:
+    from server.app import artifact_row, engine, REFERENCE_TYPES
+    with engine.connect() as connection:
+        row = artifact_row(connection, artifact_id)
+    if row is None or row["artifact_type"] not in REFERENCE_TYPES:
+        raise HTTPException(404, "Reference artifact not found")
+    return row["capture_device_id"]
+
+
+@router.get("/recordings/{recording_id}/references", response_class=HTMLResponse, dependencies=[Depends(require_label_user)])
+def reference_form(recording_id: uuid.UUID):
+    from server.app import engine
+    with engine.connect() as connection:
+        recording = connection.execute(text("SELECT r.session_label,d.number_or_name FROM recordings r JOIN dogs d ON d.id=r.dog_id WHERE r.id=:id"), {"id": recording_id}).mappings().first()
+    if recording is None:
+        raise HTTPException(404, "Recording not found")
+    heading = html.escape(recording["number_or_name"] + " → " + recording["session_label"])
+    page = """<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Добавить контрольную запись</title><style>body{font:16px system-ui;max-width:720px;margin:40px auto;padding:16px}label{display:block;margin:16px 0}input,select,textarea,button{display:block;max-width:100%;padding:10px;font:inherit}output{display:block;white-space:pre-wrap}</style>
+<a href="/dashboard">← Все сессии</a><h1>Добавить контрольную запись</h1><p>HEADING</p>
+<p>Исходный файл сохраняется без преобразований в этой сессии. Временная привязка нужна для последующего сопоставления с ошейником. ЧСС без интервалов подходит только для сравнения среднего темпа.</p>
+<form id="form"><label>Тип данных *<select name="type" required><option value="">Выберите тип</option><option value="ecg">ЭКГ</option><option value="heart_rate">ЧСС</option><option value="rr">Интервалы между ударами (Polar и др.)</option></select></label>
+<label>Исходный файл *<input name="file" type="file" required></label>
+<label>Устройство / источник *<input name="source" required maxlength="200"></label>
+<label>Начало контрольной записи UTC *<input name="start" placeholder="2026-10-05T12:00:00Z" required></label>
+<label>Окончание контрольной записи UTC *<input name="end" placeholder="2026-10-05T12:05:00Z" required></label>
+<label>Поправка к UTC таргета, мс (добавляется к его меткам, если известна)<input name="offset" type="number" step="any"></label>
+<label>Временная привязка / примечания<textarea name="notes" maxlength="2000"></textarea></label>
+<button>Добавить файл</button><output id="status" aria-live="polite"></output></form>
+<script>
+const form = document.querySelector('#form'), status = document.querySelector('#status');
+async function send(method, path, body, extra = {}) {
+ const r = await fetch(path, {method, body, headers: {'X-Woona-Upload':'1', ...extra}});
+ if (!r.ok) throw Error(await r.text());
+ return r;
+}
+form.addEventListener('submit', async event => {
+ event.preventDefault(); const button = form.querySelector('button'); button.disabled = true;
+ try {
+  const values = new FormData(form), file = values.get('file');
+  // ponytail: Web Crypto hashes a whole file; use mobile streaming sync for files over 256 MiB.
+  if (file.size > 256 * 1024 * 1024) throw Error('Для файлов больше 256 МиБ используйте загрузку из приложения.');
+  if (!file.size) throw Error('Файл пуст.');
+  status.textContent = 'Проверка файла…';
+  const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', await file.arrayBuffer()))].map(x => x.toString(16).padStart(2,'0')).join('');
+  const identity = `${file.name}:${hash}:${values.get('type')}:${values.get('source')}:${values.get('start')}:${values.get('end')}:${values.get('offset')}:${values.get('notes')}`;
+  if (form.uploadIdentity !== identity) { form.uploadId = crypto.randomUUID(); form.uploadIdentity = identity; }
+  const id = form.uploadId;
+  const artifact = {id, type:values.get('type'), fileName:`reference-${id}-${file.name.slice(-180)}`, mimeType:'application/octet-stream', sizeBytes:file.size, sha256:hash, clientCreatedAtUtc:new Date().toISOString(),
+    referenceMetadata:{source:values.get('source'), startedAtUtc:values.get('start'), endedAtUtc:values.get('end'), offsetFromRecordingMs:values.get('offset') === '' ? null : Number(values.get('offset')), notes:values.get('notes') || null}};
+  await send('POST', '/dashboard/recordings/RECORDING/references', JSON.stringify(artifact), {'Content-Type':'application/json'});
+  const path = `/dashboard/artifacts/${id}/content`, head = await send('HEAD', path);
+  let offset = Number(head.headers.get('Upload-Offset'));
+  while (offset < file.size) {
+   const chunk = file.slice(offset, offset + 8 * 1024 * 1024);
+   const result = await send('PATCH', path, chunk, {'Upload-Offset':String(offset), 'Content-Type':'application/offset+octet-stream'});
+   offset = Number(result.headers.get('Upload-Offset'));
+   status.textContent = `Загружено ${Math.round(100 * offset / file.size)}%`;
+  }
+  await send('POST', `/dashboard/artifacts/${id}/complete`, '{}', {'Content-Type':'application/json'});
+  status.textContent = 'Файл сохранён. Можно вернуться к сессии или добавить следующий.';
+  form.reset(); form.uploadIdentity = null;
+ } catch (error) { status.textContent = `Не удалось загрузить: ${error.message}. Повторите отправку для продолжения.`; }
+ finally { button.disabled = false; }
+});
+</script></html>"""
+    return HTMLResponse(page.replace("HEADING", heading).replace("RECORDING", str(recording_id)), headers={"Cache-Control": "no-store"})
+
+
+@router.post("/recordings/{recording_id}/references", dependencies=[Depends(require_label_user), Depends(require_upload_origin)])
+async def dashboard_add_reference(recording_id: uuid.UUID, request: Request):
+    from pydantic import ValidationError
+    from server.app import ArtifactPayload, MAX_JSON_BYTES, add_reference, engine
+    body = await request.body()
+    if len(body) > MAX_JSON_BYTES:
+        raise HTTPException(413, "Metadata too large")
+    try:
+        artifact = ArtifactPayload.model_validate_json(body)
+    except ValidationError as error:
+        raise HTTPException(422, "Invalid reference metadata") from error
+    with engine.connect() as connection:
+        owner = connection.execute(text("SELECT capture_device_id FROM recordings WHERE id=:id"), {"id": recording_id}).scalar_one_or_none()
+    if owner is None:
+        raise HTTPException(404, "Recording not found")
+    return add_reference(recording_id, artifact, owner)
+
+
+@router.head("/artifacts/{artifact_id}/content", dependencies=[Depends(require_label_user)])
+def dashboard_reference_offset(artifact_id: uuid.UUID):
+    from server.app import head_artifact
+    return head_artifact(artifact_id, reference_owner(artifact_id))
+
+
+@router.patch("/artifacts/{artifact_id}/content", status_code=204, dependencies=[Depends(require_label_user), Depends(require_upload_origin)])
+async def dashboard_reference_chunk(artifact_id: uuid.UUID, request: Request):
+    from server.app import patch_artifact
+    offset = request.headers.get("upload-offset", "")
+    if not offset.isdigit():
+        raise HTTPException(422, "Upload-Offset required")
+    return await patch_artifact(artifact_id, request, reference_owner(artifact_id), int(offset))
+
+
+@router.post("/artifacts/{artifact_id}/complete", dependencies=[Depends(require_label_user), Depends(require_upload_origin)])
+def dashboard_reference_complete(artifact_id: uuid.UUID):
+    from server.app import complete_artifact
+    return complete_artifact(artifact_id, reference_owner(artifact_id))

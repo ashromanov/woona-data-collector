@@ -9,10 +9,10 @@ import csv
 import io
 import json
 import math
-from datetime import date, time
+from datetime import date, time, datetime
 from pathlib import Path
 
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, FormatChecker
 
 DOG_COLUMNS = (
     ("savedAtLocal", "Дата и время сохранения"),
@@ -54,6 +54,18 @@ SESSION_COLUMNS = (
 MODELS = Path(__file__).resolve().parents[1] / "docs/target-server-plan/models"
 
 
+def validate_heart(answers: dict) -> None:
+    schema = json.loads((MODELS / "heart-questionnaire.schema.json").read_text())
+    Draft202012Validator(schema, format_checker=FormatChecker()).validate(answers)
+    bpm = answers.get("referenceBpm")
+    if bpm and not math.isfinite(bpm["bpm"]):
+        raise ValueError("referenceBpm: enter a finite number")
+    if bpm:
+        measured_at = datetime.fromisoformat(bpm["measuredAtUtc"])
+        if measured_at.tzinfo is None:
+            raise ValueError("referenceBpm: include a timezone")
+
+
 def sheet_schema(kind: str) -> dict:
     old = json.loads((MODELS / f"{kind}-questionnaire.schema.json").read_text())
     properties = {}
@@ -73,10 +85,11 @@ def sheet_schema(kind: str) -> dict:
     for key in ("animalId", "numberOrName") if kind == "dog" else ("sessionLabel",):
         properties[key] = {"type": "string", "minLength": 1, "maxLength": 100, "pattern": r"\S"}
     if kind == "session":
+        properties["sessionKind"] = {"enum": ["activity", "heart"]}
+        properties["heartQuestionnaire"] = json.loads((MODELS / "heart-questionnaire.schema.json").read_text())
         properties["durationMinutes"] = {"type": ["number", "null"], "minimum": 0}
         for key in ("plannedActivities", "surfaces"):
             properties[key] = {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 100}, "uniqueItems": True, "maxItems": 30}
-        properties["plannedActivities"]["minItems"] = 1
     required = ["schemaVersion"] + (["animalId", "numberOrName"] if kind == "dog" else ["sessionLabel", "plannedActivities", "videoRequested"])
     return {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "additionalProperties": False,
             "properties": properties, "required": required}
@@ -88,6 +101,10 @@ def validate_sheet(kind: str, answers: dict) -> None:
             raise ValueError(f"{key}: enter a finite number")
     Draft202012Validator(sheet_schema(kind)).validate(answers)
     if kind == "session":
+        if answers.get("sessionKind") == "heart":
+            validate_heart(answers.get("heartQuestionnaire", {}))
+        elif not answers.get("plannedActivities"):
+            raise ValueError("plannedActivities: choose an activity")
         if answers.get("sessionDate"):
             date.fromisoformat(answers["sessionDate"])
         for key in ("startTime", "endTime"):
@@ -99,6 +116,8 @@ def empty_sheet(kind: str) -> dict:
     """Supply compatibility keys so older typed storage decoders remain usable."""
     result = {}
     for key, rule in sheet_schema(kind)["properties"].items():
+        if key in ("sessionKind", "heartQuestionnaire"):
+            continue
         types = rule.get("type", "")
         result[key] = None if "null" in types else [] if types == "array" else True if types == "boolean" else ""
     result["schemaVersion"] = 2

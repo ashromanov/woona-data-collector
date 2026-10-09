@@ -77,6 +77,7 @@ class AppShellNavigationTest {
         ))
 
         navTab("Settings").performClick()
+        composeRule.onNode(hasScrollAction()).performScrollToIndex(3)
         composeRule.onNodeWithText(message).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Retry uploads").performScrollTo().assertIsEnabled()
     }
@@ -308,7 +309,7 @@ class AppShellNavigationTest {
         Espresso.closeSoftKeyboard()
         composeRule.onNodeWithText("Аллюр/движение").performScrollTo().performClick()
         checkbox("Аллюр/движение").assertIsOn()
-        composeRule.onNodeWithText("Активность").performScrollTo().performClick()
+        checkbox("Активность").performScrollTo().performClick()
         checkbox("Аллюр/движение").assertIsOn()
         checkbox("Активность").assertIsOn()
         composeRule.onNodeWithText("Validate and save").performClick()

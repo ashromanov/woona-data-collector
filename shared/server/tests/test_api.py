@@ -279,6 +279,8 @@ class ApiIntegrationTest(unittest.TestCase):
                 "sessionZeroMonotonicNs": 1000000000,
                 "sessionZeroUncertaintyNs": 1000,
                 "firstSensorPacketMonotonicNs": 1001000000,
+                "videoFirstFrameMonotonicNs": 1002000000,
+                "videoOffsetFromSensorNs": 1000000,
                 "cameraClockQuality": "unavailable",
                 "sensorClockQuality": "first_packet_arrival",
                 "overallSyncQuality": "arrival_aligned",

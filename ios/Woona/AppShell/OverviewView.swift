@@ -11,6 +11,11 @@ struct OverviewView: View {
     @State private var isSessionEditorPresented = false
     @State private var pendingDevice: BleDevice?
     @State private var pendingReplayURL: URL?
+    @State private var heartRecording: WoonaRecording?
+    @State private var referenceRecording: WoonaRecording?
+    @State private var isReferenceImporterPresented = false
+    @State private var referenceURL: URL?
+    @State private var isReferenceEditorPresented = false
 
     var body: some View {
         NavigationStack {
@@ -165,6 +170,15 @@ struct OverviewView: View {
                                         .disabled(appState.downloadingRecordingID != nil)
                                     }
                                 }
+                                if recording.endedAtUTC != nil {
+                                    if recording.questionnaire?.sessionKind == "heart", recording.questionnaire?.readyForSync == false {
+                                        Button("Заполнить анкету по сердцебиению") { heartRecording = recording }
+                                    }
+                                    Button("Добавить ЭКГ / ЧСС / интервалы") {
+                                        referenceRecording = recording
+                                        isReferenceImporterPresented = true
+                                    }
+                                }
                             }
                         }
                         if !appState.showingAllRecordings && appState.recentRecordings.count == 10 {
@@ -196,6 +210,27 @@ struct OverviewView: View {
                 }
             }
             .navigationTitle(appState.text(.overview))
+            .onChange(of: appState.recentRecordings) { _, records in
+                if heartRecording == nil, !isSessionEditorPresented {
+                    heartRecording = records.first { $0.endedAtUTC != nil && $0.questionnaire?.sessionKind == "heart" && $0.questionnaire?.readyForSync == false }
+                }
+            }
+            .sheet(item: $heartRecording) { recording in
+                HeartQuestionnaireEditor(initial: appState.heartQuestionnaireDraft(recordingID: recording.id)) { appState.saveHeartQuestionnaire($0, recordingID: recording.id) }
+            }
+            .fileImporter(isPresented: $isReferenceImporterPresented, allowedContentTypes: [.data, .item], allowsMultipleSelection: false) { result in
+                switch result {
+                case .success(let urls): referenceURL = urls.first; isReferenceEditorPresented = referenceURL != nil
+                case .failure(let error): appState.reportError("Не удалось выбрать контрольную запись", error: error)
+                }
+            }
+            .sheet(isPresented: $isReferenceEditorPresented) {
+                if let url = referenceURL, let recording = referenceRecording {
+                    ReferenceAttachmentEditor(url: url) { type, metadata in
+                        appState.attachReference(recordingID: recording.id, type: type, url: url, metadata: metadata)
+                    }
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(appState.text(.export)) {

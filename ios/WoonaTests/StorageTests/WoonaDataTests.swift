@@ -2,6 +2,94 @@ import XCTest
 @testable import Woona
 
 final class WoonaDataTests: XCTestCase {
+    func testUnchangedAnswersDoNotCreateAnotherProfileVersion() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try WoonaStore(rootDirectory: root)
+        let original = try store.saveProfile(completeDog())
+        var answers = original.questionnaire
+        answers.savedAtLocal = "2026-10-09T12:00:00"
+        let saved = try store.saveProfile(answers,replacing:original)
+        XCTAssertEqual(saved.profileVersionID,original.profileVersionID)
+    }
+
+    func testQuestionnairesMatchSharedServerFixtures() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let cases = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent("shared/testdata/questionnaires-v2.json"))) as? [[String:Any]])
+        for item in cases {
+            let data = try JSONSerialization.data(withJSONObject: item["questionnaire"]!)
+            let valid: Bool
+            if item["kind"] as? String == "dog" { valid = try JSONDecoder().decode(DogQuestionnaire.self,from:data).validate().isValid }
+            else { valid = try JSONDecoder().decode(SessionQuestionnaire.self,from:data).validate().isValid }
+            XCTAssertEqual(valid,item["valid"] as? Bool)
+        }
+    }
+
+    func testServerDeletionRemovesOnlyRetiredCompletedUnit() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try WoonaStore(rootDirectory: root)
+        let profile = try store.saveProfile(completeDog())
+        let retired = try store.createRecording(profile: profile, source: "live", questionnaire: completeSession())
+        let source = root.appendingPathComponent("capture.bin")
+        try Data([1,2,3]).write(to: source)
+        try store.finalize(recording: retired, status: "completed", files: [("packet",source,"packets.bin","application/octet-stream")], syncJSON: Data("{}".utf8))
+        let keep = try store.createRecording(profile: profile, source: "live", questionnaire: completeSession())
+        let deletion = ServerDeletion(kind: "recording", id_sha256: WoonaStore.sha256(Data(retired.id.uuidString.lowercased().utf8)))
+        XCTAssertEqual(try store.applyServerDeletions([deletion]),1)
+        XCTAssertNil(try store.recording(id: retired.id))
+        XCTAssertNotNil(try store.recording(id: keep.id))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.directory(for: retired).path))
+        XCTAssertEqual(try store.applyServerDeletions([deletion]),0)
+    }
+
+    func testHeartAnswersReferencesAndRestart() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        var store: WoonaStore? = try WoonaStore(rootDirectory: root)
+        let profile = try store!.saveProfile(completeDog())
+        var session = SessionQuestionnaire()
+        session.schemaVersion = 2
+        session.sessionLabel = "Heart"
+        session.sessionKind = "heart"
+        session.plannedActivities = []
+        session.surfaces = []
+        session.videoRequested = false
+        let recording = try store!.createRecording(profile: profile, source: "live", questionnaire: session)
+        try store!.finalize(recording: recording, status: "completed", files: [], syncJSON: Data("{}".utf8))
+        XCTAssertTrue(try store!.pendingRecordings().isEmpty)
+        func unknown(_ key: String) -> HeartAnswer { HeartQuestionnaire.options[key]!.first { $0.key == "unknown" }! }
+        var heart = HeartQuestionnaire()
+        heart.knownHeartCondition = unknown("knownHeartCondition")
+        heart.heartRelevantMedication = unknown("heartRelevantMedication")
+        heart.preRecordingState = unknown("preRecordingState")
+        heart.actualActivity = unknown("actualActivity")
+        heart.acuteHeartRateFactors = [unknown("acuteHeartRateFactors")]
+        heart.referenceMethod = unknown("referenceMethod")
+        XCTAssertTrue(heart.validate().isValid)
+        var invalid = heart
+        invalid.acuteHeartRateFactors.append(HeartQuestionnaire.options["acuteHeartRateFactors"]!.first { $0.key == "pain" }!)
+        XCTAssertFalse(invalid.validate().isValid)
+        invalid = heart
+        invalid.referenceMethod = HeartQuestionnaire.options["referenceMethod"]!.first { $0.key == "ecg" }
+        XCTAssertFalse(invalid.validate().isValid)
+        try store!.saveHeartQuestionnaire(recordingID: recording.id, heart: heart)
+        XCTAssertEqual(1, try store!.pendingRecordings().count)
+        let bytes = Data("utc,bpm\n2026-10-05T12:00:00Z,120\n".utf8)
+        let input = root.appendingPathComponent("target.csv")
+        try bytes.write(to: input)
+        let metadata = ReferenceMetadata(source: "Polar H10", startedAtUtc: "2026-10-05T12:00:00Z", endedAtUtc: "2026-10-05T12:01:00Z", offsetFromRecordingMs: 0)
+        try store!.attachReference(recordingID: recording.id, type: "rr", sourceURL: input, metadata: metadata)
+        store = nil
+        store = try WoonaStore(rootDirectory: root)
+        let restored = try XCTUnwrap(store!.recording(id: recording.id))
+        XCTAssertEqual(heart, restored.questionnaire?.heartQuestionnaire)
+        let artifact = try XCTUnwrap(store!.artifacts(recordingID: recording.id).first { $0.type == "rr" })
+        XCTAssertEqual(metadata, artifact.referenceMetadata)
+        XCTAssertEqual(bytes, try Data(contentsOf: root.appendingPathComponent(artifact.relativePath)))
+        XCTAssertEqual(profile.questionnaire, try store!.profile(dogID: profile.id, versionID: profile.profileVersionID)?.questionnaire)
+    }
+
     func testSheetQuestionnaireRoundTripAndDogLink() throws {
         var dog = DogQuestionnaire()
         dog.schemaVersion = 2

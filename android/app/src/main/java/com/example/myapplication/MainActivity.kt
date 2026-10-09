@@ -30,6 +30,7 @@ import com.example.myapplication.data.markArtifactDownloaded
 import com.example.myapplication.data.remoteArtifacts
 import com.example.myapplication.data.resetFailedSync
 import com.example.myapplication.data.restoreServerMetadata
+import com.example.myapplication.data.applyServerDeletions
 import com.example.myapplication.data.serverSyncCounts
 import com.example.myapplication.data.sessionQuestionnaireFromJson
 import com.example.myapplication.data.toJson
@@ -42,6 +43,9 @@ import com.example.myapplication.localization.AppTextResolver
 import com.example.myapplication.profile.DogQuestionnaireDialog
 import com.example.myapplication.profile.ProfilesOverview
 import com.example.myapplication.profile.SessionQuestionnaireDialog
+import com.example.myapplication.profile.HeartQuestionnaireDialog
+import com.example.myapplication.profile.ReferenceAttachmentDialog
+import com.example.myapplication.data.heartQuestionnaireDraft
 import com.example.myapplication.sync.ServerSettingsDialog
 import com.example.myapplication.sync.ServerSettingsStore
 import com.example.myapplication.sync.ServerApiClient
@@ -97,6 +101,11 @@ class MainActivity : ComponentActivity() {
     private var isDogQuestionnaireVisible by mutableStateOf(false)
     private var editingProfile by mutableStateOf<DogProfile?>(null)
     private var isSessionQuestionnaireVisible by mutableStateOf(false)
+    private var heartQuestionnaireRecordingId by mutableStateOf<String?>(null)
+    private var referenceRecordingId: String? = null
+    private var referenceUri by mutableStateOf<android.net.Uri?>(null)
+
+    private val referencePicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri -> referenceUri = uri }
     private var pendingLiveAddress: String? = null
     private var pendingReplayQuestionnaire: SessionQuestionnaire? = null
     private var isChartFullscreenActive = false
@@ -381,6 +390,8 @@ class MainActivity : ComponentActivity() {
                                     deviceFeatureController.onPolarConnectRequested(device.address, device.name)
                                 },
                                 onPolarDisconnect = deviceFeatureController::onPolarDisconnectRequested,
+                                onHeartQuestionnaire = { heartQuestionnaireRecordingId = it },
+                                onAddReference = { referenceRecordingId = it; referencePicker.launch("*/*") },
                             )
                         },
                     )
@@ -425,6 +436,37 @@ class MainActivity : ComponentActivity() {
                                     replayFilePickerLauncher.launch("*/*")
                                 } else {
                                     startLiveRecording(address, questionnaire)
+                                }
+                            },
+                        )
+                    }
+                    heartQuestionnaireRecordingId?.let { id ->
+                        HeartQuestionnaireDialog(
+                            language = selectedLanguage,
+                            initial = woonaDatabase.heartQuestionnaireDraft(id),
+                            onDismiss = { heartQuestionnaireRecordingId = null },
+                            onSave = {
+                                woonaDatabase.saveHeartQuestionnaire(id, it)
+                                heartQuestionnaireRecordingId = null
+                                handleRecordingChanged()
+                            },
+                        )
+                    }
+                    referenceUri?.let { uri ->
+                        val name = contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+                            if (it.moveToFirst()) it.getString(0) else null
+                        } ?: "data.bin"
+                        ReferenceAttachmentDialog(selectedLanguage, name,
+                            onDismiss = { referenceUri = null; referenceRecordingId = null },
+                            onSave = { type, metadata ->
+                                val id = requireNotNull(referenceRecordingId)
+                                referenceUri = null
+                                referenceRecordingId = null
+                                backgroundExecutor.execute {
+                                    try {
+                                        woonaDatabase.attachReference(id, type, name, requireNotNull(contentResolver.openInputStream(uri)), metadata)
+                                        handleRecordingChanged()
+                                    } catch (error: Exception) { runOnUiThread { Toast.makeText(this, error.message, Toast.LENGTH_LONG).show() } }
                                 }
                             },
                         )
@@ -599,6 +641,9 @@ class MainActivity : ComponentActivity() {
     private fun handleRecordingChanged() {
         runOnUiThread {
             refreshProfilesAndRecordings()
+            recentRecordings.firstOrNull {
+                it.endedAtUtc != null && it.questionnaire?.sessionKind == "heart" && it.questionnaire.heartQuestionnaire == null
+            }?.let { if (heartQuestionnaireRecordingId == null) heartQuestionnaireRecordingId = it.id }
             ServerSyncScheduler.enqueuePending(applicationContext)
             refreshServerState()
         }
@@ -634,7 +679,9 @@ class MainActivity : ComponentActivity() {
         backgroundExecutor.execute {
             val outcome = runCatching {
                 val snapshot = ServerApiClient(settings).fetchRestoreSnapshot()
-                woonaDatabase.restoreServerMetadata(snapshot.dogs, snapshot.recordings)
+                val restored = woonaDatabase.restoreServerMetadata(snapshot.dogs, snapshot.recordings)
+                woonaDatabase.applyServerDeletions(snapshot.deletions)
+                restored
             }
             runOnUiThread {
                 isServerRestoreInProgress = false

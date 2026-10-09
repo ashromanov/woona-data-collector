@@ -83,6 +83,7 @@ final class AppViewModel: ObservableObject {
     private var captureSessionZeroUncertaintyNs: UInt64?
     private var captureStopInProgress = false
     private var hasPreparedActiveCapture = false
+    private var syncingRecordingIDs = Set<UUID>()
 
     init(store: WoonaStore? = try? WoonaStore()) {
         self.store = store
@@ -674,6 +675,41 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    func saveHeartQuestionnaire(_ heart: HeartQuestionnaire, recordingID: UUID) {
+        do {
+            guard let store else { return }
+            try store.saveHeartQuestionnaire(recordingID: recordingID, heart: heart)
+            reloadRecentRecordings()
+            if let recording = try store.recording(id: recordingID) { Task { await sync(recording: recording) } }
+        } catch { showError("Не удалось сохранить анкету по сердцебиению", error: error) }
+    }
+
+    func heartQuestionnaireDraft(recordingID: UUID) -> HeartQuestionnaire {
+        let artifacts = (try? store?.artifacts(recordingID: recordingID)) ?? []
+        let artifact = artifacts.first { $0.type == "ecg" }
+            ?? artifacts.first { $0.type == "rr" && $0.referenceMetadata?.source.localizedCaseInsensitiveContains("polar") == true }
+        var draft = HeartQuestionnaire()
+        if let artifact {
+            let method = artifact.type == "ecg" ? "ecg" : "polar_rr"
+            draft.referenceMethod = HeartQuestionnaire.options["referenceMethod"]!.first { $0.key == method }
+            draft.referenceArtifact = "\(artifact.fileName); \(artifact.referenceMetadata?.startedAtUtc ?? "") – \(artifact.referenceMetadata?.endedAtUtc ?? "")"
+        }
+        return draft
+    }
+
+    func attachReference(recordingID: UUID, type: String, url: URL, metadata: ReferenceMetadata) {
+        guard let root = store?.rootDirectory else { return }
+        Task {
+            do {
+                try await Task.detached(priority: .userInitiated) {
+                    try WoonaStore(rootDirectory: root).attachReference(recordingID: recordingID, type: type, sourceURL: url, metadata: metadata)
+                }.value
+                reloadRecentRecordings()
+                if let recording = try store?.recording(id: recordingID), recording.questionnaire?.readyForSync != false { await sync(recording: recording) }
+            } catch { showError("Не удалось добавить контрольную запись", error: error) }
+        }
+    }
+
     func showAllRecordings() {
         showingAllRecordings = true
         reloadRecentRecordings()
@@ -724,7 +760,7 @@ final class AppViewModel: ObservableObject {
     private func uploadProfile(_ profile: DogProfile) async {
         guard !serverToken.isEmpty, let store else { return }
         do {
-            let revision = try await serverClient().upload(profile: profile)
+            let revision = try await serverClient().upload(profile: profile, store: store)
             try store.setServerRevision(dogID: profile.id, revision: revision)
             reloadProfiles(selecting: profile.id)
         } catch { showError("Profile upload failed", error: error) }
@@ -755,11 +791,12 @@ final class AppViewModel: ObservableObject {
         if let rawFile { files.append(("raw", rawFile, "raw_fragments.binlog", "application/octet-stream")) }
         if let logFile { files.append(("diagnostic", logFile, "diagnostics.log", "text/plain")) }
         let video = store.directory(for: recording).appendingPathComponent("video.mp4")
-        if FileManager.default.fileExists(atPath: video.path), !isCameraDegraded {
+        if FileManager.default.fileExists(atPath: video.path) {
             files.append(("video", video, "video.mp4", "video/mp4"))
         }
-        let sensorTime = packetIngressGate.firstTimestamp
-        let lastSensorTime = packetIngressGate.lastTimestamp
+        let acceptedTiming = await packetProcessor.acceptedPacketTiming()
+        let sensorTime = acceptedTiming?.first
+        let lastSensorTime = acceptedTiming?.last
         let info = cameraCaptureInfo
         let fallbackWallClockMs = Int64((ISO8601DateFormatter().date(from: recording.startedAtUTC)?.timeIntervalSince1970 ?? 0) * 1_000)
         var sync: [String: Any] = [
@@ -771,10 +808,11 @@ final class AppViewModel: ObservableObject {
             "sessionZeroUncertaintyNs": captureSessionZeroUncertaintyNs ?? 0,
             "cameraClockQuality": info?.clockQuality ?? "unavailable",
             "sensorClockQuality": sensorTime == nil ? "unavailable" : "first_packet_arrival",
-            "overallSyncQuality": sensorTime != nil && info?.clockQuality == "callback_estimate" ? "callback_estimate" : (sensorTime != nil ? "arrival_aligned" : "unavailable"),
+            "overallSyncQuality": sensorTime != nil && info?.firstFrameMonotonicNs != nil ? (info?.clockQuality == "callback_estimate" ? "callback_estimate" : "arrival_aligned") : "unavailable",
             "calibrationOffsetNs": 0,
         ]
         if let sensorTime { sync["firstSensorPacketMonotonicNs"] = sensorTime }
+        if let timer = acceptedTiming?.deviceTimer { sync["firstSensorDeviceTimerMs"] = timer }
         if let lastSensorTime { sync["lastSensorPacketMonotonicNs"] = lastSensorTime }
         if let info {
             sync["videoRequestedMonotonicNs"] = info.requestedMonotonicNs
@@ -807,7 +845,9 @@ final class AppViewModel: ObservableObject {
     }
 
     private func sync(recording: WoonaRecording) async {
-        guard !serverToken.isEmpty, let store else { return }
+        guard !serverToken.isEmpty, let store, recording.questionnaire?.readyForSync != false, !syncingRecordingIDs.contains(recording.id) else { return }
+        syncingRecordingIDs.insert(recording.id)
+        defer { syncingRecordingIDs.remove(recording.id) }
         do {
             guard let profile = try store.profile(dogID: recording.dogID, versionID: recording.profileVersionID) else {
                 throw WoonaStoreError.invalidData("Recording profile version is missing")
@@ -815,6 +855,9 @@ final class AppViewModel: ObservableObject {
             try await serverClient().upload(recording: recording, profile: profile, store: store)
             reloadRecentRecordings()
             await reloadServerRecordings()
+            if let latest = try store.recording(id: recording.id), latest.serverSyncState == "pending" {
+                Task { await self.sync(recording: latest) }
+            }
         } catch {
             reloadRecentRecordings()
             showError("Recording upload failed", error: error)
@@ -921,9 +964,11 @@ final class AppViewModel: ObservableObject {
     }
 
     private func makePacketFragmentSubmitter() -> PacketFragmentSubmitter {
-        PacketFragmentSubmitter(
+        let ingress = packetIngressGate
+        return PacketFragmentSubmitter(
             packetProcessor: packetProcessor,
             maxPendingFragments: Self.maxPendingPacketFragments,
+            onIngressStop: { ingress.stop() },
             onOverflow: { [weak self] in
                 guard let self else { return }
                 await MainActor.run {
@@ -1351,10 +1396,11 @@ final class AppViewModel: ObservableObject {
     }
 }
 
-private final class PacketFragmentSubmitter: @unchecked Sendable {
+final class PacketFragmentSubmitter: @unchecked Sendable {
     private let packetProcessor: PacketCaptureProcessor
     private let maxPendingFragments: Int
     private let onOverflow: @Sendable () async -> Void
+    private let onIngressStop: @Sendable () -> Void
     private let lock = NSLock()
 
     private var pendingFragments: [QueuedPacketFragment] = []
@@ -1366,11 +1412,13 @@ private final class PacketFragmentSubmitter: @unchecked Sendable {
     init(
         packetProcessor: PacketCaptureProcessor,
         maxPendingFragments: Int,
+        onIngressStop: @escaping @Sendable () -> Void = {},
         onOverflow: @escaping @Sendable () async -> Void
     ) {
         self.packetProcessor = packetProcessor
         self.maxPendingFragments = max(0, maxPendingFragments)
         self.onOverflow = onOverflow
+        self.onIngressStop = onIngressStop
     }
 
     func enqueue(_ data: Data, receivedAtMonotonicNs: UInt64? = nil) {
@@ -1383,8 +1431,11 @@ private final class PacketFragmentSubmitter: @unchecked Sendable {
         let action = lock.withLock {
             guard !isFinishing else { return EnqueueAction.none }
             guard pendingQueueDepthLocked() < maxPendingFragments else {
-                stopAfterOverflowLocked(completeActiveDrain: false)
-                return EnqueueAction.overflow
+                pendingFragments.append(QueuedPacketFragment(generation: generation,bytes: bytes,receivedAtMonotonicNs: receivedAtMonotonicNs))
+                isFinishing = true
+                let startDrain = !isDraining
+                isDraining = true
+                return EnqueueAction.overflow(startDrain)
             }
             pendingFragments.append(
                 QueuedPacketFragment(
@@ -1405,7 +1456,9 @@ private final class PacketFragmentSubmitter: @unchecked Sendable {
             Task(priority: .userInitiated) {
                 await drain()
             }
-        case .overflow:
+        case .overflow(let startDrain):
+            onIngressStop()
+            if startDrain { Task(priority: .userInitiated) { await drain() } }
             Task(priority: .userInitiated) {
                 await onOverflow()
             }
@@ -1458,9 +1511,9 @@ private final class PacketFragmentSubmitter: @unchecked Sendable {
                 receivedAtMonotonicNs: fragment.receivedAtMonotonicNs
             )
             if submitResult == .overflow {
-                stopAfterOverflowFromDrain()
+                lock.withLock { isFinishing = true }
+                onIngressStop()
                 await onOverflow()
-                return
             }
         }
     }
@@ -1485,22 +1538,6 @@ private final class PacketFragmentSubmitter: @unchecked Sendable {
         }
     }
 
-    private func stopAfterOverflowFromDrain() {
-        lock.withLock {
-            stopAfterOverflowLocked(completeActiveDrain: true)
-        }
-    }
-
-    private func stopAfterOverflowLocked(completeActiveDrain: Bool) {
-        generation += 1
-        pendingFragments.removeAll(keepingCapacity: true)
-        pendingHeadIndex = 0
-        isFinishing = true
-        if completeActiveDrain {
-            isDraining = false
-        }
-    }
-
     private func pendingQueueDepthLocked() -> Int {
         max(pendingFragments.count - pendingHeadIndex, 0)
     }
@@ -1521,23 +1558,16 @@ private final class PacketFragmentSubmitter: @unchecked Sendable {
     private enum EnqueueAction {
         case none
         case startDrain
-        case overflow
+        case overflow(Bool)
     }
 }
 
 private final class PacketIngressGate: @unchecked Sendable {
     private let lock = NSLock()
     private var active = false
-    private var first: UInt64?
-    private var last: UInt64?
-
-    var firstTimestamp: UInt64? { lock.withLock { first } }
-    var lastTimestamp: UInt64? { lock.withLock { last } }
 
     func start() {
         lock.withLock {
-            first = nil
-            last = nil
             active = true
         }
     }
@@ -1548,8 +1578,6 @@ private final class PacketIngressGate: @unchecked Sendable {
         lock.withLock {
             guard active else { return nil }
             let timestamp = HostClock.nowNanoseconds()
-            if first == nil { first = timestamp }
-            last = timestamp
             return timestamp
         }
     }

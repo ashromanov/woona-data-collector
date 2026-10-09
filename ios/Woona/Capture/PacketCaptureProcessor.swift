@@ -25,6 +25,9 @@ actor PacketCaptureProcessor {
     private var receivedFragmentCount: UInt64 = 0
     private var receivedRawBytes: UInt64 = 0
     private var lastAcceptedTimerMillis: UInt64?
+    private var firstAcceptedPacketMonotonicNs: UInt64?
+    private var lastAcceptedPacketMonotonicNs: UInt64?
+    private var firstAcceptedDeviceTimerMillis: UInt64?
     private var rejectionCounts: [String: UInt64] = [:]
     private var rejectionReasonOrder: [String] = []
     private var nextDiagnosticEventId: UInt64 = 0
@@ -161,6 +164,9 @@ actor PacketCaptureProcessor {
             receivedFragmentCount = 0
             receivedRawBytes = 0
             lastAcceptedTimerMillis = nil
+            firstAcceptedPacketMonotonicNs = nil
+            lastAcceptedPacketMonotonicNs = nil
+            firstAcceptedDeviceTimerMillis = nil
             rejectionCounts.removeAll(keepingCapacity: true)
             rejectionReasonOrder.removeAll(keepingCapacity: true)
             nextDiagnosticEventId = 0
@@ -212,6 +218,13 @@ actor PacketCaptureProcessor {
 
     func currentPacketFile() -> URL? {
         packetFileStore.currentFile()
+    }
+
+    func acceptedPacketTiming() -> (first: UInt64, last: UInt64, deviceTimer: UInt64)? {
+        guard let first = firstAcceptedPacketMonotonicNs,
+              let last = lastAcceptedPacketMonotonicNs,
+              let deviceTimer = firstAcceptedDeviceTimerMillis else { return nil }
+        return (first, last, deviceTimer)
     }
 
     func currentRawFile() -> URL? {
@@ -387,6 +400,11 @@ actor PacketCaptureProcessor {
                         hostMonotonicNs: Int64(bitPattern: receivedAtMonotonicNs),
                         packetBytes: Int32(packet.bytes.count)
                     )
+                    if firstAcceptedPacketMonotonicNs == nil {
+                        firstAcceptedPacketMonotonicNs = receivedAtMonotonicNs
+                        firstAcceptedDeviceTimerMillis = packet.timerMillis
+                    }
+                    lastAcceptedPacketMonotonicNs = receivedAtMonotonicNs
                 }
             } catch {
                 let message = "Failed to write accepted packet"

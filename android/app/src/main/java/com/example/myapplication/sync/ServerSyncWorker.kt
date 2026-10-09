@@ -29,6 +29,14 @@ import com.example.myapplication.data.pendingProfileVersionIds
 import com.example.myapplication.data.pendingRecordingIds
 import com.example.myapplication.data.profileSyncRecord
 import com.example.myapplication.data.recordingSyncRecord
+import com.example.myapplication.data.readyForSync
+import com.example.myapplication.data.applyServerDeletions
+import com.example.myapplication.data.acceptServerProfile
+import com.example.myapplication.data.acceptServerRecording
+import com.example.myapplication.data.restoreServerMetadata
+import com.example.myapplication.data.dogQuestionnaireFromJson
+import com.example.myapplication.data.sessionQuestionnaireFromJson
+import com.example.myapplication.data.validate
 import com.example.myapplication.R
 import java.io.IOException
 import java.util.concurrent.TimeUnit
@@ -51,9 +59,12 @@ class ProfileSyncWorker(
                 )
                 return Result.failure()
             }
-            val profile = database.profileSyncRecord(profileVersionId) ?: return Result.failure()
+            val client = ServerApiClient(settings)
+            database.applyServerDeletions(client.fetchDeletions())
+            val profile = database.profileSyncRecord(profileVersionId) ?: return Result.success()
             database.markProfileUploading(profileVersionId)
-            val receipt = ServerApiClient(settings).uploadProfile(profile)
+            val receipt = client.uploadProfile(profile)
+            receipt.profileVersion?.let { database.acceptServerProfile(profile.dogId, it) }
             database.markProfileSynced(
                 profileVersionId,
                 profile.dogId,
@@ -101,6 +112,10 @@ class RecordingSyncWorker(
         val recordingId = inputData.getString(KEY_ID) ?: return Result.failure()
         setForeground(foregroundInfo(recordingId))
         val database = WoonaDatabase(applicationContext)
+        if (database.recording(recordingId)?.questionnaire?.readyForSync() == false) {
+            database.close()
+            return Result.success()
+        }
         return try {
             val settings = ServerSettingsStore(applicationContext).get()
             if (!settings.isConfigured) {
@@ -112,9 +127,23 @@ class RecordingSyncWorker(
                 )
                 return Result.failure()
             }
-            var record = database.recordingSyncRecord(recordingId) ?: return Result.failure()
             val client = ServerApiClient(settings)
+            database.applyServerDeletions(client.fetchDeletions())
+            var record = database.recordingSyncRecord(recordingId) ?: return Result.success()
+            val accepted = try { client.fetchRecording(recordingId) }
+                catch (error: ServerHttpException) { if (error.status == 404) null else throw error }
+            if (accepted?.receiptSha256 != null) {
+                database.restoreServerMetadata(listOf(client.fetchDog(accepted.dogId)),listOf(accepted))
+                database.markRecordingSynced(recordingId,accepted.receiptSha256,requireNotNull(accepted.verifiedAtUtc))
+                if (record.artifacts.none { it.type in setOf("ecg","heart_rate","rr") && it.uploadState != "available" }) return Result.success()
+                record = database.recordingSyncRecord(recordingId) ?: return Result.success()
+            }
+            require(dogQuestionnaireFromJson(record.profile.questionnaireJson).validate().isValid &&
+                sessionQuestionnaireFromJson(record.sessionQuestionnaireJson).validate().isValid) {
+                "Анкета не прошла локальную проверку"
+            }
             val profileReceipt = client.uploadProfile(record.profile)
+            profileReceipt.profileVersion?.let { database.acceptServerProfile(record.dogId, it) }
             database.markProfileSynced(
                 record.profileVersionId,
                 record.dogId,
@@ -132,12 +161,13 @@ class RecordingSyncWorker(
                     database.markArtifactProgress(artifactId, uploadedBytes, available)
                 },
             )
+            database.acceptServerRecording(client.fetchRecording(recordingId))
             database.markRecordingSynced(
                 recordingId,
                 receipt.receiptSha256,
                 receipt.verifiedAtUtc,
             )
-            Result.success()
+            if (database.recording(recordingId)?.serverSyncState == "pending") Result.retry() else Result.success()
         } catch (exception: Exception) {
             val retryable = exception.isRetryable()
             database.markRecordingSyncError(

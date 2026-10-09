@@ -21,6 +21,7 @@ import java.nio.file.StandardCopyOption
 data class ProfileServerReceipt(
     val dogRevision: Long,
     val serverTimestampUtc: String,
+    val profileVersion: RemoteProfileVersion? = null,
 )
 
 data class RecordingServerReceipt(
@@ -31,6 +32,7 @@ data class RecordingServerReceipt(
 data class ServerRestoreSnapshot(
     val dogs: List<RemoteDog>,
     val recordings: List<RemoteRecording>,
+    val deletions: List<Pair<String, String>> = emptyList(),
 )
 
 class ServerHttpException(
@@ -61,6 +63,7 @@ class ServerApiClient(
         return ProfileServerReceipt(
             dogRevision = response.getLong("dogRevision"),
             serverTimestampUtc = response.getString("serverTimestampUtc"),
+            profileVersion = response.optJSONObject("profileVersion")?.let(::parseProfile),
         )
     }
 
@@ -69,12 +72,22 @@ class ServerApiClient(
         fileForArtifact: (String) -> File,
         onProgress: (artifactId: String, uploadedBytes: Long, available: Boolean) -> Unit,
     ): RecordingServerReceipt {
-        jsonRequest(
+        val existing = try { jsonRequest("GET", "/v1/recordings/${record.id}/sync-status", null) }
+            catch (error: ServerHttpException) { if (error.status == 404) null else throw error }
+        val alreadyComplete = existing?.optString("ingestStatus") == "complete"
+        if (!alreadyComplete) jsonRequest(
             method = "PUT",
             path = "/v1/recordings/${record.id}",
             body = recordingManifest(record),
         )
-        record.artifacts.forEach { artifact ->
+        val references = record.artifacts.filter { it.type in setOf("ecg", "heart_rate", "rr") && it.uploadState != "available" }
+        if (alreadyComplete) references.forEach { artifact ->
+            val payload = recordingManifest(record).getJSONArray("artifacts").let { items ->
+                (0 until items.length()).map { items.getJSONObject(it) }.first { it.getString("id") == artifact.id }
+            }
+            jsonRequest("POST", "/v1/recordings/${record.id}/references", payload)
+        }
+        (if (alreadyComplete) references else record.artifacts).forEach { artifact ->
             val file = fileForArtifact(artifact.id)
             require(file.isFile && file.length() == artifact.sizeBytes) {
                 "Artifact ${artifact.id} is missing or changed"
@@ -96,7 +109,7 @@ class ServerApiClient(
             jsonRequest("POST", "/v1/artifacts/${artifact.id}/complete", JSONObject())
             onProgress(artifact.id, artifact.sizeBytes, true)
         }
-        val receipt = jsonRequest("POST", "/v1/recordings/${record.id}/complete", JSONObject())
+        val receipt = if (alreadyComplete) requireNotNull(existing) else jsonRequest("POST", "/v1/recordings/${record.id}/complete", JSONObject())
         return RecordingServerReceipt(
             receiptSha256 = receipt.getString("receiptSha256"),
             verifiedAtUtc = receipt.getString("verifiedAtUtc"),
@@ -202,8 +215,21 @@ class ServerApiClient(
             }
             dogCursor = page.nullableString("nextCursor")
         } while (dogCursor != null)
-        return ServerRestoreSnapshot(dogs, recordings)
+        return ServerRestoreSnapshot(dogs, recordings, fetchDeletions())
     }
+
+    fun fetchDeletions(): List<Pair<String, String>> {
+        val entities = jsonRequest("GET", "/v1/deletions", null).getJSONArray("entities")
+        return (0 until entities.length()).map { index ->
+            val item = entities.getJSONObject(index)
+            item.getString("kind") to item.getString("id_sha256")
+        }
+    }
+
+    fun fetchRecording(recordingId: String): RemoteRecording =
+        parseRecording(jsonRequest("GET", "/v1/recordings/$recordingId", null))
+
+    fun fetchDog(dogId: String): RemoteDog = parseDog(jsonRequest("GET", "/v1/dogs/$dogId",null))
 
     fun readiness(): Boolean {
         val connection = open("GET", "/health/ready", authenticated = false)
@@ -375,6 +401,7 @@ class ServerApiClient(
                             put("sizeBytes", artifact.sizeBytes)
                             put("sha256", artifact.sha256)
                             put("clientCreatedAtUtc", artifact.clientCreatedAtUtc)
+                            artifact.referenceMetadataJson?.let { put("referenceMetadata", JSONObject(it)) }
                         },
                     )
                 }
@@ -468,6 +495,7 @@ class ServerApiClient(
                             sizeBytes = artifact.getLong("sizeBytes"),
                             sha256 = artifact.getString("sha256"),
                             storageStatus = artifact.getString("storageStatus"),
+                            referenceMetadataJson = artifact.optJSONObject("referenceMetadata")?.toString(),
                         ),
                     )
                 }

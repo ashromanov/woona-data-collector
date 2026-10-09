@@ -438,16 +438,25 @@ struct SessionQuestionnaireEditor: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section("Вид сессии") {
+                    Picker("Вид сессии", selection: Binding(get: { draft.sessionKind ?? "activity" }, set: { draft.sessionKind = $0; if $0 == "heart" { draft.videoRequested = false } })) {
+                        Text("Активность").tag("activity")
+                        Text("Сердцебиение").tag("heart")
+                    }.pickerStyle(.segmented)
+                }
                 Section("Сессия") {
                     Text("Собака связывается с выбранной карточкой. Технические время и длительность записываются автоматически.")
                     TextField("Номер сессии *", text: $draft.sessionLabel)
+                    if draft.sessionKind != "heart" {
                     TextField("Дата сессии (ГГГГ-ММ-ДД)", text: text(\.sessionDate))
                     TextField("Время начала записи (ЧЧ:ММ, для импорта)", text: text(\.startTime))
                     TextField("Время окончания (ЧЧ:ММ, для импорта)", text: text(\.endTime))
                     TextField("Фактическая продолжительность, мин (для импорта)", text: decimal(\.durationMinutes)).keyboardType(.decimalPad)
                     TextField("Кто проводил запись", text: $draft.operatorName)
+                    }
                     Toggle("Записывать видео", isOn: $draft.videoRequested).disabled(source == "replay")
                 }
+                if draft.sessionKind != "heart" {
                 Section("Что планировалось записывать *") {
                     ForEach(["Аллюр/движение", "Активность", "Покой", "Другое"], id: \.self) { value in
                         Toggle(value, isOn: multiple(\.plannedActivities, value))
@@ -472,6 +481,7 @@ struct SessionQuestionnaireEditor: View {
                     TextField("Примечания", text: text(\.notes), axis: .vertical)
                     TextField("ФИО специалиста, проводящего запись", text: text(\.specialistName))
                 }
+                } else { Text("Анкета по сердцебиению заполняется после записи. Контрольные файлы можно добавить позже.") }
                 ForEach(errors.keys.sorted(), id: \.self) { key in Text("\(key): \(errors[key]!)").foregroundStyle(.red) }
             }
             .onAppear { draft.schemaVersion = 2; draft.plannedActivities = draft.plannedActivities ?? []; draft.surfaces = draft.surfaces ?? []; if source == "replay" { draft.videoRequested = false } }
@@ -515,5 +525,119 @@ private func sheetPicker(_ title: String, selection: Binding<String>, values: [S
     let options = [""] + values + (current.isEmpty || values.contains(current) ? [] : [current])
     return Picker(title, selection: selection) {
         ForEach(options, id: \.self) { Text($0.isEmpty ? "Не указано" : $0).tag($0) }
+    }
+}
+
+struct HeartQuestionnaireEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var draft = HeartQuestionnaire()
+    @State private var bpm = ""
+    @State private var measuredAt = ""
+    @State private var errors: [String: String] = [:]
+    let initial: HeartQuestionnaire
+    let onSave: (HeartQuestionnaire) -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Text("Опишите состояние собаки и условия записи. Анкета не ставит диагноз и не изменяет карточку собаки. Заполните все обязательные вопросы; если ответ неизвестен, выберите «Неизвестно».")
+                Section("1. Сведения о сердце и препаратах") {
+                    choice("1.1. Диагностировал ли ветеринар заболевание сердца или нарушение ритма? *", "knownHeartCondition", $draft.knownHeartCondition)
+                    if draft.knownHeartCondition?.key == "yes" { TextField("Какой диагноз? (необязательно)", text: optional(\.knownHeartConditionDetails)) }
+                    choice("1.2. Принимала ли собака препараты, которые могут повлиять на частоту сердечных сокращений (ЧСС)? *", "heartRelevantMedication", $draft.heartRelevantMedication)
+                    if draft.heartRelevantMedication?.key == "yes" { TextField("Название препарата и время последнего приёма (необязательно)", text: optional(\.heartRelevantMedicationDetails)) }
+                    Text("Если оператор не знает, не нужно оценивать препарат самостоятельно — выберите «Неизвестно».")
+                }
+                Section("2. Условия записи") {
+                    choice("2.1. Что собака делала непосредственно перед началом записи? *", "preRecordingState", $draft.preRecordingState)
+                    choice("2.2. Что собака фактически делала во время записи? *", "actualActivity", $draft.actualActivity)
+                    Text("2.3. Были ли во время записи факторы, способные изменить ЧСС? *")
+                    ForEach(HeartQuestionnaire.options["acuteHeartRateFactors"]!, id: \.key) { answer in
+                        Toggle(answer.text, isOn: Binding(get: { draft.acuteHeartRateFactors.contains(answer) }, set: { selected in
+                            draft.acuteHeartRateFactors.removeAll { $0 == answer || (selected && (["none", "unknown"].contains(answer.key) || ["none", "unknown"].contains($0.key))) }
+                            if selected { draft.acuteHeartRateFactors.append(answer) }
+                        }))
+                    }
+                    Text("«Нет» и «Неизвестно» нельзя сочетать с другими вариантами.")
+                }
+                Section("3. Контрольное измерение") {
+                    choice("3.1. Есть ли независимое измерение сердцебиения за тот же период? *", "referenceMethod", $draft.referenceMethod)
+                    if ["ecg", "polar_rr"].contains(draft.referenceMethod?.key ?? "") {
+                        TextField("Файл или идентификатор контрольной записи и её временная привязка *", text: optional(\.referenceArtifact), axis: .vertical)
+                    }
+                    if draft.referenceMethod?.key == "bpm_only" {
+                        TextField("Измеренная ЧСС, уд/мин *", text: $bpm).keyboardType(.decimalPad)
+                        TextField("Время измерения UTC * (ГГГГ-ММ-ДДTЧЧ:ММ:ССZ)", text: $measuredAt)
+                    }
+                    Text("Файл ЭКГ или интервалы с временными метками нужны для проверки отдельных ударов. Одиночное значение ЧСС подходит только для сравнения среднего темпа. По ответам анкеты нельзя делать заключение об аритмии.")
+                }
+                ForEach(errors.keys.sorted(), id: \.self) { key in Text(errors[key]!).foregroundStyle(.red) }
+            }
+            .navigationTitle("Анкета по активности и сердцебиению")
+            .onAppear {
+                if draft.referenceMethod == nil {
+                    draft.referenceMethod = initial.referenceMethod
+                    draft.referenceArtifact = initial.referenceArtifact
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Позже") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button("Сохранить") {
+                    if draft.referenceMethod?.key == "bpm_only" { draft.referenceBpm = HeartBpm(bpm: Double(bpm.replacingOccurrences(of: ",", with: ".")) ?? .nan, measuredAtUtc: measuredAt) }
+                    errors = draft.validate().errors
+                    if errors.isEmpty { onSave(draft.normalized()); dismiss() }
+                } }
+            }
+        }
+    }
+    private func choice(_ title: String, _ key: String, _ binding: Binding<HeartAnswer?>) -> some View {
+        Picker(title, selection: binding) {
+            Text("Выберите ответ").tag(Optional<HeartAnswer>.none)
+            ForEach(HeartQuestionnaire.options[key]!, id: \.key) { Text($0.text).tag(Optional($0)) }
+        }
+    }
+    private func optional(_ key: WritableKeyPath<HeartQuestionnaire, String?>) -> Binding<String> {
+        Binding(get: { draft[keyPath: key] ?? "" }, set: { draft[keyPath: key] = $0.isEmpty ? nil : $0 })
+    }
+}
+
+struct ReferenceAttachmentEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var type = ""
+    @State private var metadata = ReferenceMetadata()
+    @State private var offset = ""
+    @State private var errors: [String: String] = [:]
+    let url: URL
+    let onSave: (String, ReferenceMetadata) -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Text(url.lastPathComponent)
+                Picker("Тип данных *", selection: $type) {
+                    Text("Выберите тип").tag("")
+                    Text("ЭКГ").tag("ecg")
+                    Text("ЧСС").tag("heart_rate")
+                    Text("Интервалы между ударами (Polar и др.)").tag("rr")
+                }
+                TextField("Устройство / источник *", text: $metadata.source)
+                TextField("Начало контрольной записи UTC * (ГГГГ-ММ-ДДTЧЧ:ММ:ССZ)", text: $metadata.startedAtUtc)
+                TextField("Окончание контрольной записи UTC *", text: $metadata.endedAtUtc)
+                TextField("Поправка к UTC таргета, мс (добавляется к его меткам, если известна)", text: $offset)
+                TextField("Временная привязка / примечания", text: Binding(get: { metadata.notes ?? "" }, set: { metadata.notes = $0 }), axis: .vertical)
+                Text("Оригинальный файл сохраняется без преобразований. ЧСС без интервалов подходит только для сравнения среднего темпа.")
+                ForEach(errors.keys.sorted(), id: \.self) { key in Text(errors[key]!).foregroundStyle(.red) }
+            }
+            .navigationTitle("Добавить контрольную запись")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Отмена") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button("Добавить") {
+                    metadata.offsetFromRecordingMs = offset.isEmpty ? nil : Double(offset.replacingOccurrences(of: ",", with: ".")) ?? .nan
+                    errors = metadata.validate().errors
+                    if type.isEmpty { errors["type"] = "Выберите тип данных" }
+                    if errors.isEmpty { onSave(type, metadata); dismiss() }
+                } }
+            }
+        }
     }
 }

@@ -7,6 +7,7 @@ WORKDIR /app
 COPY server /app/server
 RUN pip install --no-cache-dir /app/server
 COPY docs/target-server-plan/models /app/docs/target-server-plan/models
+COPY testdata /app/testdata
 
 RUN useradd --system --uid 10001 --no-create-home woona
 USER 10001
