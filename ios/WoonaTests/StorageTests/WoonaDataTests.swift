@@ -2,6 +2,106 @@ import XCTest
 @testable import Woona
 
 final class WoonaDataTests: XCTestCase {
+    @MainActor
+    func testFirstOfflineRecordingAcceptsRevisionBeforeArtifactUploadFails() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root); RecordingSyncProtocol.handler = nil }
+        let store = try WoonaStore(rootDirectory: root)
+        let profile = try store.saveProfile(completeDog())
+        let recording = try store.createRecording(profile: profile, source: "live", questionnaire: completeSession())
+        try store.finalize(recording: recording, status: "completed", files: [], syncJSON: Data("{}".utf8))
+        let saved = try XCTUnwrap(store.recording(id: recording.id))
+        RecordingSyncProtocol.handler = { request in
+            let path = request.url!.path
+            if path == "/v1/deletions" { return (200, ["entities": []]) }
+            if path.hasSuffix("/sync-status") { return (404, [:]) }
+            if path == "/v1/me" { return (200, ["deviceId": UUID().uuidString]) }
+            if request.httpMethod == "PUT" { return (200, ["dogRevision": 1]) }
+            if request.httpMethod == "HEAD" { return (503, [:]) }
+            throw ServerSyncError.responseInvalid
+        }
+        do {
+            try await syncClient().upload(recording: saved, profile: profile, store: store)
+            XCTFail("The artifact request must fail")
+        } catch ServerSyncError.requestFailed(let status, _) {
+            XCTAssertEqual(status, 503)
+        }
+        XCTAssertEqual(try store.profile(dogID: profile.id)?.revision, 1)
+        var edited = profile.questionnaire
+        edited.numberOrName = "Edited"
+        let next = try store.saveProfile(edited, replacing: try XCTUnwrap(store.profile(dogID: profile.id)))
+        XCTAssertEqual(next.revision, 1)
+        XCTAssertEqual(try store.recording(id: recording.id)?.serverSyncState, "retryable_error")
+    }
+
+    @MainActor
+    func testCompletedServerRecordingRepairsInvalidLocalQuestionnaire() async throws {
+        try await checkCompletedRecovery(invalidLocal: true, normalizedHash: false)
+    }
+
+    @MainActor
+    func testLostCompletionResponseAcceptsServerHashAndArtifactProgress() async throws {
+        try await checkCompletedRecovery(invalidLocal: false, normalizedHash: true)
+    }
+
+    @MainActor
+    private func checkCompletedRecovery(invalidLocal: Bool, normalizedHash: Bool) async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root); RecordingSyncProtocol.handler = nil }
+        let store = try WoonaStore(rootDirectory: root)
+        let profile = try store.saveProfile(completeDog())
+        let recording = try store.createRecording(profile: profile, source: "live", questionnaire: completeSession())
+        try store.finalize(recording: recording, status: "completed", files: [], syncJSON: Data("{}".utf8))
+        let validSession = try JSONSerialization.jsonObject(with: WoonaStore.sessionQuestionnaireData(completeSession()))
+        if invalidLocal {
+            var invalid = completeSession(); invalid.operatorName = ""
+            let answers = try JSONDecoder().decode(JSONValue.self, from: WoonaStore.sessionQuestionnaireData(invalid))
+            try store.acceptServerSession(recordingID: recording.id, questionnaire: answers)
+        }
+        let saved = try XCTUnwrap(store.recording(id: recording.id))
+        let files = try store.artifacts(recordingID: recording.id)
+        let hash = normalizedHash ? String(repeating: "a", count: 64) : profile.contentSha256
+        let version: [String: Any] = ["id": profile.profileVersionID.uuidString, "schemaVersion": 1,
+            "validationState": "complete", "questionnaire": try JSONSerialization.jsonObject(with: WoonaStore.dogQuestionnaireData(profile.questionnaire)),
+            "contentSha256": hash, "clientCreatedAtUtc": profile.updatedAtUTC]
+        let detail: [String: Any] = ["id": saved.id.uuidString, "dogId": profile.id.uuidString, "profileVersion": version,
+            "source": "live", "captureStatus": "completed", "ingestStatus": "complete", "startedAtUtc": saved.startedAtUTC,
+            "timezone": saved.timezone, "sessionLabel": saved.sessionLabel, "questionnaireSchemaVersion": 1,
+            "questionnaireValidationState": "complete", "sessionQuestionnaire": validSession, "videoRequested": false,
+            "sync": [:], "artifacts": files.map { ["id": $0.id.uuidString, "type": $0.type, "fileName": $0.fileName,
+                "mimeType": $0.mimeType, "sizeBytes": $0.sizeBytes, "sha256": $0.sha256, "storageStatus": "available"] }]
+        RecordingSyncProtocol.handler = { request in
+            guard request.httpMethod == "GET" else { throw ServerSyncError.responseInvalid }
+            switch request.url!.path {
+            case "/v1/deletions": return (200, ["entities": []])
+            case "/v1/me": return (200, ["deviceId": UUID().uuidString])
+            case "/v1/dogs": return (200, ["items": [["id": profile.id.uuidString]]])
+            case "/v1/dogs/" + profile.id.uuidString:
+                return (200, ["id": profile.id.uuidString, "numberOrName": profile.numberOrName, "revision": 1,
+                              "profileVersion": version, "profileVersions": [version]])
+            case "/v1/recordings/" + saved.id.uuidString + "/sync-status": return (200, ["ingestStatus": "complete"])
+            case "/v1/recordings/" + saved.id.uuidString: return (200, detail)
+            default: throw ServerSyncError.responseInvalid
+            }
+        }
+        try await syncClient().upload(recording: saved, profile: profile, store: store)
+        XCTAssertEqual(try store.profile(dogID: profile.id)?.contentSha256, hash)
+        XCTAssertEqual(try store.recording(id: recording.id)?.questionnaire?.operatorName, "Operator")
+        XCTAssertEqual(try store.recording(id: recording.id)?.serverSyncState, "synced")
+        let reconciled = try store.artifacts(recordingID: recording.id)
+        XCTAssertTrue(reconciled.allSatisfy { $0.uploadState == "available" && $0.uploadedBytes == $0.sizeBytes })
+        XCTAssertEqual(reconciled.map(\.relativePath), files.map(\.relativePath))
+        XCTAssertEqual(try Data(contentsOf: root.appendingPathComponent(files[0].relativePath)), Data("{}".utf8))
+    }
+
+    @MainActor
+    private func syncClient() throws -> WoonaServerClient {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [RecordingSyncProtocol.self]
+        return try WoonaServerClient(configuration: .init(baseURL: "https://sync.test", wifiOnly: false),
+                                     token: "fixture", sessionConfiguration: configuration)
+    }
+
     func testUnchangedAnswersDoNotCreateAnotherProfileVersion() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -443,4 +543,22 @@ final class WoonaDataTests: XCTestCase {
         session.bodyTemperatureStatus = "not_measured"
         return session
     }
+}
+
+private final class RecordingSyncProtocol: URLProtocol, @unchecked Sendable {
+    nonisolated(unsafe) static var handler: ((URLRequest) throws -> (Int, [String: Any]))?
+    override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "sync.test" }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        do {
+            guard let handler = Self.handler else { throw ServerSyncError.responseInvalid }
+            let (status, value) = try handler(request)
+            let data = try JSONSerialization.data(withJSONObject: value)
+            let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch { client?.urlProtocol(self, didFailWithError: error) }
+    }
+    override func stopLoading() {}
 }

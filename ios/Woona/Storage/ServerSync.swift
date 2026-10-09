@@ -170,7 +170,7 @@ final class WoonaServerClient {
     private let token: String
     private let session: URLSession
 
-    init(configuration: ServerConfiguration, token: String) throws {
+    init(configuration: ServerConfiguration, token: String, sessionConfiguration: URLSessionConfiguration = .default) throws {
         guard let url = URL(string: configuration.baseURL), url.host != nil,
               ["http", "https"].contains(url.scheme?.lowercased()) else {
             throw ServerSyncError.invalidURL
@@ -178,7 +178,6 @@ final class WoonaServerClient {
         guard !token.isEmpty else { throw ServerSyncError.tokenMissing }
         self.baseURL = url
         self.token = token
-        let sessionConfiguration = URLSessionConfiguration.default
         sessionConfiguration.allowsCellularAccess = !configuration.wifiOnly
         sessionConfiguration.allowsExpensiveNetworkAccess = !configuration.wifiOnly
         sessionConfiguration.waitsForConnectivity = true
