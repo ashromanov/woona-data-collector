@@ -79,6 +79,19 @@ jobs:
           name: ios-recording-export-proof
           path: ${{ runner.temp }}/WoonaTestAttachments/
           if-no-files-found: error
+      - name: Collect iOS crash diagnostics
+        if: failure()
+        run: |
+          mkdir -p "$RUNNER_TEMP/WoonaFailure"
+          xcrun xcresulttool export diagnostics --path "$RUNNER_TEMP/WoonaTests.xcresult" --output-path "$RUNNER_TEMP/WoonaFailure" || true
+          find "$HOME/Library/Logs/DiagnosticReports" -maxdepth 1 -type f -name 'Woona*' -exec cp {} "$RUNNER_TEMP/WoonaFailure/" \; || true
+          find "$RUNNER_TEMP/WoonaFailure" -type f -name '*.ips' -exec cat {} \;
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: ios-failure-diagnostics
+          path: ${{ runner.temp }}/WoonaFailure/
+          if-no-files-found: warn
       - name: Package simulator app for tagged builds
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
