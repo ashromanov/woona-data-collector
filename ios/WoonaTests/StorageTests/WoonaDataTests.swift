@@ -45,7 +45,12 @@ final class WoonaDataTests: XCTestCase {
     }
 
     @MainActor
-    private func checkCompletedRecovery(invalidLocal: Bool, normalizedHash: Bool) async throws {
+    func testImportedServerRecordingRebindsArtifactIdentityWithoutChangingFiles() async throws {
+        try await checkCompletedRecovery(invalidLocal: false, normalizedHash: false, rekeyedArtifacts: true)
+    }
+
+    @MainActor
+    private func checkCompletedRecovery(invalidLocal: Bool, normalizedHash: Bool, rekeyedArtifacts: Bool = false) async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root); RecordingSyncProtocol.handler = nil }
         let store = try WoonaStore(rootDirectory: root)
@@ -60,6 +65,7 @@ final class WoonaDataTests: XCTestCase {
         }
         let saved = try XCTUnwrap(store.recording(id: recording.id))
         let files = try store.artifacts(recordingID: recording.id)
+        let remoteIDs = files.map { rekeyedArtifacts ? UUID() : $0.id }
         let hash = normalizedHash ? String(repeating: "a", count: 64) : profile.contentSha256
         let version: [String: Any] = ["id": profile.profileVersionID.uuidString, "schemaVersion": 1,
             "validationState": "complete", "questionnaire": try JSONSerialization.jsonObject(with: WoonaStore.dogQuestionnaireData(profile.questionnaire)),
@@ -68,8 +74,9 @@ final class WoonaDataTests: XCTestCase {
             "source": "live", "captureStatus": "completed", "ingestStatus": "complete", "startedAtUtc": saved.startedAtUTC,
             "timezone": saved.timezone, "sessionLabel": saved.sessionLabel, "questionnaireSchemaVersion": 1,
             "questionnaireValidationState": "complete", "sessionQuestionnaire": validSession, "videoRequested": false,
-            "sync": [:], "artifacts": files.map { ["id": $0.id.uuidString, "type": $0.type, "fileName": $0.fileName,
-                "mimeType": $0.mimeType, "sizeBytes": $0.sizeBytes, "sha256": $0.sha256, "storageStatus": "available"] }]
+            "sync": [:], "artifacts": zip(files, remoteIDs).map { file, id in
+                ["id": id.uuidString, "type": file.type, "fileName": file.fileName,
+                 "mimeType": file.mimeType, "sizeBytes": file.sizeBytes, "sha256": file.sha256, "storageStatus": "available"] }]
         RecordingSyncProtocol.handler = { request in
             guard request.httpMethod == "GET" else { throw ServerSyncError.responseInvalid }
             switch request.url!.path {
@@ -89,6 +96,7 @@ final class WoonaDataTests: XCTestCase {
         XCTAssertEqual(try store.recording(id: recording.id)?.questionnaire?.operatorName, "Operator")
         XCTAssertEqual(try store.recording(id: recording.id)?.serverSyncState, "synced")
         let reconciled = try store.artifacts(recordingID: recording.id)
+        XCTAssertEqual(reconciled.map(\.id), remoteIDs)
         XCTAssertTrue(reconciled.allSatisfy { $0.uploadState == "available" && $0.uploadedBytes == $0.sizeBytes })
         XCTAssertEqual(reconciled.map(\.relativePath), files.map(\.relativePath))
         XCTAssertEqual(try Data(contentsOf: root.appendingPathComponent(files[0].relativePath)), Data("{}".utf8))
