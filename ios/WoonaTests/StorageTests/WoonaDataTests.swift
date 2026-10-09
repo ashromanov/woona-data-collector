@@ -26,10 +26,10 @@ final class WoonaDataTests: XCTestCase {
         } catch ServerSyncError.requestFailed(let status, _) {
             XCTAssertEqual(status, 503)
         }
-        XCTAssertEqual(try store.profile(dogID: profile.id)?.revision, 1)
+        XCTAssertEqual(try store.profile(dogID: profile.id, versionID: profile.profileVersionID)?.revision, 1)
         var edited = profile.questionnaire
         edited.numberOrName = "Edited"
-        let next = try store.saveProfile(edited, replacing: try XCTUnwrap(store.profile(dogID: profile.id)))
+        let next = try store.saveProfile(edited, replacing: try XCTUnwrap(store.profile(dogID: profile.id, versionID: profile.profileVersionID)))
         XCTAssertEqual(next.revision, 1)
         XCTAssertEqual(try store.recording(id: recording.id)?.serverSyncState, "retryable_error")
     }
@@ -85,7 +85,7 @@ final class WoonaDataTests: XCTestCase {
             }
         }
         try await syncClient().upload(recording: saved, profile: profile, store: store)
-        XCTAssertEqual(try store.profile(dogID: profile.id)?.contentSha256, hash)
+        XCTAssertEqual(try store.profile(dogID: profile.id, versionID: profile.profileVersionID)?.contentSha256, hash)
         XCTAssertEqual(try store.recording(id: recording.id)?.questionnaire?.operatorName, "Operator")
         XCTAssertEqual(try store.recording(id: recording.id)?.serverSyncState, "synced")
         let reconciled = try store.artifacts(recordingID: recording.id)
@@ -100,6 +100,30 @@ final class WoonaDataTests: XCTestCase {
         configuration.protocolClasses = [RecordingSyncProtocol.self]
         return try WoonaServerClient(configuration: .init(baseURL: "https://sync.test", wifiOnly: false),
                                      token: "fixture", sessionConfiguration: configuration)
+    }
+
+    func testDelayedServerReceiptCannotRollBackDogRevision() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try WoonaStore(rootDirectory: root)
+        let profile = try store.saveProfile(completeDog())
+        try store.setServerRevision(dogID: profile.id, revision: 2)
+        try store.setServerRevision(dogID: profile.id, revision: 1)
+        XCTAssertEqual(try store.profile(dogID: profile.id, versionID: profile.profileVersionID)?.revision, 2)
+    }
+
+    func testRecordingArchiveCarriesCaptureVersionAfterRestart() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try WoonaStore(rootDirectory: root)
+        let profile = try store.saveProfile(completeDog())
+        let recording = try store.createRecording(profile: profile, source: "live", questionnaire: completeSession())
+        let version = try XCTUnwrap(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String)
+        try store.finalize(recording: recording, status: "completed", files: [], syncJSON: Data("{}".utf8))
+        let reopened = try WoonaStore(rootDirectory: root)
+        let archive = try reopened.recordingArchive(recordingID: recording.id)
+        let value = try XCTUnwrap(JSONSerialization.jsonObject(with: archive.manifest) as? [String: Any])
+        XCTAssertEqual((value["recording"] as? [String: Any])?["appVersion"] as? String, version)
     }
 
     func testUnchangedAnswersDoNotCreateAnotherProfileVersion() throws {
