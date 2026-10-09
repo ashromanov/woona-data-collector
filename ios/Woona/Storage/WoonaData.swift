@@ -1025,7 +1025,9 @@ final class WoonaStore {
                     sizeBytes: sqlite3_column_int64(statement, 6),
                     sha256: columnText(statement, 7),
                     uploadedBytes: sqlite3_column_int64(statement, 8),
-                    referenceMetadata: try? JSONDecoder().decode(ReferenceMetadata.self, from: Data(columnText(statement, 9).utf8)),
+                    referenceMetadata: columnOptionalText(statement, 9).flatMap {
+                        try? JSONDecoder().decode(ReferenceMetadata.self, from: Data($0.utf8))
+                    },
                     uploadState: columnText(statement, 10)
                 )
             )

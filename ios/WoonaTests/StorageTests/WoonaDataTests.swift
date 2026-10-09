@@ -86,6 +86,8 @@ final class WoonaDataTests: XCTestCase {
         XCTAssertEqual(heart, restored.questionnaire?.heartQuestionnaire)
         let artifact = try XCTUnwrap(store!.artifacts(recordingID: recording.id).first { $0.type == "rr" })
         XCTAssertEqual(metadata, artifact.referenceMetadata)
+        let syncArtifact = try XCTUnwrap(store!.artifacts(recordingID: recording.id).first { $0.type == "sync" })
+        XCTAssertNil(syncArtifact.referenceMetadata)
         XCTAssertEqual(bytes, try Data(contentsOf: root.appendingPathComponent(artifact.relativePath)))
         XCTAssertEqual(profile.questionnaire, try store!.profile(dogID: profile.id, versionID: profile.profileVersionID)?.questionnaire)
     }
