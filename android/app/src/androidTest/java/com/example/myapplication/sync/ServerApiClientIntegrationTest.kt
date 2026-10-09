@@ -3,6 +3,14 @@ package com.example.myapplication.sync
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.semantics.SemanticsProperties
 import com.example.myapplication.BuildConfig
 import com.example.myapplication.data.ArtifactSyncRecord
 import com.example.myapplication.data.DogQuestionnaire
@@ -37,10 +45,14 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
+import org.junit.Rule
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class ServerApiClientIntegrationTest {
+    @get:Rule
+    val composeRule = createEmptyComposeRule()
+
     @Test
     fun realWorkManager_invalidTokenIsVisibleAndManualRetrySucceeds() {
         val arguments = InstrumentationRegistry.getArguments()
@@ -87,22 +99,17 @@ class ServerApiClientIntegrationTest {
                 var settingsNode = requireNotNull(visible("Settings") ?: visible("Настройки"))
                 while (!settingsNode.isClickable && settingsNode.parent != null) settingsNode = settingsNode.parent
                 assertTrue(settingsNode.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK))
-                fun scroll(node: android.view.accessibility.AccessibilityNodeInfo?): Boolean {
-                    if (node == null) return false
-                    if (node.isScrollable && node.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)) return true
-                    return (0 until node.childCount).any { scroll(node.getChild(it)) }
+                composeRule.waitUntil(10_000) {
+                    composeRule.onAllNodes(hasText("BLE transport profile") or hasText("Профиль BLE-транспорта"))
+                        .fetchSemanticsNodes().isNotEmpty()
                 }
-                repeat(8) {
-                    if (visible("invalid_bearer_token") == null) {
-                        scroll(automation.rootInActiveWindow)
-                        Thread.sleep(200)
-                    }
-                }
-                val errorNode = requireNotNull(visible("invalid_bearer_token"))
-                val retryNode = requireNotNull(visible("Retry uploads") ?: visible("Повторить выгрузку"))
-                assertTrue(retryNode.isEnabled)
+                composeRule.onNode(hasScrollAction()).performScrollToIndex(3)
+                val errorNode = composeRule.onNode(hasText("invalid_bearer_token", substring = true))
+                    .performScrollTo().assertIsDisplayed().fetchSemanticsNode()
+                composeRule.onNode(hasText("Retry uploads") or hasText("Повторить выгрузку"))
+                    .performScrollTo().assertIsDisplayed().assertIsEnabled()
                 File(context.cacheDir, "actual-worker-401.png").outputStream().use { output -> automation.takeScreenshot().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output) }
-                File(context.cacheDir, "actual-worker-401.txt").writeText("${errorNode.text}\nRetry enabled=${retryNode.isEnabled}\n")
+                File(context.cacheDir, "actual-worker-401.txt").writeText("${errorNode.config[SemanticsProperties.Text].joinToString { it.text }}\nRetry enabled=true\n")
                 Log.i("WOONA_E2E", "PASS actualMainActivity worker401Visible=true retryEnabled=true screenshot=actual-worker-401.png")
             }
             val work = WorkManager.getInstance(context)
@@ -148,6 +155,35 @@ class ServerApiClientIntegrationTest {
             assertTrue(!remote.receiptSha256.isNullOrBlank())
             assertTrue(remote.artifacts.all { it.storageStatus == "available" })
             Log.i("WOONA_E2E", "PASS WorkManager recordingUploadBytes=9Artifacts polarCsvAll=true receiptVerified=true recording=${recording.id}")
+
+            fun retryCompletedRecording(expected: String) {
+                val finishDeadline = System.nanoTime() + 10_000_000_000L
+                while (work.getWorkInfosForUniqueWork("server-sync-${recording.id}").get().any { !it.state.isFinished } && System.nanoTime() < finishDeadline) Thread.sleep(100)
+                assertTrue(work.getWorkInfosForUniqueWork("server-sync-${recording.id}").get().all { it.state.isFinished })
+                database.writableDatabase.execSQL("UPDATE server_sync_state SET state='pending' WHERE recording_id=?", arrayOf(recording.id))
+                ServerSyncScheduler.enqueueRecording(context, recording.id)
+                val stateDeadline = System.nanoTime() + 10_000_000_000L
+                while (database.recording(recording.id)?.serverSyncState != expected && System.nanoTime() < stateDeadline) Thread.sleep(100)
+                assertEquals(expected, database.recording(recording.id)?.serverSyncState)
+            }
+            val draft = database.saveProfile(profile.questionnaire.copy(numberOrName = "Local draft"), profile.id)
+            retryCompletedRecording("synced")
+            assertEquals(draft.profileVersionId, database.profile(profile.id)?.profileVersionId)
+            val packets = File(directory, "packets.bin")
+            val localBytes = "local packet bytes retained".toByteArray()
+            packets.writeBytes(localBytes)
+            database.registerArtifact(recording.id, com.example.myapplication.data.ArtifactType.PACKET, packets)
+            database.hashPendingArtifacts()
+            retryCompletedRecording("permanent_error")
+            database.readableDatabase.rawQuery("SELECT last_error_code,last_error_message FROM server_sync_state WHERE recording_id=?", arrayOf(recording.id)).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("metadata_conflict", cursor.getString(0))
+                assertTrue(cursor.getString(1).contains("Локальные файлы сохранены"))
+            }
+            assertArrayEquals(localBytes, packets.readBytes())
+            assertEquals(9, database.recording(recording.id)?.artifacts?.size)
+            assertEquals(draft.profileVersionId, database.profile(profile.id)?.profileVersionId)
+            Log.i("WOONA_E2E", "PASS WorkManager completedReceiptIgnoresDogDraft=true artifactConflict=permanent_error filesPreserved=true")
         } finally {
             if (original.isConfigured) settingsStore.save(original.baseUrl, original.token, original.wifiOnly) else settingsStore.clearToken()
             preferences.edit().putString("base_url", original.baseUrl).putBoolean("wifi_only", original.wifiOnly).commit()

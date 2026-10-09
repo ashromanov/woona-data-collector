@@ -34,6 +34,5 @@ if __name__ == "__main__":
         "LABEL_API_TOKEN": secrets.token_hex(20),
         "LABEL_DJANGO_SECRET_KEY": secrets.token_hex(32),
         "LABEL_POSTGRES_ROOT": "/srv/woona/label-postgres",
-        "LABEL_SNAPSHOT_ROOT": "/srv/woona/drive-2026-09-18",
     })
     print("Created root-only .env and .env.label")

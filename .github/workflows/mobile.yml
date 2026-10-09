@@ -125,7 +125,7 @@ jobs:
           mkdir -p ../test-run/ci-storage
           chmod 777 ../test-run/ci-storage
           docker compose -p woona-ci up -d --build --wait
-          docker compose -p woona-ci exec -T api python -m unittest -v server.tests.test_schemas server.tests.test_api
+          docker compose -p woona-ci exec -T api python -m unittest discover -v -s server/tests
       - name: Clean up
         if: always()
         run: docker compose -p woona-ci down -v --remove-orphans

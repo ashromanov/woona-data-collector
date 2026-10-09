@@ -94,6 +94,24 @@ class WoonaDatabaseTest {
     }
 
     @Test
+    fun serverDeletionRejectsRecordingDirectoryThatResolvesToStorageRoot() {
+        val profile = database.saveProfile(completeDogQuestionnaire("Corrupt retired path"))
+        val retired = database.beginRecording(profile.id, RecordingSource.LIVE, completeSessionQuestionnaire())
+        database.finishRecording(retired.id, RecordingStatus.COMPLETED)
+        val keep = database.beginRecording(profile.id, RecordingSource.LIVE, completeSessionQuestionnaire())
+        val preserved = File(database.recordingDirectory(keep.relativeDirectory), "packets.bin")
+        preserved.writeText("unrelated recording")
+        database.writableDatabase.execSQL("UPDATE recordings SET relative_directory='.' WHERE id=?", arrayOf(retired.id))
+        val hash = java.security.MessageDigest.getInstance("SHA-256").digest(retired.id.toByteArray()).joinToString("") { "%02x".format(it) }
+
+        assertTrue(runCatching { database.applyServerDeletions(listOf("recording" to hash)) }.isFailure)
+        assertTrue(root.isDirectory)
+        assertEquals("unrelated recording", preserved.readText())
+        assertTrue(database.recording(keep.id) != null)
+        assertTrue(database.recording(retired.id) != null)
+    }
+
+    @Test
     fun profileSyncFailureIsCountedAndCanBeRetriedWithoutRecordings() {
         val profile = database.saveProfile(completeDogQuestionnaire("Mock profile"))
         assertEquals(1, database.serverSyncCounts().pending)
@@ -514,6 +532,120 @@ class WoonaDatabaseTest {
         assertEquals("both", database.recording(recording.id)?.artifacts?.single()?.localPresence)
         assertEquals("synced", database.recording(recording.id)?.serverSyncState)
     }
+
+    @Test
+    fun completedServerRestoreReconcilesArtifactIdWithoutChangingLocalBytes() {
+        val local = completedPacketRecording("Canonical artifact")
+        val old = local.artifacts.single()
+        val canonicalId = "90000000-0000-0000-0000-000000000001"
+        val remote = remoteCompletedRecording(local).let { it.copy(artifacts = listOf(it.artifacts.single().copy(id = canonicalId))) }
+
+        assertEquals(0, database.restoreServerMetadata(emptyList(), listOf(remote)).conflicts)
+        val restored = requireNotNull(database.recording(local.id)).artifacts.single { it.type == ArtifactType.PACKET }
+        assertEquals(canonicalId, restored.id)
+        assertEquals(old.relativePath, restored.relativePath)
+        assertEquals("both", restored.localPresence)
+        assertEquals("available", restored.uploadState)
+        assertEquals(11L, restored.uploadedBytes)
+        assertEquals("packet data", database.resolveRelativePath(old.relativePath).readText())
+        assertEquals(RestoreResult(0, 0, 0, 0), database.restoreServerMetadata(emptyList(), listOf(remote)))
+    }
+
+    @Test
+    fun completedServerRestoreRejectsArtifactIdOwnedByAnotherRecording() {
+        val local = completedPacketRecording("First recording")
+        val other = completedPacketRecording("Other recording")
+        val remote = remoteCompletedRecording(local).let { it.copy(artifacts = listOf(it.artifacts.single().copy(id = other.artifacts.single().id))) }
+
+        assertEquals(1, database.restoreServerMetadata(emptyList(), listOf(remote)).conflicts)
+        assertEquals(local.artifacts.single().id, database.recording(local.id)?.artifacts?.single { it.type == ArtifactType.PACKET }?.id)
+        assertEquals("pending", database.recording(local.id)?.serverSyncState)
+        assertEquals("pending", database.recording(other.id)?.artifacts?.single { it.type == ArtifactType.PACKET }?.uploadState)
+        assertEquals("packet data", database.resolveRelativePath(other.artifacts.single().relativePath).readText())
+    }
+
+    @Test
+    fun completedServerRestoreMergesEarlierCanonicalPlaceholderIntoLocalPath() {
+        val local = completedPacketRecording("Earlier placeholder")
+        val old = local.artifacts.single()
+        val canonicalId = "90000000-0000-0000-0000-000000000004"
+        database.writableDatabase.execSQL("""
+            INSERT INTO artifacts(id,recording_id,type,file_name,mime_type,relative_path,size_bytes,sha256,
+                hash_state,local_presence,upload_state,uploaded_bytes,created_at_utc)
+            SELECT ?,recording_id,type,file_name,mime_type,?,size_bytes,sha256,
+                hash_state,'remote_only','available',size_bytes,created_at_utc FROM artifacts WHERE id=?
+        """.trimIndent(), arrayOf(canonicalId, "recordings/server-corrected/packets.bin", old.id))
+        val remote = remoteCompletedRecording(local).let { it.copy(artifacts = listOf(it.artifacts.single().copy(id = canonicalId))) }
+
+        assertEquals(0, database.restoreServerMetadata(emptyList(), listOf(remote)).conflicts)
+        val packets = requireNotNull(database.recording(local.id)).artifacts.filter { it.type == ArtifactType.PACKET }
+        assertEquals(1, packets.size)
+        assertEquals(canonicalId, packets.single().id)
+        assertEquals(old.relativePath, packets.single().relativePath)
+        assertEquals("both", packets.single().localPresence)
+        assertEquals("available", packets.single().uploadState)
+        assertEquals("packet data", database.resolveRelativePath(old.relativePath).readText())
+        assertEquals("synced", database.recording(local.id)?.serverSyncState)
+        assertEquals(RestoreResult(0, 0, 0, 0), database.restoreServerMetadata(emptyList(), listOf(remote)))
+    }
+
+    @Test
+    fun completedServerRestoreRejectsAliasWithDifferentBytes() {
+        val local = completedPacketRecording("Conflicting bytes")
+        val remote = remoteCompletedRecording(local)
+        val aliases = listOf(
+            remote.artifacts.single().copy(id = "90000000-0000-0000-0000-000000000002", sha256 = "a".repeat(64)),
+            remote.artifacts.single().copy(id = "90000000-0000-0000-0000-000000000003", sizeBytes = 12),
+        )
+        aliases.forEach { alias ->
+            val restored = database.restoreServerMetadata(emptyList(), listOf(remote.copy(artifacts = listOf(alias))))
+            assertEquals(1, restored.conflicts)
+            assertEquals(1, restored.recordingConflicts)
+            assertEquals(local.artifacts.single().id, database.recording(local.id)?.artifacts?.single { it.type == ArtifactType.PACKET }?.id)
+            assertEquals("pending", database.recording(local.id)?.serverSyncState)
+            assertEquals("packet data", database.resolveRelativePath(local.artifacts.single().relativePath).readText())
+        }
+    }
+
+    @Test
+    fun unsyncedDogDraftConflictDoesNotBlockCompletedRecordingRestore() {
+        val local = completedPacketRecording("Server profile")
+        val remote = remoteCompletedRecording(local)
+        val draft = database.saveProfile(completeDogQuestionnaire("Local draft"), local.dogId)
+        val dog = RemoteDog(local.dogId, "Server profile", 1, remote.profile)
+
+        val restored = database.restoreServerMetadata(listOf(dog), listOf(remote))
+
+        assertEquals(1, restored.conflicts)
+        assertEquals(0, restored.recordingConflicts)
+        assertEquals(draft.profileVersionId, database.profile(local.dogId)?.profileVersionId)
+        assertEquals("synced", database.recording(local.id)?.serverSyncState)
+        assertEquals("packet data", database.resolveRelativePath(local.artifacts.single().relativePath).readText())
+    }
+
+    private fun completedPacketRecording(name: String): RecordingSyncRecord {
+        val profile = database.saveProfile(completeDogQuestionnaire(name))
+        val recording = database.beginRecording(profile.id, RecordingSource.LIVE, completeSessionQuestionnaire())
+        File(database.recordingDirectory(recording.relativeDirectory), "packets.bin").writeText("packet data")
+        database.writeSyncMetadata(recording.id, CaptureSyncMetadata(recordingId = recording.id, profileId = profile.id,
+            source = "live", timezone = recording.timezone, selectedSessionStartUtc = recording.startedAtUtc))
+        database.finishRecording(recording.id, RecordingStatus.COMPLETED)
+        return requireNotNull(database.recordingSyncRecord(recording.id)).let { it.copy(artifacts = it.artifacts.filter { artifact -> artifact.type == "packet" }) }
+    }
+
+    private fun remoteCompletedRecording(local: RecordingSyncRecord) = RemoteRecording(
+        id = local.id, dogId = local.dogId,
+        profile = RemoteProfileVersion(local.profileVersionId, local.profile.schemaVersion, local.profile.validationState,
+            local.profile.questionnaireJson, local.profile.contentSha256, local.profile.clientCreatedAtUtc),
+        source = local.source, captureStatus = local.captureStatus, startedAtUtc = local.startedAtUtc,
+        endedAtUtc = local.endedAtUtc, timezone = local.timezone, sessionLabel = local.sessionLabel,
+        questionnaireSchemaVersion = local.questionnaireSchemaVersion, questionnaireValidationState = local.questionnaireValidationState,
+        sessionQuestionnaireJson = local.sessionQuestionnaireJson, videoRequested = local.videoRequested,
+        sensorHardwareId = local.sensorHardwareId, appVersion = local.appVersion, protocolVersion = local.protocolVersion,
+        captureErrorCode = local.captureErrorCode, captureErrorMessage = local.captureErrorMessage,
+        receiptSha256 = "b".repeat(64), verifiedAtUtc = "2026-10-09T12:00:00Z", sync = local.sync,
+        artifacts = local.artifacts.map { RemoteArtifact(it.id, it.type, it.fileName, it.mimeType, it.sizeBytes, it.sha256, "available") },
+    )
 }
 
 private fun completeDogQuestionnaire(name: String) = DogQuestionnaire(

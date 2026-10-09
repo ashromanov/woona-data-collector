@@ -133,7 +133,12 @@ class RecordingSyncWorker(
             val accepted = try { client.fetchRecording(recordingId) }
                 catch (error: ServerHttpException) { if (error.status == 404) null else throw error }
             if (accepted?.receiptSha256 != null) {
-                database.restoreServerMetadata(listOf(client.fetchDog(accepted.dogId)),listOf(accepted))
+                val restored = database.restoreServerMetadata(listOf(client.fetchDog(accepted.dogId)),listOf(accepted))
+                if (restored.recordingConflicts > 0) {
+                    database.markRecordingSyncError(recordingId, false, "metadata_conflict",
+                        "Файлы или метаданные записи отличаются от серверной версии. Локальные файлы сохранены.")
+                    return Result.failure()
+                }
                 database.markRecordingSynced(recordingId,accepted.receiptSha256,requireNotNull(accepted.verifiedAtUtc))
                 if (record.artifacts.none { it.type in setOf("ecg","heart_rate","rr") && it.uploadState != "available" }) return Result.success()
                 record = database.recordingSyncRecord(recordingId) ?: return Result.success()

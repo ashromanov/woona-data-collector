@@ -147,6 +147,7 @@ data class RestoreResult(
     val recordings: Int,
     val artifacts: Int,
     val conflicts: Int,
+    val recordingConflicts: Int = 0,
 )
 
 fun WoonaDatabase.pendingProfileVersionIds(): List<String> =
@@ -509,7 +510,10 @@ fun WoonaDatabase.applyServerDeletions(entities: List<Pair<String, String>>): In
             }
         }
     }
-    directories.forEach { directory -> check(directory.deleteRecursively() || !directory.exists()) { "Could not remove retired recording files" } }
+    directories.forEach { directory ->
+        require(directory != rootDirectory.canonicalFile) { "Cannot remove Woona storage root" }
+        check(directory.deleteRecursively() || !directory.exists()) { "Could not remove retired recording files" }
+    }
     writableDatabase.beginTransaction()
     try {
         ids.forEach { writableDatabase.delete("recordings", "id=?", arrayOf(it)) }
@@ -657,6 +661,7 @@ fun WoonaDatabase.restoreServerMetadata(
     var restoredRecordings = 0
     var restoredArtifacts = 0
     var conflicts = 0
+    var recordingConflicts = 0
     val database = writableDatabase
     database.beginTransaction()
     try {
@@ -739,24 +744,33 @@ fun WoonaDatabase.restoreServerMetadata(
         }
 
         recordings.forEach { recording ->
+            val relativeDirectory = database.rawQuery("SELECT relative_directory FROM recordings WHERE id=?", arrayOf(recording.id)).use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else recordingRelativeDirectory(
+                    recording.dogId, recording.id, Instant.parse(recording.startedAtUtc), recording.timezone,
+                )
+            }
             val mismatched = recording.artifacts.any { artifact ->
-                database.rawQuery("SELECT sha256 FROM artifacts WHERE id=?",arrayOf(artifact.id)).use { cursor ->
-                    cursor.moveToFirst() && cursor.getString(0) != artifact.sha256
+                database.rawQuery(
+                    "SELECT id,recording_id,sha256,size_bytes,type,file_name FROM artifacts WHERE id=? OR (recording_id=? AND relative_path=?)",
+                    arrayOf(artifact.id, recording.id, "$relativeDirectory/${artifact.fileName}"),
+                ).use { cursor ->
+                    var conflict = false
+                    while (cursor.moveToNext()) {
+                        if (cursor.getString(1) != recording.id || cursor.getString(2) != artifact.sha256 ||
+                            cursor.getLong(3) != artifact.sizeBytes || cursor.getString(4) != artifact.type ||
+                            cursor.getString(5) != artifact.fileName ||
+                            (cursor.getString(0) != artifact.id && recording.receiptSha256 == null)) conflict = true
+                    }
+                    conflict
                 }
             }
-            if (mismatched) { conflicts++; return@forEach }
+            if (mismatched) { conflicts++; recordingConflicts++; return@forEach }
             insertRemoteProfileVersion(
                 database,
                 recording.dogId,
                 recording.profile,
                 supersededAtUtc = recording.startedAtUtc,
                 serverRevision = null,
-            )
-            val relativeDirectory = recordingRelativeDirectory(
-                recording.dogId,
-                recording.id,
-                Instant.parse(recording.startedAtUtc),
-                recording.timezone,
             )
             val inserted = database.insertWithOnConflict(
                 "recordings",
@@ -831,43 +845,38 @@ fun WoonaDatabase.restoreServerMetadata(
                 )
             }
             recording.artifacts.forEach { artifact ->
-                val existingHash = database.query(
-                    "artifacts",
-                    arrayOf("sha256"),
-                    "id=?",
-                    arrayOf(artifact.id),
-                    null,
-                    null,
-                    null,
-                    "1",
+                val relativePath = "$relativeDirectory/${artifact.fileName}"
+                val existingId = database.rawQuery(
+                    "SELECT id FROM artifacts WHERE id=? OR (recording_id=? AND relative_path=?) ORDER BY relative_path=? DESC LIMIT 1",
+                    arrayOf(artifact.id, recording.id, relativePath, relativePath),
                 ).use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
-                if (existingHash != null && existingHash != artifact.sha256) {
-                    conflicts++
-                    return@forEach
-                }
-                if (existingHash != null) {
+                if (existingId != null) {
+                    if (existingId != artifact.id) database.delete("artifacts", "id=? AND recording_id=?", arrayOf(artifact.id, recording.id))
                     database.execSQL(
                         """
                         UPDATE artifacts
-                        SET local_presence=CASE
+                        SET id=?,mime_type=?,reference_metadata_json=?,local_presence=CASE
                                 WHEN local_presence IN ('local','both') THEN 'both'
                                 ELSE 'remote_only'
                             END,
                             upload_state=?,
                             uploaded_bytes=?,
                             server_verified_at_utc=?
-                        WHERE id=?
+                        WHERE id=? AND recording_id=?
                         """.trimIndent(),
                         arrayOf<Any?>(
+                            artifact.id,
+                            artifact.mimeType,
+                            artifact.referenceMetadataJson,
                             if (artifact.storageStatus == "available") "available" else "uploading",
                             if (artifact.storageStatus == "available") artifact.sizeBytes else 0L,
                             recording.verifiedAtUtc,
-                            artifact.id,
+                            existingId,
+                            recording.id,
                         ),
                     )
                     return@forEach
                 }
-                val relativePath = "$relativeDirectory/${artifact.fileName}"
                 val insertedArtifact = database.insertWithOnConflict(
                     "artifacts",
                     null,
@@ -896,7 +905,7 @@ fun WoonaDatabase.restoreServerMetadata(
     } finally {
         database.endTransaction()
     }
-    return RestoreResult(restoredDogs, restoredRecordings, restoredArtifacts, conflicts)
+    return RestoreResult(restoredDogs, restoredRecordings, restoredArtifacts, conflicts, recordingConflicts)
 }
 
 fun WoonaDatabase.remoteArtifacts(recordingId: String): List<Artifact> =

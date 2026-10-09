@@ -334,11 +334,24 @@ class AndroidVideoRecorderDeviceTest {
                 System.currentTimeMillis(),
                 android.os.SystemClock.elapsedRealtimeNanos(),
             )
+            val partialVideo = File(database.recordingDirectory(recording.relativeDirectory), "video.mp4")
+            val videoExistedBeforeStop = partialVideo.exists()
             controller.onDisconnectRequested()
 
             val completed = requireNotNull(database.recordingSyncRecord(recording.id))
             assertEquals("camera_failed", completed.captureErrorCode)
-            assertTrue(completed.artifacts.none { it.type == ArtifactType.VIDEO.value })
+            if (videoExistedBeforeStop) assertTrue(partialVideo.isFile)
+            val videoArtifact = completed.artifacts.singleOrNull { it.type == ArtifactType.VIDEO.value }
+            if (partialVideo.isFile) {
+                assertNotNull(videoArtifact)
+                val artifact = requireNotNull(videoArtifact)
+                assertEquals("${recording.relativeDirectory}/video.mp4", artifact.relativePath)
+                assertEquals(partialVideo.length(), artifact.sizeBytes)
+                val hash = java.security.MessageDigest.getInstance("SHA-256").digest(partialVideo.readBytes()).joinToString("") { "%02x".format(it) }
+                assertEquals(hash, artifact.sha256)
+            } else {
+                assertNull(videoArtifact)
+            }
         } finally {
             controller.close()
             database.close()

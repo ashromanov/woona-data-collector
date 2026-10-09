@@ -1,4 +1,4 @@
-"""Import verified Woona and Drive recordings into Label Studio projects."""
+"""Synchronize complete Woona recordings with the existing Label Studio project."""
 
 import argparse
 import fcntl
@@ -10,48 +10,9 @@ import math
 import os
 import time
 from collections import defaultdict
-from pathlib import Path
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree
-
-LABELS = {
-    "source": ("Woona · Проверка исходных записей v1", ["Комплект пригоден", "Брак / неполный комплект", "Требует проверки"]),
-    "activity": ("Woona · Виды активности v1", ["Лежит, не спит", "Спит", "Ходит", "Бегает", "Прыгает"]),
-    "gait": ("Woona · Аллюр v1", ["Медленный шаг", "Быстрый шаг без перехода на рысь", "Рысь", "Галоп"]),
-    "lameness": ("Woona · Хромота v1", ["Спокойная стойка", "Обычный шаг", "Лёгкая рысь", "Бордюр", "Лестница"]),
-}
-
-
-def config(kind: str) -> str:
-    if kind == "source":
-        choices = "".join(f'<Choice value="{html.escape(choice, quote=True)}"/>' for choice in LABELS[kind][1])
-        return '<View><HyperText name="context" value="$html" clickableLinks="true"/>' \
-               f'<Choices name="source" toName="context" choice="single">{choices}</Choices></View>'
-    labels = "".join(f'<Label value="{html.escape(label, quote=True)}"/>' for label in LABELS[kind][1])
-    # ponytail: source MP4s are nominally 30 FPS; use sync metadata for exact sensor alignment.
-    result = '<View><Video name="video" value="$video" frameRate="30" height="400" timelineHeight="110"/>' \
-             f'<TimelineLabels name="segment" toName="video">{labels}</TimelineLabels>' \
-             '<Choices name="segment_quality" toName="video" choice="single" perRegion="true">' \
-             '<Choice value="Чистый"/><Choice value="Брак"/></Choices>'
-    if kind == "activity":
-        result += '<Choices name="jump_type" toName="video" choice="single" perRegion="true" ' \
-                  'visibleWhen="region-selected" whenLabelValue="Прыгает">' \
-                  '<Choice value="Через препятствие"/><Choice value="На поверхность"/>' \
-                  '<Choice value="С поверхности"/></Choices>'
-    if kind == "gait":
-        result += '<Choices name="direction" toName="video" choice="single" perRegion="true">' \
-                  '<Choice value="Туда"/><Choice value="Обратно"/></Choices>'
-    if kind == "lameness":
-        result += '<Choices name="viewpoint" toName="video" choice="single" perRegion="true">' \
-                  '<Choice value="Спереди"/><Choice value="Сзади"/>' \
-                  '<Choice value="Слева направо"/><Choice value="Справа налево"/></Choices>' \
-                  '<Header value="Клиническую метку указывать только по подтверждённым данным, не по видео"/>' \
-                  '<Choices name="clinical_lameness" toName="video" choice="single">' \
-                  '<Choice value="Да"/><Choice value="Нет"/><Choice value="Неопределённо"/></Choices>'
-    return result + '<TextArea name="segment_notes" toName="video" perRegion="true" ' \
-                    'displayMode="region-list" rows="2" placeholder="Номер, причина брака; для прыжка: тип, высота, отрыв/приземление"/></View>'
-
 
 def file_url(relative: str) -> str:
     return "/data/local-files/?d=" + quote(relative, safe="/")
@@ -84,22 +45,6 @@ def task(source_id: str, title: str, files: list[dict], *, source: str, dog: str
                                      "dog": dog, "capture_date": date}}
 
 
-def historical_tasks(snapshot: Path) -> list[dict]:
-    index_path = snapshot / "recordings-v1.json"
-    if not index_path.exists():
-        return []
-    index = json.loads(index_path.read_text(encoding="utf-8"))
-    if index["schema_version"] != 1:
-        raise ValueError("unsupported Drive index")
-    result = []
-    for session in index["sessions"]:
-        files = [{"name": Path(item["path"]).name, "relative": "drive/raw/" + item["path"],
-                  "size": item["size"], "sha256": item["sha256"]} for item in session["files"]]
-        result.append(task("drive:" + session["id"], session["source_path"], files,
-                           source="drive-2026-09-18", dog=session["dog"], date=session["capture_date"]))
-    return result
-
-
 def app_tasks(database_url: str) -> list[dict]:
     from sqlalchemy import create_engine, text
 
@@ -108,13 +53,11 @@ def app_tasks(database_url: str) -> list[dict]:
         rows = connection.execute(text("""
             SELECT r.id, r.started_at, r.dog_id, r.dog_profile_version_id,
                    r.session_questionnaire, v.questionnaire AS dog_questionnaire,
-                   d.number_or_name, i.source_id AS import_source_id, i.source_path, i.provenance,
-                   rs.overall_sync_quality, a.file_name,
+                   d.number_or_name, rs.alignment, a.artifact_type, a.file_name,
                    a.server_relative_path, a.expected_size_bytes, a.sha256
             FROM recordings r JOIN dogs d ON d.id=r.dog_id
             JOIN dog_profile_versions v ON v.id=r.dog_profile_version_id
             JOIN recording_sync rs ON rs.recording_id=r.id
-            LEFT JOIN source_imports i ON i.recording_id=r.id
             JOIN artifacts a ON a.recording_id=r.id
             WHERE r.ingest_status='complete' AND r.capture_status='completed' AND r.capture_error_code IS NULL AND a.storage_status='available'
               AND a.artifact_type NOT IN ('ecg','heart_rate','rr')
@@ -131,8 +74,8 @@ def app_tasks(database_url: str) -> list[dict]:
         questionnaire = first["session_questionnaire"]
         if questionnaire.get("sessionKind") == "heart" or questionnaire.get("schemaVersion") != 2 or not set(questionnaire.get("plannedActivities", [])) & {"Аллюр/движение", "Активность"}:
             continue
-        names = {row["file_name"] for row in members}
-        if not any(name.lower().endswith(".mp4") for name in names) or not any(name.lower().endswith((".bin", ".binlog")) for name in names):
+        kinds = {row["artifact_type"] for row in members}
+        if not {'packet','packet_timeline','raw','diagnostic','sync','video'} <= kinds:
             continue
         files = [{"name": row["file_name"], "relative": "woona/" + row["server_relative_path"],
                   "size": row["expected_size_bytes"], "sha256": row["sha256"]} for row in members]
@@ -143,14 +86,9 @@ def app_tasks(database_url: str) -> list[dict]:
                                   "dog_profile_version_id": str(first["dog_profile_version_id"]),
                                   "dog": first["number_or_name"], "session": questionnaire["sessionLabel"]})
         result[-1]["meta"].update({"dog_questionnaire": first["dog_questionnaire"], "session_questionnaire": questionnaire})
-        if first["import_source_id"]:
-            result[-1]["meta"].update({"import_source_id": first["import_source_id"], "source_path": first["source_path"],
-                                       "drive_files": first["provenance"]["files"],
-                                       "alignment": "unavailable: external video has no camera anchor"})
-            camera = first['provenance'].get('original_sync', {}).get('video')
-            if camera:
-                result[-1]['meta'].update({'original_camera_anchor': camera,
-                    'alignment': first['overall_sync_quality'] + ': native camera anchor; sensor arrival timing is not calibration'})
+        result[-1]['meta']['alignment'] = first['alignment']
+        if first['alignment'] and first['alignment'].get('data_quality'):
+            result[-1]['meta']['data_quality'] = first['alignment']['data_quality']
     return result
 
 

@@ -37,7 +37,7 @@ class SheetContractTest(unittest.TestCase):
     def test_only_existing_project_is_used_and_config_is_never_written(self):
         project = {"id": 21, "title": "Активность и Аллюр", "label_config":
                    '<View><TimelineLabels name="videoLabels" toName="video"><Label value="Шаг"/></TimelineLabels><Video name="video" value="$video"/></View>'}
-        task = {"data": {"source_id": "woona:one", "video": "/video"}}
+        task = {"data": {"source_id": "woona:one", "video": "/video"}, "meta": {}}
         with patch("server.label_sync.request_json", return_value=project) as request:
             self.assertEqual(active_project()["labels"], ["Шаг"])
             self.assertEqual(request.call_args.args[0], "GET")

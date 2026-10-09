@@ -470,8 +470,7 @@ final class WoonaServerClient {
         let attributes = try? FileManager.default.attributesOfItem(atPath: part.path)
         var offset = (attributes?[.size] as? NSNumber)?.int64Value ?? 0
         if attributes != nil, offset == expectedSize {
-            let existing = try Data(contentsOf: part, options: .mappedIfSafe)
-            if WoonaStore.sha256(existing) == sha256 {
+            if try WoonaStore.sha256File(part) == sha256 {
                 try? FileManager.default.removeItem(at: target)
                 try FileManager.default.moveItem(at: part, to: target)
                 return
@@ -495,10 +494,12 @@ final class WoonaServerClient {
             let output = try FileHandle(forWritingTo: part)
             defer { try? output.close() }
             try output.seekToEnd()
-            try output.write(contentsOf: input.readDataToEndOfFile())
+            while let chunk = try input.read(upToCount: 65_536), !chunk.isEmpty {
+                try output.write(contentsOf: chunk)
+            }
         }
-        let data = try Data(contentsOf: part, options: .mappedIfSafe)
-        guard data.count == expectedSize, WoonaStore.sha256(data) == sha256 else {
+        let size = (try FileManager.default.attributesOfItem(atPath: part.path)[.size] as? NSNumber)?.int64Value
+        guard size == expectedSize, try WoonaStore.sha256File(part) == sha256 else {
             throw ServerSyncError.responseInvalid
         }
         try? FileManager.default.removeItem(at: target)
