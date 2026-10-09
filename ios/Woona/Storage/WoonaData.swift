@@ -748,6 +748,26 @@ final class WoonaStore {
                    existing.recordingID != remote.id || existing.sha256 != artifact.sha256 {
                     throw WoonaStoreError.invalidData("Remote artifact conflicts with local metadata")
                 }
+                let matching = try artifacts(recordingID: remote.id).filter {
+                    $0.id == artifact.id || $0.fileName == artifact.fileName
+                }
+                guard matching.allSatisfy({ $0.sha256 == artifact.sha256 && $0.sizeBytes == artifact.sizeBytes &&
+                                            $0.type == artifact.type && $0.fileName == artifact.fileName }) else {
+                    throw WoonaStoreError.invalidData("Remote artifact conflicts with local file metadata")
+                }
+                let originalPath = (existingRecording?.relativeDirectory ?? relative) + "/" + artifact.fileName
+                if let local = matching.first(where: { $0.relativePath == originalPath }) ?? matching.first,
+                   local.id != artifact.id || matching.count > 1 {
+                    guard remote.ingestStatus == "complete" else {
+                        throw WoonaStoreError.invalidData("Artifact identity can only be reconciled with a completed server record")
+                    }
+                    // Old restores could leave a remote placeholder beside the same phone file.
+                    for other in matching where other.id != local.id {
+                        try execute("DELETE FROM artifacts WHERE id=? AND recording_id=?", [.text(other.id.uuidString), .text(remote.id.uuidString)])
+                    }
+                    try execute("UPDATE artifacts SET id=? WHERE id=? AND recording_id=?",
+                                [.text(artifact.id.uuidString), .text(local.id.uuidString), .text(remote.id.uuidString)])
+                }
                 let relativePath = "\(relative)/\(artifact.fileName)"
                 try execute(
                     """

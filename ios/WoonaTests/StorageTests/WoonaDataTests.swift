@@ -1,4 +1,5 @@
 import XCTest
+import SQLite3
 @testable import Woona
 
 final class WoonaDataTests: XCTestCase {
@@ -50,7 +51,18 @@ final class WoonaDataTests: XCTestCase {
     }
 
     @MainActor
-    private func checkCompletedRecovery(invalidLocal: Bool, normalizedHash: Bool, rekeyedArtifacts: Bool = false) async throws {
+    func testCompletedRestoreMergesCanonicalPlaceholderWithOriginalPhoneFile() async throws {
+        try await checkCompletedRecovery(invalidLocal: false, normalizedHash: false, rekeyedArtifacts: true, canonicalPlaceholder: true)
+    }
+
+    @MainActor
+    func testArtifactIdentityCannotBeReboundToDifferentBytes() async throws {
+        try await checkCompletedRecovery(invalidLocal: false, normalizedHash: false, rekeyedArtifacts: true, corruptServerSHA: true)
+    }
+
+    @MainActor
+    private func checkCompletedRecovery(invalidLocal: Bool, normalizedHash: Bool, rekeyedArtifacts: Bool = false,
+                                        canonicalPlaceholder: Bool = false, corruptServerSHA: Bool = false) async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root); RecordingSyncProtocol.handler = nil }
         let store = try WoonaStore(rootDirectory: root)
@@ -66,6 +78,20 @@ final class WoonaDataTests: XCTestCase {
         let saved = try XCTUnwrap(store.recording(id: recording.id))
         let files = try store.artifacts(recordingID: recording.id)
         let remoteIDs = files.map { rekeyedArtifacts ? UUID() : $0.id }
+        if canonicalPlaceholder {
+            var database: OpaquePointer?
+            XCTAssertEqual(sqlite3_open(root.appendingPathComponent("woona.sqlite").path, &database), SQLITE_OK)
+            defer { sqlite3_close(database) }
+            let sql = """
+                INSERT INTO artifacts(id,recording_id,type,file_name,relative_path,mime_type,size_bytes,sha256,
+                                      upload_state,uploaded_bytes,created_at_utc)
+                SELECT '\(remoteIDs[0].uuidString)',recording_id,type,file_name,'old-server-directory/sync.json',
+                       mime_type,size_bytes,sha256,'available',size_bytes,created_at_utc
+                FROM artifacts WHERE id='\(files[0].id.uuidString)'
+                """
+            XCTAssertEqual(sqlite3_exec(database, sql, nil, nil, nil), SQLITE_OK)
+            XCTAssertEqual(sqlite3_changes(database), 1)
+        }
         let hash = normalizedHash ? String(repeating: "a", count: 64) : profile.contentSha256
         let version: [String: Any] = ["id": profile.profileVersionID.uuidString, "schemaVersion": 1,
             "validationState": "complete", "questionnaire": try JSONSerialization.jsonObject(with: WoonaStore.dogQuestionnaireData(profile.questionnaire)),
@@ -76,7 +102,8 @@ final class WoonaDataTests: XCTestCase {
             "questionnaireValidationState": "complete", "sessionQuestionnaire": validSession, "videoRequested": false,
             "sync": [:], "artifacts": zip(files, remoteIDs).map { file, id in
                 ["id": id.uuidString, "type": file.type, "fileName": file.fileName,
-                 "mimeType": file.mimeType, "sizeBytes": file.sizeBytes, "sha256": file.sha256, "storageStatus": "available"] }]
+                 "mimeType": file.mimeType, "sizeBytes": file.sizeBytes,
+                 "sha256": corruptServerSHA ? String(repeating: "b", count: 64) : file.sha256, "storageStatus": "available"] }]
         RecordingSyncProtocol.handler = { request in
             guard request.httpMethod == "GET" else { throw ServerSyncError.responseInvalid }
             switch request.url!.path {
@@ -90,6 +117,16 @@ final class WoonaDataTests: XCTestCase {
             case "/v1/recordings/" + saved.id.uuidString: return (200, detail)
             default: throw ServerSyncError.responseInvalid
             }
+        }
+        if corruptServerSHA {
+            do {
+                try await syncClient().upload(recording: saved, profile: profile, store: store)
+                XCTFail("Different bytes must not be silently accepted")
+            } catch WoonaStoreError.invalidData { }
+            XCTAssertEqual(try store.artifacts(recordingID: recording.id).map(\.id), files.map(\.id))
+            XCTAssertEqual(try Data(contentsOf: root.appendingPathComponent(files[0].relativePath)), Data("{}".utf8))
+            XCTAssertEqual(try store.recording(id: recording.id)?.serverSyncState, "permanent_error")
+            return
         }
         try await syncClient().upload(recording: saved, profile: profile, store: store)
         XCTAssertEqual(try store.profile(dogID: profile.id, versionID: profile.profileVersionID)?.contentSha256, hash)
