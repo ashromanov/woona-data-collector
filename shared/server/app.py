@@ -20,6 +20,7 @@ from jsonschema import Draft202012Validator, ValidationError as SchemaValidation
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Connection
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
@@ -358,7 +359,50 @@ async def lifespan(_: FastAPI):
     yield
 
 
+class MetadataBodyLimitMiddleware:
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        if scope["type"] != "http" or (
+            scope["method"] == "PATCH"
+            and re.fullmatch(r"/(?:v1|dashboard)/artifacts/[^/]+/content/?", scope["path"])
+        ):
+            return await self.app(scope, receive, send)
+        request = Request(scope)
+        length = request.headers.get("content-length", "")
+        too_large = length.isdigit() and int(length) > MAX_JSON_BYTES
+        body = bytearray()
+        disconnected = False
+        while not too_large:
+            message = await receive()
+            chunk = message.get("body", b"")
+            too_large = len(body) + len(chunk) > MAX_JSON_BYTES
+            if too_large:
+                break
+            body.extend(chunk)
+            disconnected = message["type"] == "http.disconnect"
+            if disconnected or not message.get("more_body", False):
+                break
+        if too_large:
+            request_id = request.state.request_id
+            return await JSONResponse(status_code=413, content={
+                "requestId": request_id, "code": "json_body_too_large",
+                "message": "JSON request body is too large",
+            }, headers={"X-Request-ID": request_id})(scope, receive, send)
+        messages: list[Message] = [{"type": "http.request", "body": bytes(body), "more_body": disconnected}]
+        if disconnected:
+            messages.append({"type": "http.disconnect"})
+        pending = iter(messages)
+
+        async def replay() -> Message:
+            return next(pending, None) or await receive()
+
+        await self.app(scope, replay, send)
+
+
 app = FastAPI(title="Woona API", version="1.0.0", lifespan=lifespan)
+app.add_middleware(MetadataBodyLimitMiddleware)
 
 from server.dashboard import router as dashboard_router
 
@@ -370,22 +414,6 @@ async def request_id_middleware(request: Request, call_next):
     started = time.monotonic()
     request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
     request.state.request_id = request_id
-    content_length = request.headers.get("content-length")
-    if (
-        request.headers.get("content-type", "").startswith("application/json")
-        and content_length
-        and content_length.isdigit()
-        and int(content_length) > MAX_JSON_BYTES
-    ):
-        return JSONResponse(
-            status_code=413,
-            content={
-                "requestId": request_id,
-                "code": "json_body_too_large",
-                "message": "JSON request body is too large",
-            },
-            headers={"X-Request-ID": request_id},
-        )
     response = await call_next(request)
     response.headers["X-Request-ID"] = request_id
     logger.info(
@@ -1699,8 +1727,11 @@ def download_artifact(
     match = re.fullmatch(r"bytes=(\d+)-(\d*)", range_header)
     if match is None:
         raise HTTPException(416, detail={"code": "invalid_range"})
-    start = int(match.group(1))
-    end = int(match.group(2)) if match.group(2) else size - 1
+    try:
+        start = int(match.group(1))
+        end = int(match.group(2)) if match.group(2) else size - 1
+    except ValueError:
+        raise HTTPException(416, detail={"code": "invalid_range"}) from None
     if start >= size or end < start or end >= size:
         raise HTTPException(
             416,

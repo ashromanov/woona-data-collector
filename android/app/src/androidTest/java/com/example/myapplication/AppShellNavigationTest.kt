@@ -39,6 +39,10 @@ import com.example.myapplication.feature.device.ExportPhase
 import com.example.myapplication.localization.AppLanguage
 import com.example.myapplication.localization.AppLocalizationProvider
 import com.example.myapplication.localization.AppTextResolver
+import com.example.myapplication.data.HeartQuestionnaire
+import com.example.myapplication.data.HEART_OPTIONS
+import com.example.myapplication.data.canonicalJsonSha256
+import com.example.myapplication.profile.HeartQuestionnaireDialog
 import com.example.myapplication.profile.DogQuestionnaireDialog
 import com.example.myapplication.profile.SessionQuestionnaireDialog
 import com.example.myapplication.sync.ServerSyncUiState
@@ -55,6 +59,31 @@ private const val CHART_FULLSCREEN_DIALOG_TEST_TAG = "chart_fullscreen_dialog"
 class AppShellNavigationTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
+
+    @Test
+    fun completedHeartQuestionnaireSavesWithoutLosingExistingAnswers() {
+        val initial = HeartQuestionnaire(
+            answers = HEART_OPTIONS.keys.filter { it != "acuteHeartRateFactors" }.associateWith { "unknown" } +
+                mapOf("knownHeartCondition" to "yes", "heartRelevantMedication" to "yes", "referenceMethod" to "bpm_only"),
+            acuteHeartRateFactors = listOf("stress", "pain"),
+            knownHeartConditionDetails = "Existing diagnosis",
+            heartRelevantMedicationDetails = "Existing medication and timing",
+            referenceBpm = 121.0,
+            referenceMeasuredAtUtc = "2026-10-10T10:00:00Z",
+        )
+        var saved: HeartQuestionnaire? = null
+        composeRule.setContent {
+            MaterialTheme {
+                HeartQuestionnaireDialog(AppLanguage.ENGLISH, initial, onDismiss = {}, onSave = { saved = it })
+            }
+        }
+        composeRule.onNodeWithText("Answered: 6 of 6").assertIsDisplayed()
+        composeRule.onNodeWithText("Validate and save").performClick()
+        composeRule.runOnIdle {
+            assertEquals(canonicalJsonSha256(initial.toJson().toString()),
+                canonicalJsonSha256(requireNotNull(saved).toJson().toString()))
+        }
+    }
 
     @Test
     fun operationFailureDetailsRemainVisibleAcrossAllTabs() {

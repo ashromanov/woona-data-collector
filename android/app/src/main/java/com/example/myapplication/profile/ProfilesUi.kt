@@ -1556,6 +1556,9 @@ fun SessionQuestionnaireDialog(language: AppLanguage, onDismiss: () -> Unit, onS
 fun HeartQuestionnaireDialog(language: AppLanguage, initial: HeartQuestionnaire? = null, onDismiss: () -> Unit, onSave: (HeartQuestionnaire) -> Unit) {
     val values = rememberSaveable(saver = questionnaireValuesSaver) { mutableStateMapOf<String, String>().apply {
         initial?.answers?.let { putAll(it) }
+        initial?.let { put("acuteHeartRateFactors", it.acuteHeartRateFactors.joinToString(LIST_SEPARATOR)) }
+        initial?.knownHeartConditionDetails?.let { put("knownHeartConditionDetails", it) }
+        initial?.heartRelevantMedicationDetails?.let { put("heartRelevantMedicationDetails", it) }
         initial?.referenceArtifact?.let { put("referenceArtifact", it) }
         initial?.referenceBpm?.let { put("referenceBpm", it.toString()) }
         initial?.referenceMeasuredAtUtc?.let { put("referenceMeasuredAtUtc", it) }

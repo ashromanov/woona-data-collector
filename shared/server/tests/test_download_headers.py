@@ -6,10 +6,26 @@ from pathlib import Path
 from unittest.mock import patch
 
 from fastapi import Request
+from fastapi import HTTPException
 from server import app
 
 
 class DownloadHeadersTest(unittest.TestCase):
+    def test_oversized_range_numbers_are_rejected_without_server_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            (root / 'content.bin').write_bytes(b'abc')
+            row = {'storage_status': 'available', 'server_relative_path': 'content.bin',
+                   'expected_size_bytes': 3, 'sha256': 'a' * 64, 'mime_type': 'video/mp4',
+                   'file_name': 'content.mp4'}
+            with patch.object(app, 'STORAGE_ROOT', root), patch.object(app.engine, 'connect', return_value=nullcontext(None)), patch.object(app, 'artifact_row', return_value=row):
+                for value in ['bytes=' + '9' * 5000 + '-', 'bytes=0-' + '9' * 5000]:
+                    request = Request({'type': 'http', 'headers': [(b'range', value.encode())]})
+                    with self.assertRaises(HTTPException) as caught:
+                        app.download_artifact('audit', request, 'audit')
+                    self.assertEqual(caught.exception.status_code, 416)
+                    self.assertEqual(caught.exception.detail['code'], 'invalid_range')
+
     def test_full_and_range_downloads_escape_names_and_preserve_bytes(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
