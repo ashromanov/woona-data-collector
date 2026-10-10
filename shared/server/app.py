@@ -108,6 +108,15 @@ class ProfilePut(StrictModel):
     profile_version: ProfileVersionPayload = Field(alias="profileVersion")
 
 
+class AccountAssignment(StrictModel):
+    account_id: str = Field(alias="accountId")
+
+
+class QuestionnaireEdit(StrictModel):
+    expected_revision: int = Field(alias="expectedRevision", ge=1)
+    questionnaire: dict[str, Any]
+
+
 class RecordingPayload(StrictModel):
     source: Literal["live", "replay"]
     capture_status: Literal["completed", "failed", "interrupted"] = Field(
@@ -431,7 +440,30 @@ async def validation_error(
     )
 
 
+def normalize_account(value: str) -> str:
+    value = value.strip().lower()
+    if not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,63}", value, flags=re.ASCII):
+        raise HTTPException(422, detail={"code": "invalid_account_identifier", "message": "Use 1–64 Latin letters, digits, dots, underscores or hyphens"})
+    return value
+
+
+def selected_account(request: Request) -> str | None:
+    value = request.headers.get("X-Woona-Account")
+    return normalize_account(value) if value is not None else None
+
+
+def ensure_account(connection: Connection, identifier: str) -> None:
+    connection.execute(text("INSERT INTO accounts(identifier) VALUES(:id) ON CONFLICT DO NOTHING"), {"id": identifier})
+
+
+def assert_dog_account(connection: Connection, dog_id: uuid.UUID, account: str | None) -> None:
+    row = connection.execute(text("SELECT account_id FROM dogs WHERE id=:id FOR UPDATE"), {"id": dog_id}).first()
+    if row is not None and row.account_id != account:
+        raise HTTPException(404, detail={"code": "dog_not_found"})
+
+
 def authenticated_device(
+    request: Request,
     authorization: Annotated[str | None, Header()] = None,
 ) -> uuid.UUID:
     if not authorization or not authorization.startswith("Bearer "):
@@ -450,6 +482,25 @@ def authenticated_device(
         ).first()
     if row is None:
         raise HTTPException(401, detail={"code": "invalid_bearer_token"})
+    account = selected_account(request)
+    # Identifiers select a workspace; the existing device token still protects API access.
+    resources = {
+        "dog_id": "SELECT account_id FROM dogs WHERE id=:id",
+        "recording_id": "SELECT d.account_id FROM recordings r JOIN dogs d ON d.id=r.dog_id WHERE r.id=:id",
+        "artifact_id": "SELECT d.account_id FROM artifacts a JOIN recordings r ON r.id=a.recording_id JOIN dogs d ON d.id=r.dog_id WHERE a.id=:id",
+    }
+    if not (request.method == "PUT" and request.url.path.endswith("/account")):
+        for parameter, query in resources.items():
+            if parameter not in request.path_params:
+                continue
+            try:
+                identity = uuid.UUID(str(request.path_params[parameter]))
+            except ValueError:
+                raise HTTPException(422, detail={"code": "invalid_resource_id"})
+            with engine.connect() as connection:
+                owner = connection.execute(text(query), {"id": identity}).first()
+            if owner is not None and owner.account_id != account:
+                raise HTTPException(404, detail={"code": "resource_not_found"})
     return row.id
 
 
@@ -481,7 +532,11 @@ def apply_profile(
     dog: DogPayload,
     profile: ProfileVersionPayload,
     device_id: uuid.UUID,
+    account: str | None = None,
 ) -> int:
+    assert_dog_account(connection, dog.id, account)
+    if account is not None:
+        ensure_account(connection, account)
     ensure_not_retired(connection, "dog", dog.id)
     ensure_not_retired(connection, "profile", profile.id)
     if profile.schema_version != 2 and not ALLOW_LEGACY_MIGRATION:
@@ -531,8 +586,8 @@ def apply_profile(
         connection.execute(
             text(
                 """
-                INSERT INTO dogs(id,number_or_name,revision,created_by_device_id)
-                VALUES(:id,:name,:revision,:device)
+                INSERT INTO dogs(id,number_or_name,revision,created_by_device_id,account_id)
+                VALUES(:id,:name,:revision,:device,:account)
                 """
             ),
             {
@@ -540,6 +595,7 @@ def apply_profile(
                 "name": dog.number_or_name.strip(),
                 "revision": revision,
                 "device": device_id,
+                "account": account,
             },
         )
     else:
@@ -633,12 +689,13 @@ def put_profile(
     profile_id: uuid.UUID,
     payload: ProfilePut,
     device_id: Annotated[uuid.UUID, Depends(authenticated_device)],
+    account: Annotated[str | None, Depends(selected_account)] = None,
 ) -> dict[str, Any]:
     if dog_id != payload.dog.id or profile_id != payload.profile_version.id:
         raise HTTPException(422, detail={"code": "path_payload_id_mismatch"})
     with engine.begin() as connection:
         revision = apply_profile(
-            connection, payload.dog, payload.profile_version, device_id
+            connection, payload.dog, payload.profile_version, device_id, account
         )
         accepted = connection.execute(text("SELECT id,schema_version,validation_state,questionnaire,content_sha256,client_created_at FROM dog_profile_versions WHERE id=:id"), {"id": profile_id}).mappings().one()
     return {
@@ -731,6 +788,7 @@ def put_recording(
     recording_id: uuid.UUID,
     manifest: RecordingManifest,
     device_id: Annotated[uuid.UUID, Depends(authenticated_device)],
+    account: Annotated[str | None, Depends(selected_account)] = None,
 ) -> dict[str, Any]:
     if manifest.capture_device_id != device_id:
         raise HTTPException(403, detail={"code": "wrong_capture_device"})
@@ -793,6 +851,7 @@ def put_recording(
             manifest.dog,
             manifest.dog_profile_version,
             device_id,
+            account,
         )
         if existing is None:
             recording = manifest.recording
@@ -1226,28 +1285,89 @@ def get_me(
     return {"deviceId": str(device_id)}
 
 
+@app.put("/v1/accounts/{identifier}")
+def put_account(identifier: str,
+                device_id: Annotated[uuid.UUID, Depends(authenticated_device)]) -> dict[str, str]:
+    identifier = normalize_account(identifier)
+    with engine.begin() as connection:
+        ensure_account(connection, identifier)
+    return {"identifier": identifier}
+
+
+@app.put("/v1/dogs/{dog_id}/account")
+def assign_dog_account(dog_id: uuid.UUID, payload: AccountAssignment,
+                       device_id: Annotated[uuid.UUID, Depends(authenticated_device)],
+                       account: Annotated[str | None, Depends(selected_account)] = None) -> dict[str, str]:
+    identifier = normalize_account(payload.account_id)
+    if account != identifier:
+        raise HTTPException(422, detail={"code": "account_header_mismatch"})
+    with engine.begin() as connection:
+        ensure_not_retired(connection, "dog", dog_id)
+        dog = connection.execute(text("SELECT account_id FROM dogs WHERE id=:id FOR UPDATE"), {"id": dog_id}).first()
+        if dog is None:
+            raise HTTPException(404, detail={"code": "dog_not_found"})
+        if dog.account_id is not None and dog.account_id != identifier:
+            raise HTTPException(409, detail={"code": "dog_account_conflict", "message": "Dog already belongs to another account"})
+        ensure_account(connection, identifier)
+        connection.execute(text("UPDATE dogs SET account_id=:account,updated_at=now() WHERE id=:id"),
+                           {"id": dog_id, "account": identifier})
+    return {"dogId": str(dog_id), "accountId": identifier}
+
+
+@app.put("/v1/recordings/{recording_id}/questionnaire")
+def edit_session_questionnaire(recording_id: uuid.UUID, payload: QuestionnaireEdit,
+                               device_id: Annotated[uuid.UUID, Depends(authenticated_device)],
+                               account: Annotated[str | None, Depends(selected_account)] = None) -> dict[str, Any]:
+    questionnaire = payload.questionnaire
+    validate_questionnaire(session_validator, questionnaire, "session")
+    with engine.begin() as connection:
+        ensure_not_retired(connection, "recording", recording_id)
+        row = connection.execute(text("""SELECT r.*,d.account_id FROM recordings r
+            JOIN dogs d ON d.id=r.dog_id WHERE r.id=:id FOR UPDATE OF r,d"""),
+            {"id": recording_id}).mappings().first()
+        if row is None or row["account_id"] != account:
+            raise HTTPException(404, detail={"code": "recording_not_found"})
+        if account is None:
+            raise HTTPException(409, detail={"code": "account_required", "message": "Link this dog to an account before editing its sessions"})
+        if row["questionnaire_revision"] != payload.expected_revision:
+            raise HTTPException(409, detail={"code": "questionnaire_revision_conflict", "serverRevision": row["questionnaire_revision"],
+                                           "message": "The questionnaire changed on another device. Refresh and try again"})
+        original = row["session_questionnaire"]
+        for key, default in (("schemaVersion", None), ("animalId", None), ("sessionKind", "activity"), ("videoRequested", row["video_requested"])):
+            if questionnaire.get(key, default) != original.get(key, default):
+                raise HTTPException(422, detail={"code": "immutable_capture_field", "field": key})
+        connection.execute(text("""UPDATE recordings SET session_questionnaire=CAST(:questionnaire AS jsonb),
+            session_label=:label,questionnaire_validation_state='complete',
+            questionnaire_revision=questionnaire_revision+1,server_updated_at=now() WHERE id=:id"""),
+            {"id": recording_id, "questionnaire": json.dumps(questionnaire, ensure_ascii=False),
+             "label": questionnaire["sessionLabel"]})
+    return get_recording(recording_id, device_id)
+
+
 @app.get("/v1/dogs")
 def get_dogs(
     device_id: Annotated[uuid.UUID, Depends(authenticated_device)],
     limit: int = 50,
     cursor: uuid.UUID | None = None,
+    account: Annotated[str | None, Depends(selected_account)] = None,
 ) -> dict[str, Any]:
     limit = min(max(limit, 1), 200)
     with engine.connect() as connection:
         rows = connection.execute(
             text(
                 """
-                SELECT d.id,d.number_or_name,d.revision,d.updated_at,
+                SELECT d.id,d.number_or_name,d.revision,d.updated_at,d.account_id,
                        v.id profile_version_id,v.schema_version,v.questionnaire
                 FROM dogs d
                 JOIN dog_profile_versions v
                   ON v.dog_id=d.id AND v.superseded_at IS NULL
                 WHERE d.archived_at IS NULL
+                  AND d.account_id IS NOT DISTINCT FROM CAST(:account AS text)
                   AND (CAST(:cursor AS uuid) IS NULL OR d.id > CAST(:cursor AS uuid))
                 ORDER BY d.id LIMIT :limit
                 """
             ),
-            {"limit": limit + 1, "cursor": cursor},
+            {"limit": limit + 1, "cursor": cursor, "account": account},
         ).mappings().all()
     has_more = len(rows) > limit
     rows = rows[:limit]
@@ -1256,6 +1376,7 @@ def get_dogs(
             {
                 "id": str(row["id"]),
                 "numberOrName": row["number_or_name"],
+                "accountId": row["account_id"],
                 "revision": row["revision"],
                 "updatedAtUtc": utc_isoformat(row["updated_at"]),
                 "profileVersion": {
@@ -1306,6 +1427,7 @@ def get_dog(
     return {
         "id": str(row["id"]),
         "numberOrName": row["number_or_name"],
+        "accountId": row["account_id"],
         "revision": row["revision"],
         "profileVersion": {
             "id": str(row["profile_version_id"]),
@@ -1391,12 +1513,13 @@ def get_recording(
         recording = connection.execute(
             text(
                 """
-                SELECT r.*,v.schema_version profile_schema_version,
+                SELECT r.*,d.account_id,v.schema_version profile_schema_version,
                        v.validation_state profile_validation_state,
                        v.questionnaire profile_questionnaire,
                        v.content_sha256 profile_content_sha256,
                        v.client_created_at profile_created_at
                 FROM recordings r
+                JOIN dogs d ON d.id=r.dog_id
                 JOIN dog_profile_versions v ON v.id=r.dog_profile_version_id
                 WHERE r.id=:id
                 """
@@ -1422,6 +1545,8 @@ def get_recording(
     return {
         "id": str(recording["id"]),
         "dogId": str(recording["dog_id"]),
+        "accountId": recording["account_id"],
+        "questionnaireRevision": recording["questionnaire_revision"],
         "profileVersion": {
             "id": str(recording["dog_profile_version_id"]),
             "schemaVersion": recording["profile_schema_version"],
@@ -1600,6 +1725,7 @@ def download_artifact(
 @app.get("/v1/integrity")
 def integrity(
     device_id: Annotated[uuid.UUID, Depends(authenticated_device)],
+    account: Annotated[str | None, Depends(selected_account)] = None,
 ) -> dict[str, Any]:
     problems: list[dict[str, str]] = []
     with engine.connect() as connection:
@@ -1608,9 +1734,12 @@ def integrity(
                 """
                 SELECT a.id,a.server_relative_path,a.expected_size_bytes,a.sha256
                 FROM artifacts a JOIN recordings r ON r.id=a.recording_id
+                JOIN dogs d ON d.id=r.dog_id
                 WHERE a.storage_status='available'
+                  AND d.account_id IS NOT DISTINCT FROM CAST(:account AS text)
                 """
             ),
+            {"account": account},
         ).mappings().all()
     for row in rows:
         path = (STORAGE_ROOT / row["server_relative_path"]).resolve()

@@ -104,6 +104,7 @@ data class RemoteDog(
     val revision: Long,
     val profile: RemoteProfileVersion,
     val profileVersions: List<RemoteProfileVersion> = listOf(profile),
+    val accountId: String? = null,
 )
 
 data class RemoteArtifact(
@@ -140,6 +141,8 @@ data class RemoteRecording(
     val verifiedAtUtc: String?,
     val sync: RecordingSyncClock,
     val artifacts: List<RemoteArtifact>,
+    val questionnaireRevision: Int = 1,
+    val accountId: String? = null,
 )
 
 data class RestoreResult(
@@ -259,6 +262,7 @@ fun WoonaDatabase.pendingRecordingIds(): List<String> =
         JOIN server_sync_state s ON s.recording_id=r.id
         WHERE r.status IN ('completed','failed','interrupted')
           AND s.state IN ('pending','retryable_error')
+          AND (r.remote_copy=0 OR s.server_receipt_sha256 IS NOT NULL)
           AND NOT EXISTS (
               SELECT 1 FROM artifacts a
               WHERE a.recording_id=r.id
@@ -488,6 +492,8 @@ fun WoonaDatabase.acceptServerRecording(recording: RemoteRecording) {
     acceptServerProfile(recording.dogId, recording.profile)
     writableDatabase.update("recordings", ContentValues().apply {
         put("questionnaire_json", recording.sessionQuestionnaireJson)
+        put("questionnaire_revision", recording.questionnaireRevision)
+        put("session_label", recording.sessionLabel)
         put("questionnaire_validation_state", recording.questionnaireValidationState)
     }, "id=? AND dog_id=? AND dog_profile_version_id=?",
         arrayOf(recording.id, recording.dogId, recording.profile.id))
@@ -663,9 +669,14 @@ fun WoonaDatabase.restoreServerMetadata(
     var conflicts = 0
     var recordingConflicts = 0
     val database = writableDatabase
+    val rejectedDogs = mutableSetOf<String>()
     database.beginTransaction()
     try {
         dogs.forEach { dog ->
+            val owner = profile(dog.id)?.accountId
+            if (owner != null && owner != dog.accountId) {
+                conflicts++; rejectedDogs += dog.id; return@forEach
+            }
             val localCurrent = database.rawQuery(
                 """
                 SELECT v.id,v.server_sync_state FROM dog_profile_versions v
@@ -684,6 +695,7 @@ fun WoonaDatabase.restoreServerMetadata(
                 null,
                 ContentValues().apply {
                     put("id", dog.id)
+                    put("account_id", dog.accountId)
                     put("number_or_name", dog.numberOrName)
                     put("server_revision", dog.revision)
                     put("created_at_utc", dog.profile.clientCreatedAtUtc)
@@ -692,6 +704,7 @@ fun WoonaDatabase.restoreServerMetadata(
                 SQLiteDatabase.CONFLICT_IGNORE,
             )
             if (insertedDog != -1L) restoredDogs++
+            database.update("dogs", ContentValues().apply { put("account_id", dog.accountId) }, "id=?", arrayOf(dog.id))
             dog.profileVersions
                 .filter { it.id != dog.profile.id }
                 .forEach { version ->
@@ -744,6 +757,10 @@ fun WoonaDatabase.restoreServerMetadata(
         }
 
         recordings.forEach { recording ->
+            val owner = profile(recording.dogId)?.accountId
+            if (recording.dogId in rejectedDogs || (owner != null && owner != recording.accountId)) {
+                conflicts++; recordingConflicts++; return@forEach
+            }
             val relativeDirectory = database.rawQuery("SELECT relative_directory FROM recordings WHERE id=?", arrayOf(recording.id)).use { cursor ->
                 if (cursor.moveToFirst()) cursor.getString(0) else recordingRelativeDirectory(
                     recording.dogId, recording.id, Instant.parse(recording.startedAtUtc), recording.timezone,
@@ -777,6 +794,7 @@ fun WoonaDatabase.restoreServerMetadata(
                 null,
                 ContentValues().apply {
                     put("id", recording.id)
+                    put("remote_copy", 1)
                     put("dog_id", recording.dogId)
                     put("dog_profile_version_id", recording.profile.id)
                     put("source", recording.source)
@@ -785,6 +803,7 @@ fun WoonaDatabase.restoreServerMetadata(
                     put("questionnaire_schema_version", recording.questionnaireSchemaVersion)
                     put("questionnaire_validation_state", recording.questionnaireValidationState)
                     put("questionnaire_json", recording.sessionQuestionnaireJson)
+                    put("questionnaire_revision", recording.questionnaireRevision)
                     put("video_requested", if (recording.videoRequested) 1 else 0)
                     put("started_at_utc", recording.startedAtUtc)
                     if (recording.endedAtUtc == null) putNull("ended_at_utc") else put("ended_at_utc", recording.endedAtUtc)
@@ -807,6 +826,8 @@ fun WoonaDatabase.restoreServerMetadata(
                     put("dog_id",recording.dogId)
                     put("dog_profile_version_id",recording.profile.id)
                     put("questionnaire_json",recording.sessionQuestionnaireJson)
+                    put("questionnaire_revision",recording.questionnaireRevision)
+                    put("session_label",recording.sessionLabel)
                     put("questionnaire_schema_version",recording.questionnaireSchemaVersion)
                     put("questionnaire_validation_state",recording.questionnaireValidationState)
                 },"id=?",arrayOf(recording.id))

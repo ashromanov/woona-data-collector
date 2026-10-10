@@ -48,6 +48,7 @@ class ProfileSyncWorker(
     override suspend fun doWork(): Result {
         val profileVersionId = inputData.getString(KEY_ID) ?: return Result.failure()
         val database = WoonaDatabase(applicationContext)
+        serverOperationLock.lock()
         return try {
             val settings = ServerSettingsStore(applicationContext).get()
             if (!settings.isConfigured) {
@@ -59,9 +60,9 @@ class ProfileSyncWorker(
                 )
                 return Result.failure()
             }
-            val client = ServerApiClient(settings)
-            database.applyServerDeletions(client.fetchDeletions())
             val profile = database.profileSyncRecord(profileVersionId) ?: return Result.success()
+            val client = ServerApiClient(settings.copy(accountId = database.profile(profile.dogId)?.accountId))
+            database.applyServerDeletions(client.fetchDeletions())
             database.markProfileUploading(profileVersionId)
             val receipt = client.uploadProfile(profile)
             receipt.profileVersion?.let { database.acceptServerProfile(profile.dogId, it) }
@@ -81,6 +82,7 @@ class ProfileSyncWorker(
             )
             if (retryable) Result.retry() else Result.failure()
         } finally {
+            serverOperationLock.unlock()
             database.close()
         }
     }
@@ -116,6 +118,7 @@ class RecordingSyncWorker(
             database.close()
             return Result.success()
         }
+        serverOperationLock.lock()
         return try {
             val settings = ServerSettingsStore(applicationContext).get()
             if (!settings.isConfigured) {
@@ -127,9 +130,9 @@ class RecordingSyncWorker(
                 )
                 return Result.failure()
             }
-            val client = ServerApiClient(settings)
-            database.applyServerDeletions(client.fetchDeletions())
             var record = database.recordingSyncRecord(recordingId) ?: return Result.success()
+            val client = ServerApiClient(settings.copy(accountId = database.profile(record.dogId)?.accountId))
+            database.applyServerDeletions(client.fetchDeletions())
             val accepted = try { client.fetchRecording(recordingId) }
                 catch (error: ServerHttpException) { if (error.status == 404) null else throw error }
             if (accepted?.receiptSha256 != null) {
@@ -183,6 +186,7 @@ class RecordingSyncWorker(
             )
             if (retryable) Result.retry() else Result.failure()
         } finally {
+            serverOperationLock.unlock()
             database.close()
         }
     }

@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
+import com.example.myapplication.data.toJson
 import com.example.myapplication.data.ACTIVITY_TYPES
 import com.example.myapplication.data.DogProfile
 import com.example.myapplication.data.DogQuestionnaire
@@ -105,6 +106,7 @@ fun ProfilesOverview(
     onPolarDisconnect: () -> Unit = {},
     onHeartQuestionnaire: (String) -> Unit = {},
     onAddReference: (String) -> Unit = {},
+    onEditQuestionnaire: (Recording) -> Unit = {},
 ) {
     val selected = profiles.firstOrNull { it.id == selectedProfileId }
     if (videoState != VideoCaptureState.IDLE) {
@@ -191,6 +193,7 @@ fun ProfilesOverview(
                 val remoteArtifacts = recording.artifacts.filter { it.localPresence == "remote_only" }
                 val dataLabels = recordingDataLabels(recording, language)
                 if (recording.endedAtUtc != null) {
+                    OutlinedButton(onClick = { onEditQuestionnaire(recording) }, enabled = recording.serverSyncState != "uploading") { Text(tr(language, "Edit questionnaire", "Изменить анкету")) }
                     if (recording.questionnaire?.sessionKind == "heart" && !recording.questionnaire.readyForSync()) {
                         Button(onClick = { onHeartQuestionnaire(recording.id) }) { Text("Заполнить анкету по сердцебиению") }
                     }
@@ -1484,11 +1487,21 @@ fun DogQuestionnaireDialog(
 }
 
 @Composable
-fun SessionQuestionnaireDialog(language: AppLanguage, onDismiss: () -> Unit, onSave: (SessionQuestionnaire) -> Unit) {
+fun SessionQuestionnaireDialog(language: AppLanguage, onDismiss: () -> Unit, onSave: (SessionQuestionnaire) -> Unit, initial: SessionQuestionnaire? = null) {
     val values = rememberSaveable(saver = questionnaireValuesSaver) { mutableStateMapOf<String, String>().apply {
         put("sessionDate", java.time.LocalDate.now().toString())
         put("videoRequested", "yes")
         put("sessionKind", "activity")
+        initial?.let { value ->
+            val json = org.json.JSONObject(value.toJson())
+            json.keys().forEach { key ->
+                if (!json.isNull(key)) {
+                    val item = json.get(key)
+                    put(key, if (item is org.json.JSONArray) (0 until item.length()).joinToString(LIST_SEPARATOR) { item.getString(it) } else item.toString())
+                }
+            }
+            put("videoRequested", if (value.videoRequested) "yes" else "no")
+        }
     } }
     var errors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     QuestionnaireDialog(
@@ -1506,14 +1519,14 @@ fun SessionQuestionnaireDialog(language: AppLanguage, onDismiss: () -> Unit, onS
                 sessionKind = values["sessionKind"] ?: "activity",
             )
             errors = result.validate().errors
-            if (errors.isEmpty()) onSave(result)
+            if (errors.isEmpty()) onSave(if (initial == null) result else result.copy(animalId = initial.animalId, videoRequested = initial.videoRequested, sessionKind = initial.sessionKind, heartQuestionnaire = initial.heartQuestionnaire))
         },
     ) {
-        Choice(values, "sessionKind", "Вид сессии", listOf("activity" to "Активность", "heart" to "Сердцебиение"), onChange = { if (it == "heart") values["videoRequested"] = "no" })
+        if (initial == null) Choice(values, "sessionKind", "Вид сессии", listOf("activity" to "Активность", "heart" to "Сердцебиение"), onChange = { if (it == "heart") values["videoRequested"] = "no" })
         Field(values, "sessionLabel", "Номер сессии *", error = errors["sessionLabel"])
         if (values["sessionKind"] == "heart") {
             Text("Анкета по сердцебиению заполняется после записи. Контрольные файлы можно добавить позже.")
-            Choice(values, "videoRequested", "Записывать видео (необязательно)", yesNo(language))
+            if (initial == null) Choice(values, "videoRequested", "Записывать видео (необязательно)", yesNo(language))
         } else {
         Field(values, "sessionDate", "Дата сессии (ГГГГ-ММ-ДД)", error = errors["sessionDate"])
         Field(values, "startTime", "Время начала записи (ЧЧ:ММ, для импорта)", error = errors["startTime"])
@@ -1534,7 +1547,7 @@ fun SessionQuestionnaireDialog(language: AppLanguage, onDismiss: () -> Unit, onS
         Field(values, "lastMedicationAt", "Когда последний раз получал препарат (ЧСС/дыхание/активность)")
         Field(values, "notes", "Примечания", singleLine = false)
         Field(values, "specialistName", "ФИО специалиста, проводящего запись")
-        Choice(values, "videoRequested", "Записывать видео", yesNo(language))
+        if (initial == null) Choice(values, "videoRequested", "Записывать видео", yesNo(language))
         }
     }
 }

@@ -20,6 +20,11 @@ import com.example.myapplication.data.RecordingSyncRecord
 import com.example.myapplication.data.SessionQuestionnaire
 import com.example.myapplication.data.canonicalJsonSha256
 import com.example.myapplication.data.toJson
+import com.example.myapplication.data.recordingSyncRecord
+import com.example.myapplication.data.sessionQuestionnaireFromJson
+import com.example.myapplication.data.HeartQuestionnaire
+import com.example.myapplication.data.HEART_OPTIONS
+import com.example.myapplication.data.profileSyncRecord
 import com.example.myapplication.data.WoonaDatabase
 import com.example.myapplication.data.restoreServerMetadata
 import com.example.myapplication.data.remoteArtifacts
@@ -52,6 +57,60 @@ import org.junit.runner.RunWith
 class ServerApiClientIntegrationTest {
     @get:Rule
     val composeRule = createEmptyComposeRule()
+
+    @Test
+    fun accountHeadersScopeDogsAndManualLink() {
+        val arguments = InstrumentationRegistry.getArguments()
+        val url = arguments.getString("serverBaseUrl")
+        assumeTrue("Local API was not supplied", url != null)
+        val settings = ServerSettings(requireNotNull(url), arguments.getString("serverToken") ?: "change-me-local-token", "unused", false)
+        val account = "android-${UUID.randomUUID()}"
+        val first = ServerApiClient(settings.copy(accountId = account))
+        val other = ServerApiClient(settings.copy(accountId = "$account-other"))
+        first.applyAccount(account); other.applyAccount("$account-other")
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val root = File(context.cacheDir, "account-api-${System.nanoTime()}")
+        val database = WoonaDatabase(context, root)
+        try {
+            val assigned = database.saveProfile(completeDog().copy(numberOrName = "Assigned"), accountId = account)
+            val unassigned = database.saveProfile(completeDog().copy(numberOrName = "Unassigned"))
+            first.uploadProfile(requireNotNull(database.profileSyncRecord(assigned.profileVersionId)))
+            ServerApiClient(settings).uploadProfile(requireNotNull(database.profileSyncRecord(unassigned.profileVersionId)))
+            assertEquals(account, first.fetchDog(assigned.id).accountId)
+            org.junit.Assert.assertThrows(ServerHttpException::class.java) { other.fetchDog(assigned.id) }
+            org.junit.Assert.assertThrows(ServerHttpException::class.java) { first.fetchDog(unassigned.id) }
+            first.linkDogAccount(unassigned.id, account)
+            assertEquals(account, first.fetchDog(unassigned.id).accountId)
+            org.junit.Assert.assertThrows(ServerHttpException::class.java) { ServerApiClient(settings).fetchDog(unassigned.id) }
+            first.linkDogAccount(unassigned.id, account)
+            listOf("activity", "heart").forEach { kind ->
+                val q = if (kind == "heart") SessionQuestionnaire(schemaVersion = 2, sessionLabel = "Heart", sessionKind = kind,
+                    videoRequested = false, heartQuestionnaire = HeartQuestionnaire(
+                        answers = HEART_OPTIONS.keys.filter { it != "acuteHeartRateFactors" }.associateWith { "unknown" },
+                        acuteHeartRateFactors = listOf("unknown")))
+                    else completeSession().copy(schemaVersion = 2, sessionKind = kind, videoRequested = false, plannedActivities = listOf("Аллюр/движение"))
+                val local = database.beginRecording(assigned.id, RecordingSource.LIVE, q)
+                database.writeSyncMetadata(local.id, CaptureSyncMetadata(recordingId = local.id, profileId = assigned.id,
+                    source = "live", timezone = local.timezone, selectedSessionStartUtc = local.startedAtUtc))
+                database.finishRecording(local.id, RecordingStatus.FAILED)
+                database.hashPendingArtifacts()
+                val upload = requireNotNull(database.recordingSyncRecord(local.id))
+                first.uploadRecording(upload, { id -> database.resolveRelativePath(upload.artifacts.single { it.id == id }.relativePath) }, { _, _, _ -> })
+                val shown = first.fetchRecording(local.id)
+                val shownQ = sessionQuestionnaireFromJson(shown.sessionQuestionnaireJson)
+                val editedQ = if (kind == "heart") shownQ.copy(heartQuestionnaire = shownQ.heartQuestionnaire?.let { it.copy(answers = it.answers + ("actualActivity" to "rest")) })
+                    else shownQ.copy(notes = "Edited activity", sessionLabel = "Edited activity label")
+                val edited = first.editQuestionnaire(local.id, shown.questionnaireRevision, editedQ)
+                assertEquals(shown.questionnaireRevision + 1, edited.questionnaireRevision)
+                assertEquals(editedQ, sessionQuestionnaireFromJson(edited.sessionQuestionnaireJson))
+                org.junit.Assert.assertThrows(ServerHttpException::class.java) { first.editQuestionnaire(local.id, shown.questionnaireRevision, shownQ) }
+                database.restoreServerMetadata(listOf(first.fetchDog(assigned.id)), listOf(edited))
+                assertEquals(edited.questionnaireRevision, database.recording(local.id)?.questionnaireRevision)
+                assertEquals(editedQ, database.recording(local.id)?.questionnaire)
+                assertEquals(editedQ.sessionLabel, database.recording(local.id)?.sessionLabel)
+            }
+        } finally { database.close(); root.deleteRecursively() }
+    }
 
     @Test
     fun realWorkManager_invalidTokenIsVisibleAndManualRetrySucceeds() {

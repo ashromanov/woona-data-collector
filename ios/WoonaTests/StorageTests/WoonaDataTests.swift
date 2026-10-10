@@ -434,7 +434,18 @@ final class WoonaDataTests: XCTestCase {
             ]
         )
         XCTAssertTrue(try store.restoreRemoteRecording(remote))
-        XCTAssertFalse(try store.restoreRemoteRecording(remote))
+        let revised = ServerRecordingDetail(
+            id: remote.id, dogId: remote.dogId, profileVersion: remote.profileVersion,
+            source: remote.source, captureStatus: remote.captureStatus, ingestStatus: remote.ingestStatus,
+            startedAtUtc: remote.startedAtUtc, endedAtUtc: remote.endedAtUtc, timezone: remote.timezone,
+            sessionLabel: "Corrected server label", questionnaireSchemaVersion: remote.questionnaireSchemaVersion,
+            questionnaireValidationState: remote.questionnaireValidationState, sessionQuestionnaire: remote.sessionQuestionnaire,
+            videoRequested: remote.videoRequested, sync: remote.sync, artifacts: remote.artifacts,
+            questionnaireRevision: 2
+        )
+        XCTAssertFalse(try store.restoreRemoteRecording(revised))
+        XCTAssertEqual("Corrected server label", try store.recording(id: recordingID)?.sessionLabel)
+        XCTAssertEqual(2, try store.recording(id: recordingID)?.questionnaireRevision)
         XCTAssertEqual("synced", try store.recording(id: recordingID)?.serverSyncState)
         XCTAssertNil(try store.recording(id: recordingID)?.questionnaire)
         XCTAssertEqual([artifactID], try store.missingArtifacts(recordingID: recordingID).map(\.id))
@@ -566,6 +577,142 @@ final class WoonaDataTests: XCTestCase {
         for _ in 0..<12 { _ = try store.createRecording(profile: profile, source: "replay", questionnaire: completeSession()) }
         XCTAssertEqual(10, try store.recentRecordings(dogID: profile.id).count)
         XCTAssertEqual(13, try store.recentRecordings(dogID: profile.id, limit: nil).count)
+    }
+
+    func testDogAccountPersistsAndManualLinkKeepsAllSessions() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try WoonaStore(rootDirectory: root)
+        let unassigned = try store.saveProfile(completeDog())
+        let other = try store.saveProfile(completeDog(), accountID: "other")
+        let recording = try store.createRecording(profile: unassigned, source: "replay", questionnaire: completeSession())
+        try store.finalize(recording: recording, status: "completed", files: [], syncJSON: Data("{}".utf8))
+        let artifacts = try store.artifacts(recordingID: recording.id)
+        try store.linkDog(dogID: unassigned.id, accountID: "field")
+        try store.linkDog(dogID: unassigned.id, accountID: "field")
+        XCTAssertThrowsError(try store.linkDog(dogID: unassigned.id, accountID: "other"))
+        let reopened = try WoonaStore(rootDirectory: root)
+        XCTAssertEqual(try reopened.profile(dogID: unassigned.id, versionID: unassigned.profileVersionID)?.accountID, "field")
+        XCTAssertEqual(try reopened.profile(dogID: other.id, versionID: other.profileVersionID)?.accountID, "other")
+        XCTAssertEqual(try reopened.recentRecordings(dogID: unassigned.id).map(\.id), [recording.id])
+        for artifact in artifacts { XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent(artifact.relativePath).path)) }
+        var revised = completeDog(); revised.numberOrName = "Renamed"
+        let updated = try store.saveProfile(revised, replacing: try XCTUnwrap(reopened.profile(dogID: unassigned.id, versionID: unassigned.profileVersionID)), accountID: "other")
+        XCTAssertEqual(updated.accountID, "field")
+        let unrelatedDeletion = ServerDeletion(kind: "dog", id_sha256: WoonaStore.sha256(Data(other.id.uuidString.lowercased().utf8)))
+        XCTAssertEqual(try store.applyServerDeletions([unrelatedDeletion], accountID: "field"), 0)
+        XCTAssertNotNil(try store.profile(dogID: other.id, versionID: other.profileVersionID))
+    }
+
+    func testRemoteExplicitDogLinkAdoptsUnassignedLocalDogWithoutRemovingSession() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try WoonaStore(rootDirectory: root)
+        let dog = try store.saveProfile(completeDog())
+        let recording = try store.createRecording(profile: dog, source: "replay", questionnaire: completeSession())
+        let adopted = try store.upsertRemoteProfile(dogID: dog.id, profileVersionID: dog.profileVersionID,
+            revision: 1, questionnaire: dog.questionnaire, contentSha256: dog.contentSha256,
+            updatedAtUTC: dog.updatedAtUTC, accountID: "field")
+        XCTAssertEqual(adopted.accountID, "field")
+        XCTAssertNotNil(try store.recording(id: recording.id))
+        XCTAssertThrowsError(try store.upsertRemoteProfile(dogID: dog.id, profileVersionID: dog.profileVersionID,
+            revision: 2, questionnaire: dog.questionnaire, contentSha256: dog.contentSha256,
+            updatedAtUTC: dog.updatedAtUTC, accountID: "other"))
+    }
+
+    func testIncompleteRemoteRecordingRestoresQuestionnaireWithoutTakingUploadOwnership() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try WoonaStore(rootDirectory: root)
+        let dog = try store.saveProfile(completeDog())
+        let local = try store.createRecording(profile: dog, source: "replay", questionnaire: completeSession())
+        try store.finalize(recording: local, status: "completed", files: [], syncJSON: Data("{}".utf8))
+        var canonical = completeSession(); canonical.sessionLabel = "Server correction"
+        let answers = try JSONDecoder().decode(JSONValue.self, from: WoonaStore.sessionQuestionnaireData(canonical))
+        func detail(_ id: UUID) -> ServerRecordingDetail {
+            ServerRecordingDetail(id: id, dogId: dog.id,
+                profileVersion: .init(id: dog.profileVersionID, schemaVersion: 1, validationState: "complete",
+                    questionnaire: dog.questionnaire, contentSha256: dog.contentSha256,
+                    clientCreatedAtUtc: dog.createdAtUTC, supersededAtUtc: nil),
+                source: "replay", captureStatus: "completed", ingestStatus: "uploading",
+                startedAtUtc: local.startedAtUTC, endedAtUtc: "2026-10-10T12:00:00Z", timezone: "UTC",
+                sessionLabel: canonical.sessionLabel, questionnaireSchemaVersion: 1,
+                questionnaireValidationState: "complete", sessionQuestionnaire: answers,
+                videoRequested: false, sync: .object([:]), artifacts: [], questionnaireRevision: 2)
+        }
+        let remoteID = UUID()
+        XCTAssertTrue(try store.restoreRemoteRecording(detail(remoteID)))
+        let remote = try XCTUnwrap(store.recording(id: remoteID))
+        XCTAssertEqual(remote.serverSyncState, "remote")
+        XCTAssertEqual(remote.questionnaire, canonical)
+        XCTAssertEqual(remote.questionnaireRevision, 2)
+        XCTAssertFalse(try store.pendingRecordings().contains { $0.id == remoteID })
+        try store.saveSessionQuestionnaire(recordingID: remoteID, questionnaire: canonical, revision: 3)
+        XCTAssertEqual(try store.recording(id: remoteID)?.serverSyncState, "remote")
+        XCTAssertFalse(try store.pendingRecordings().contains { $0.id == remoteID })
+        XCTAssertFalse(try store.restoreRemoteRecording(detail(local.id)))
+        XCTAssertEqual(try store.recording(id: local.id)?.serverSyncState, "pending")
+        XCTAssertEqual(try store.recording(id: local.id)?.sessionLabel, canonical.sessionLabel)
+        XCTAssertEqual(try store.pendingRecordings().map(\.id), [local.id])
+    }
+
+    func testSessionEditQueuesAnswersAndPreservesCaptureFieldsAndFiles() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try WoonaStore(rootDirectory: root)
+        let profile = try store.saveProfile(completeDog(), accountID: "field")
+        let recording = try store.createRecording(profile: profile, source: "replay", questionnaire: completeSession())
+        try store.finalize(recording: recording, status: "completed", files: [], syncJSON: Data("{}".utf8))
+        let syncBefore = try store.syncJSON(recordingID: recording.id)
+        var edited = completeSession(); edited.sessionLabel = "Corrected"
+        try store.saveSessionQuestionnaire(recordingID: recording.id, questionnaire: edited)
+        let pending = try XCTUnwrap(store.recording(id: recording.id))
+        XCTAssertTrue(pending.questionnaireDirty)
+        XCTAssertEqual(pending.questionnaireRevision, 1)
+        XCTAssertEqual(pending.sessionLabel, "Corrected")
+        XCTAssertEqual(try store.pendingRecordings().map(\.id), [recording.id])
+        XCTAssertEqual(try store.syncJSON(recordingID: recording.id), syncBefore)
+        edited.videoRequested = true
+        XCTAssertThrowsError(try store.saveSessionQuestionnaire(recordingID: recording.id, questionnaire: edited))
+        edited.videoRequested = false
+        try store.saveSessionQuestionnaire(recordingID: recording.id, questionnaire: edited, revision: 2)
+        XCTAssertFalse(try XCTUnwrap(store.recording(id: recording.id)).questionnaireDirty)
+        XCTAssertEqual(try store.recording(id: recording.id)?.questionnaireRevision, 2)
+    }
+
+    @MainActor
+    func testAccountNormalizationAndRevisionConflictUseDisplayedRevision() async throws {
+        XCTAssertEqual(try WoonaServerClient.normalizedAccount("  Field_A-1  "), "field_a-1")
+        XCTAssertNil(try WoonaServerClient.normalizedAccount(" "))
+        for invalid in ["../account", "аccount", "-account", String(repeating: "a", count: 65)] {
+            XCTAssertThrowsError(try WoonaServerClient.normalizedAccount(invalid))
+        }
+        defer { RecordingSyncProtocol.handler = nil }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [RecordingSyncProtocol.self]
+        let client = try WoonaServerClient(configuration: .init(baseURL: "https://sync.test", wifiOnly: false, accountID: "field"), token: "test", sessionConfiguration: configuration)
+        RecordingSyncProtocol.handler = { request in
+            XCTAssertEqual(request.value(forHTTPHeaderField: "X-Woona-Account"), "field")
+            XCTAssertEqual(request.httpMethod, "PUT")
+            XCTAssertTrue(request.url!.path.hasSuffix("/questionnaire"))
+            var data = request.httpBody ?? Data()
+            if let stream = request.httpBodyStream {
+                stream.open(); defer { stream.close() }
+                var buffer = [UInt8](repeating: 0, count: 4096)
+                while stream.hasBytesAvailable {
+                    let count = stream.read(&buffer, maxLength: buffer.count)
+                    guard count > 0 else { break }
+                    data.append(contentsOf: buffer.prefix(count))
+                }
+            }
+            let body = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+            XCTAssertEqual(body["expectedRevision"] as? Int, 2)
+            return (409, ["message": "Revision conflict"])
+        }
+        do {
+            _ = try await client.updateQuestionnaire(recordingID: UUID(), questionnaire: completeSession(), expectedRevision: 2)
+            XCTFail("Stale revision must fail")
+        } catch ServerSyncError.requestFailed(let status, _) { XCTAssertEqual(status, 409) }
     }
 
     private func completeDog() -> DogQuestionnaire {

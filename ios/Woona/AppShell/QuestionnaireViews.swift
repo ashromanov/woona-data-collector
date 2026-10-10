@@ -185,13 +185,22 @@ private struct LegacyDogQuestionnaireEditor: View {
     ]
 }
 
-private struct LegacySessionQuestionnaireEditor: View {
+struct LegacySessionQuestionnaireEditor: View {
     @Environment(\.dismiss) private var dismiss
     @State private var draft = SessionQuestionnaire()
     @State private var errors: [String: String] = [:]
     let language: AppLanguage
     let source: String
     let onSave: (SessionQuestionnaire) -> Void
+    let initial: SessionQuestionnaire?
+
+    init(language: AppLanguage, source: String, initial: SessionQuestionnaire? = nil, onSave: @escaping (SessionQuestionnaire) -> Void) {
+        self.language = language
+        self.source = source
+        self.initial = initial
+        self.onSave = onSave
+        _draft = State(initialValue: initial ?? SessionQuestionnaire())
+    }
 
     var body: some View {
         NavigationStack {
@@ -200,7 +209,7 @@ private struct LegacySessionQuestionnaireEditor: View {
                     Section {
                         ProgressView(value: progress)
                         Toggle(language == .russian ? "Записывать видео" : "Record video", isOn: $draft.videoRequested)
-                            .disabled(source == "replay")
+                            .disabled(source == "replay" || initial != nil)
                     }
                     Section(language == .russian ? "Сессия" : "Session") {
                         field("sessionLabel", language == .russian ? "Название" : "Session label", text: $draft.sessionLabel)
@@ -229,7 +238,7 @@ private struct LegacySessionQuestionnaireEditor: View {
                         }
                     }
                 }
-                .onAppear { if source == "replay" { draft.videoRequested = false } }
+                .onAppear { if initial == nil && source == "replay" { draft.videoRequested = false } }
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button(language == .russian ? "Отмена" : "Cancel") { dismiss() } }
                     ToolbarItem(placement: .confirmationAction) {
@@ -431,9 +440,19 @@ struct SessionQuestionnaireEditor: View {
     @Environment(\.dismiss) private var dismiss
     @State private var draft = SessionQuestionnaire()
     @State private var errors: [String: String] = [:]
+    @State private var isHeartEditorPresented = false
     let language: AppLanguage
     let source: String
     let onSave: (SessionQuestionnaire) -> Void
+    let initial: SessionQuestionnaire?
+
+    init(language: AppLanguage, source: String, initial: SessionQuestionnaire? = nil, onSave: @escaping (SessionQuestionnaire) -> Void) {
+        self.language = language
+        self.source = source
+        self.initial = initial
+        self.onSave = onSave
+        _draft = State(initialValue: initial ?? SessionQuestionnaire())
+    }
 
     var body: some View {
         NavigationStack {
@@ -442,7 +461,7 @@ struct SessionQuestionnaireEditor: View {
                     Picker("Вид сессии", selection: Binding(get: { draft.sessionKind ?? "activity" }, set: { draft.sessionKind = $0; if $0 == "heart" { draft.videoRequested = false } })) {
                         Text("Активность").tag("activity")
                         Text("Сердцебиение").tag("heart")
-                    }.pickerStyle(.segmented)
+                    }.pickerStyle(.segmented).disabled(initial != nil)
                 }
                 Section("Сессия") {
                     Text("Собака связывается с выбранной карточкой. Технические время и длительность записываются автоматически.")
@@ -454,7 +473,7 @@ struct SessionQuestionnaireEditor: View {
                     TextField("Фактическая продолжительность, мин (для импорта)", text: decimal(\.durationMinutes)).keyboardType(.decimalPad)
                     TextField("Кто проводил запись", text: $draft.operatorName)
                     }
-                    Toggle("Записывать видео", isOn: $draft.videoRequested).disabled(source == "replay")
+                    Toggle("Записывать видео", isOn: $draft.videoRequested).disabled(source == "replay" || initial != nil)
                 }
                 if draft.sessionKind != "heart" {
                 Section("Что планировалось записывать *") {
@@ -481,15 +500,26 @@ struct SessionQuestionnaireEditor: View {
                     TextField("Примечания", text: text(\.notes), axis: .vertical)
                     TextField("ФИО специалиста, проводящего запись", text: text(\.specialistName))
                 }
+                } else if initial != nil {
+                    Section("Сведения о сессии") {
+                        TextField("Кто проводил запись", text: $draft.operatorName)
+                        TextField("Примечания", text: text(\.notes), axis: .vertical)
+                        TextField("ФИО специалиста", text: text(\.specialistName))
+                        Button("Редактировать ответы по сердцебиению") { isHeartEditorPresented = true }
+                    }
                 } else { Text("Анкета по сердцебиению заполняется после записи. Контрольные файлы можно добавить позже.") }
                 ForEach(errors.keys.sorted(), id: \.self) { key in Text("\(key): \(errors[key]!)").foregroundStyle(.red) }
             }
-            .onAppear { draft.schemaVersion = 2; draft.plannedActivities = draft.plannedActivities ?? []; draft.surfaces = draft.surfaces ?? []; if source == "replay" { draft.videoRequested = false } }
+            .onAppear { if initial != nil { return }; draft.schemaVersion = 2; draft.plannedActivities = draft.plannedActivities ?? []; draft.surfaces = draft.surfaces ?? []; if source == "replay" { draft.videoRequested = false } }
+            .sheet(isPresented: $isHeartEditorPresented) {
+                HeartQuestionnaireEditor(initial: draft.heartQuestionnaire ?? HeartQuestionnaire()) { draft.heartQuestionnaire = $0.normalized() }
+            }
             .navigationTitle("Анкета сессии")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Отмена") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) { Button("Продолжить") {
+                ToolbarItem(placement: .confirmationAction) { Button(initial == nil ? "Продолжить" : "Сохранить") {
                     errors = draft.validate().errors
+                    if initial != nil && !draft.readyForSync { errors["heartQuestionnaire"] = "Заполните ответы по сердцебиению" }
                     guard errors.isEmpty else { return }
                     draft.savedAtLocal = sheetSavedAt()
                     onSave(draft); dismiss()
@@ -576,8 +606,9 @@ struct HeartQuestionnaireEditor: View {
             .navigationTitle("Анкета по активности и сердцебиению")
             .onAppear {
                 if draft.referenceMethod == nil {
-                    draft.referenceMethod = initial.referenceMethod
-                    draft.referenceArtifact = initial.referenceArtifact
+                    draft = initial
+                    bpm = initial.referenceBpm.map { String($0.bpm) } ?? ""
+                    measuredAt = initial.referenceBpm?.measuredAtUtc ?? ""
                 }
             }
             .toolbar {

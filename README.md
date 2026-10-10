@@ -6,6 +6,8 @@ Native Android 12+ and iOS 17+ apps for dog profiles, questionnaires, BLE sensor
 
 Heart sessions, the separate post-recording questionnaire, and manual ECG/HR/reference uploads are documented in [Heart recordings](shared/HEART_RECORDINGS.md).
 
+Operator accounts and post-recording questionnaire edits in 1.3.5 are documented in [Accounts](shared/ACCOUNTS.md).
+
 The production labeling stack, canonical recordings, and annotation counts are documented in [Label Studio deployment](shared/LABEL_STUDIO.md).
 
 | Directory | Contents |

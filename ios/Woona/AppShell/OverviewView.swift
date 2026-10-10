@@ -8,6 +8,7 @@ struct OverviewView: View {
     @State private var pendingExportKind: ExportKind?
     @State private var isDogEditorPresented = false
     @State private var editingProfile: DogProfile?
+    @State private var editingSession: WoonaRecording?
     @State private var isSessionEditorPresented = false
     @State private var pendingDevice: BleDevice?
     @State private var pendingReplayURL: URL?
@@ -171,6 +172,10 @@ struct OverviewView: View {
                                     }
                                 }
                                 if recording.endedAtUTC != nil {
+                                    Button(appState.selectedLanguage == .russian ? "Редактировать анкету сессии" : "Edit session questionnaire") { editingSession = recording }
+                                        .disabled(!appState.canEditQuestionnaire(recording))
+                                    Button(appState.selectedLanguage == .russian ? "Заменить анкету данными сервера" : "Restore questionnaire from server") { appState.restoreSessionQuestionnaire(recording) }
+                                        .disabled(!appState.canEditQuestionnaire(recording))
                                     if recording.questionnaire?.sessionKind == "heart", recording.questionnaire?.readyForSync == false {
                                         Button("Заполнить анкету по сердцебиению") { heartRecording = recording }
                                     }
@@ -178,6 +183,7 @@ struct OverviewView: View {
                                         referenceRecording = recording
                                         isReferenceImporterPresented = true
                                     }
+                                    .disabled(recording.serverSyncState == "remote")
                                 }
                             }
                         }
@@ -213,6 +219,19 @@ struct OverviewView: View {
             .onChange(of: appState.recentRecordings) { _, records in
                 if heartRecording == nil, !isSessionEditorPresented {
                     heartRecording = records.first { $0.endedAtUTC != nil && $0.questionnaire?.sessionKind == "heart" && $0.questionnaire?.readyForSync == false }
+                }
+            }
+            .sheet(item: $editingSession) { recording in
+                if let questionnaire = recording.questionnaire {
+                    if questionnaire.schemaVersion == 1 {
+                        LegacySessionQuestionnaireEditor(language: appState.selectedLanguage, source: recording.source, initial: questionnaire) {
+                            appState.saveSessionQuestionnaire($0, displayedRecording: recording)
+                        }
+                    } else {
+                        SessionQuestionnaireEditor(language: appState.selectedLanguage, source: recording.source, initial: questionnaire) {
+                            appState.saveSessionQuestionnaire($0, displayedRecording: recording)
+                        }
+                    }
                 }
             }
             .sheet(item: $heartRecording) { recording in

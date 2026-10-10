@@ -30,7 +30,7 @@ PostgreSQL хранит анкеты, версии, связи, состояни
 - `feature/device/` — единый lifecycle датчика, камеры, replay и экспорта.
 - `storage/` — packet/raw/timeline/diagnostic/CSV/ZIP форматы.
 - `video/` — Camera2 preview и MediaRecorder.
-- `data/` — SQLite v6 на Android, анкеты, immutable profile versions, записи, sync и
+- `data/` — SQLite v7 на Android, анкеты, immutable profile versions, записи, sync и
   artifacts.
 - `sync/` — настройки сервера, Keystore-токен, HTTP upload/download и
   WorkManager.
@@ -41,7 +41,7 @@ PostgreSQL хранит анкеты, версии, связи, состояни
 ## Локальная модель
 
 `filesDir/Woona/woona.sqlite` на Android и Application Support
-`Woona/woona.sqlite` на iOS используют совместимые модели (Android schema version 6; iOS version 5 с добавленным столбцом метаданных контрольных файлов):
+`Woona/woona.sqlite` на iOS используют совместимые модели (Android schema version 7; iOS version 5 с дополнительными столбцами аккаунта, версий анкет и контрольных файлов):
 
 - `dogs`;
 - `dog_profile_versions`;
@@ -89,8 +89,12 @@ sync и список артефактов; совпадающие локальн
 контрольной суммы не перезаписывается.
 
 Bearer-токен хранится на сервере только как SHA-256, локально — в Android
-Keystore или iOS Keychain. Все активные device tokens одного развёртывания
-видят общих собак, профили, завершённые записи и downloads. Изменять
+Keystore или iOS Keychain. Аккаунт оператора выбирается заголовком `X-Woona-Account`; `dogs.account_id`
+связывает собаку и все её сессии с одним аккаунтом. Без заголовка доступны
+только непривязанные данные. Аккаунт не заменяет технический device token.
+Анкеты сессий редактируются отдельно с проверкой `questionnaire_revision`;
+исходные manifests/files и receipt артефактов сохраняются. Подробности:
+[`shared/ACCOUNTS.md`](shared/ACCOUNTS.md). Изменять
 незавершённую artifact upload может только создавший recording
 `capture_device_id`. Readiness отдельно проверяет БД и файловую систему.
 

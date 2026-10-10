@@ -360,6 +360,7 @@ data class DogProfile(
     val validationState: String,
     val createdAtUtc: String,
     val updatedAtUtc: String,
+    val accountId: String? = null,
 )
 
 data class Artifact(
@@ -393,6 +394,7 @@ data class Recording(
     val relativeDirectory: String,
     val artifacts: List<Artifact> = emptyList(),
     val serverSyncState: String = "pending",
+    val questionnaireRevision: Int = 1,
 )
 
 data class RecordingSummary(
@@ -708,6 +710,16 @@ class WoonaDatabase(
         if (oldVersion < 3) migrateV2ToV3(db)
         if (oldVersion < 4) repairLegacySyncRows(db)
         if (oldVersion < 5) repairCanonicalProfileHashes(db)
+        if (oldVersion in 3..6) {
+            fun hasColumn(table: String, name: String): Boolean = db.rawQuery("PRAGMA table_info($table)", null).use { cursor ->
+                var found = false
+                while (cursor.moveToNext()) if (cursor.getString(1) == name) found = true
+                found
+            }
+            if (!hasColumn("dogs", "account_id")) db.execSQL("ALTER TABLE dogs ADD COLUMN account_id TEXT")
+            if (!hasColumn("recordings", "remote_copy")) db.execSQL("ALTER TABLE recordings ADD COLUMN remote_copy INTEGER NOT NULL DEFAULT 0")
+            if (!hasColumn("recordings", "questionnaire_revision")) db.execSQL("ALTER TABLE recordings ADD COLUMN questionnaire_revision INTEGER NOT NULL DEFAULT 1")
+        }
         if (oldVersion < 6) {
             db.execSQL("ALTER TABLE artifacts RENAME TO artifacts_v5")
             db.execSQL("DROP INDEX IF EXISTS artifacts_recording")
@@ -724,6 +736,7 @@ class WoonaDatabase(
             """
             CREATE TABLE dogs (
                 id TEXT PRIMARY KEY,
+                account_id TEXT,
                 number_or_name TEXT NOT NULL CHECK(length(trim(number_or_name)) > 0),
                 server_revision INTEGER NOT NULL DEFAULT 0,
                 created_at_utc TEXT NOT NULL,
@@ -765,6 +778,8 @@ class WoonaDatabase(
             """
             CREATE TABLE recordings (
                 id TEXT PRIMARY KEY,
+                questionnaire_revision INTEGER NOT NULL DEFAULT 1,
+                remote_copy INTEGER NOT NULL DEFAULT 0,
                 dog_id TEXT NOT NULL REFERENCES dogs(id) ON DELETE RESTRICT,
                 dog_profile_version_id TEXT NOT NULL REFERENCES dog_profile_versions(id) ON DELETE RESTRICT,
                 source TEXT NOT NULL CHECK(source IN ('live','replay')),
@@ -1046,6 +1061,7 @@ class WoonaDatabase(
         questionnaire: DogQuestionnaire,
         profileId: String? = null,
         now: Instant = Instant.now(),
+        accountId: String? = null,
     ): DogProfile {
         require(questionnaire.validate().isValid) {
             "Dog questionnaire is incomplete: ${questionnaire.validate().errors.keys.joinToString()}"
@@ -1067,6 +1083,7 @@ class WoonaDatabase(
                 null,
                 ContentValues().apply {
                     put("id", id)
+                    put("account_id", accountId?.let(::normalizeAccountId))
                     put("number_or_name", name)
                     put("created_at_utc", createdAt)
                     put("updated_at_utc", now.toString())
@@ -1112,7 +1129,7 @@ class WoonaDatabase(
         return readableDatabase.rawQuery(
             """
             SELECT d.id,v.id,d.number_or_name,v.questionnaire_json,v.validation_state,
-                   d.created_at_utc,d.updated_at_utc
+                   d.created_at_utc,d.updated_at_utc,d.account_id
             FROM dogs d
             JOIN dog_profile_versions v ON v.dog_id=d.id AND v.superseded_at_utc IS NULL
             WHERE d.archived_at_utc IS NULL
@@ -1130,7 +1147,7 @@ class WoonaDatabase(
         return readableDatabase.rawQuery(
             """
             SELECT d.id,v.id,d.number_or_name,v.questionnaire_json,v.validation_state,
-                   d.created_at_utc,d.updated_at_utc
+                   d.created_at_utc,d.updated_at_utc,d.account_id
             FROM dogs d
             JOIN dog_profile_versions v ON v.dog_id=d.id AND v.superseded_at_utc IS NULL
             WHERE d.id=?
@@ -1138,6 +1155,13 @@ class WoonaDatabase(
             """.trimIndent(),
             arrayOf(id),
         ).use { cursor -> if (cursor.moveToFirst()) cursor.toProfile() else null }
+    }
+
+    fun linkDogAccount(dogId: String, accountId: String) {
+        val account = normalizeAccountId(accountId)
+        val existing = requireNotNull(profile(dogId)).accountId
+        require(existing == null || existing == account) { "Собака уже принадлежит другому аккаунту" }
+        writableDatabase.update("dogs", ContentValues().apply { put("account_id", account) }, "id=?", arrayOf(dogId))
     }
 
     fun beginRecording(
@@ -1259,8 +1283,15 @@ class WoonaDatabase(
         require(heart.validate().isValid)
         val recording = requireNotNull(recording(recordingId))
         require(recording.endedAtUtc != null && recording.questionnaire?.sessionKind == "heart")
-        require(recording.questionnaire.heartQuestionnaire == null) { "Анкета уже сохранена" }
-        val questionnaire = recording.questionnaire.copy(heartQuestionnaire = heart)
+        saveSessionQuestionnaire(recordingId, recording.questionnaire.copy(heartQuestionnaire = heart))
+    }
+
+    fun saveSessionQuestionnaire(recordingId: String, questionnaire: SessionQuestionnaire) {
+        val recording = requireNotNull(recording(recordingId))
+        val original = requireNotNull(recording.questionnaire)
+        require(recording.endedAtUtc != null && recording.serverSyncState != "synced" && recording.serverSyncState != "uploading")
+        require(questionnaire.validate().isValid)
+        require(original.animalId == questionnaire.animalId && original.videoRequested == questionnaire.videoRequested && original.sessionKind == questionnaire.sessionKind)
         val sync = File(recordingDirectory(recording.relativeDirectory), "sync.json")
         if (sync.isFile) {
             val temporary = File(sync.parentFile, "sync.json.tmp")
@@ -1269,8 +1300,11 @@ class WoonaDatabase(
         }
         writableDatabase.beginTransaction()
         try {
-            writableDatabase.update("recordings", ContentValues().apply { put("questionnaire_json", questionnaire.toJson()) }, "id=?", arrayOf(recordingId))
+            writableDatabase.update("recordings", ContentValues().apply { put("questionnaire_json", questionnaire.toJson()); put("session_label", questionnaire.sessionLabel) }, "id=?", arrayOf(recordingId))
             if (sync.isFile) insertArtifact(recordingId, ArtifactType.SYNC, sync, Instant.now())
+            writableDatabase.update("server_sync_state", ContentValues().apply {
+                put("state", "pending"); putNull("last_error_code"); putNull("last_error_message")
+            }, "recording_id=?", arrayOf(recordingId))
             writableDatabase.setTransactionSuccessful()
         } finally { writableDatabase.endTransaction() }
     }
@@ -1665,6 +1699,7 @@ class WoonaDatabase(
         validationState = getString(4),
         createdAtUtc = getString(5),
         updatedAtUtc = getString(6),
+        accountId = if (isNull(7)) null else getString(7),
     )
 
     private fun android.database.Cursor.toRecording(): Recording = Recording(
@@ -1680,10 +1715,11 @@ class WoonaDatabase(
         timezone = getString(9),
         questionnaire = if (isNull(10)) null else sessionQuestionnaireFromJson(getString(10)),
         relativeDirectory = getString(11),
+        questionnaireRevision = getInt(12),
     )
 
     companion object {
-        private const val DATABASE_VERSION = 6
+        private const val DATABASE_VERSION = 7
         private val RECORDING_COLUMNS = arrayOf(
             "id",
             "dog_id",
@@ -1697,6 +1733,7 @@ class WoonaDatabase(
             "timezone",
             "questionnaire_json",
             "relative_directory",
+            "questionnaire_revision",
         )
         private val ARTIFACT_COLUMNS = arrayOf(
             "id",

@@ -49,6 +49,18 @@ final class AppViewModel: ObservableObject {
     @Published var serverBaseURL = ""
     @Published var serverToken = ""
     @Published var serverWifiOnly = true
+    @Published var accountInput = ""
+    @Published private(set) var selectedAccountID: String?
+    @Published private(set) var unassignedDogProfiles: [DogProfile] = []
+    @Published private(set) var isAccountOperationRunning = false
+    @Published private var uploadingProfileCount = 0
+    @Published private var scheduledSyncCount = 0
+
+    var canChangeAccount: Bool {
+        !isAccountOperationRunning && !isConnectionActive && !isReplayRunning && !isRecording &&
+        !captureStopInProgress && activeRecording == nil && syncingRecordingIDs.isEmpty &&
+        uploadingProfileCount == 0 && scheduledSyncCount == 0 && downloadingRecordingID == nil
+    }
 
     let cameraRecorder = CameraRecorder()
 
@@ -83,7 +95,7 @@ final class AppViewModel: ObservableObject {
     private var captureSessionZeroUncertaintyNs: UInt64?
     private var captureStopInProgress = false
     private var hasPreparedActiveCapture = false
-    private var syncingRecordingIDs = Set<UUID>()
+    @Published private var syncingRecordingIDs = Set<UUID>()
 
     init(store: WoonaStore? = try? WoonaStore()) {
         self.store = store
@@ -93,13 +105,15 @@ final class AppViewModel: ObservableObject {
         serverBaseURL = defaults.string(forKey: "serverBaseURL") ?? "https://cool-trams.digital"
         serverWifiOnly = defaults.object(forKey: "serverWifiOnly") as? Bool ?? true
         serverToken = keychainTokenStore.load()
+        selectedAccountID = defaults.string(forKey: "selectedAccountID")
+        accountInput = selectedAccountID ?? ""
         cameraRecorder.onRecordingFailure = { [weak self] message in
             Task { @MainActor in self?.handleCameraFailure(message) }
         }
         reloadProfiles(selecting: defaults.string(forKey: "selectedDogID").flatMap(UUID.init(uuidString:)))
         if store == nil { errorMessage = "Unable to open local Woona database" }
         registerBackgroundSync()
-        Task { await resumePendingSync() }
+        schedulePendingSync()
     }
 
     enum AppTab: Hashable {
@@ -113,15 +127,22 @@ final class AppViewModel: ObservableObject {
     }
 
     func saveDogProfile(_ questionnaire: DogQuestionnaire, replacing profile: DogProfile? = nil) {
-        guard let store else { return }
+        guard !isAccountOperationRunning, let store else { return }
+        guard profile == nil || profile?.accountID == selectedAccountID else { return }
         do {
-            let saved = try store.saveProfile(questionnaire, replacing: profile)
+            let saved = try store.saveProfile(questionnaire, replacing: profile, accountID: selectedAccountID)
             reloadProfiles(selecting: saved.id)
-            Task { await uploadProfile(saved) }
+            uploadingProfileCount += 1
+            Task {
+                defer { uploadingProfileCount -= 1 }
+                await uploadProfile(saved)
+            }
         } catch { showError("Failed to save dog profile", error: error) }
     }
 
     func selectDogProfile(_ profile: DogProfile) {
+        guard profile.accountID == selectedAccountID else { return }
+        serverRecordings = []
         selectedDogProfile = profile
         UserDefaults.standard.set(profile.id.uuidString, forKey: "selectedDogID")
         reloadRecentRecordings()
@@ -129,6 +150,7 @@ final class AppViewModel: ObservableObject {
     }
 
     func saveServerSettings() {
+        guard canChangeAccount else { return }
         serverBaseURL = serverBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         serverToken = serverToken.trimmingCharacters(in: .whitespacesAndNewlines)
         UserDefaults.standard.set(serverBaseURL, forKey: "serverBaseURL")
@@ -137,10 +159,56 @@ final class AppViewModel: ObservableObject {
         catch { showError("Failed to store server token", error: error) }
     }
 
-    func refreshFromServer() {
-        saveServerSettings()
-        guard let store else { return }
+    func applyAccount() {
+        guard canChangeAccount, let store else { return }
+        do {
+            let account = try WoonaServerClient.normalizedAccount(accountInput)
+            let client = try serverClient(accountID: account)
+            isAccountOperationRunning = true
+            Task {
+                defer { isAccountOperationRunning = false; schedulePendingSync() }
+                do {
+                    try await client.applyAccount()
+                    selectedAccountID = account
+                    accountInput = account ?? ""
+                    UserDefaults.standard.set(account, forKey: "selectedAccountID")
+                    serverRecordings = []
+                    showingAllRecordings = false
+                    reloadProfiles()
+                    let restored = try await client.restoreProfiles(into: store)
+                    _ = try await client.restoreRecordings(dogIDs: restored.map(\.id), into: store)
+                    reloadProfiles()
+                    await reloadServerRecordings()
+                } catch { showError("Account restore failed; retry Apply", error: error) }
+            }
+        } catch { showError("Invalid account", error: error) }
+    }
+
+    func linkUnassignedDog(_ dog: DogProfile) {
+        guard canChangeAccount, let account = selectedAccountID, dog.accountID == nil, let store else { return }
+        isAccountOperationRunning = true
         Task {
+            defer { isAccountOperationRunning = false; schedulePendingSync() }
+            do {
+                let client = try serverClient(accountID: account)
+                do { try await client.linkDog(dog.id) }
+                catch ServerSyncError.requestFailed(404, _) {
+                    guard dog.revision == 0 else { throw WoonaStoreError.invalidData("Server dog was not found; restore before linking") }
+                    // A never-uploaded local dog can be explicitly assigned before its first upload.
+                }
+                try store.linkDog(dogID: dog.id, accountID: account)
+                reloadProfiles(selecting: dog.id)
+                if let linked = selectedDogProfile { await uploadProfile(linked) }
+            } catch { showError("Dog link failed", error: error) }
+        }
+    }
+
+    func refreshFromServer() {
+        guard canChangeAccount, let store else { return }
+        saveServerSettings()
+        isAccountOperationRunning = true
+        Task {
+            defer { isAccountOperationRunning = false; schedulePendingSync() }
             do {
                 let client = try serverClient()
                 _ = try await client.deviceID()
@@ -150,6 +218,22 @@ final class AppViewModel: ObservableObject {
                 await reloadServerRecordings()
                 appendDiagnostic("Server restore completed")
             } catch { showError("Server restore failed", error: error) }
+        }
+    }
+
+    private func schedulePendingSync() {
+        scheduledSyncCount += 1
+        Task {
+            defer { scheduledSyncCount -= 1 }
+            await resumePendingSync()
+        }
+    }
+
+    private func scheduleSync(_ recording: WoonaRecording) {
+        scheduledSyncCount += 1
+        Task {
+            defer { scheduledSyncCount -= 1 }
+            await sync(recording: recording)
         }
     }
 
@@ -170,7 +254,7 @@ final class AppViewModel: ObservableObject {
             defer { downloadingRecordingID = nil }
             do {
                 let client = try serverClient()
-                for artifact in try store.missingArtifacts(recordingID: recordingID) {
+                for artifact in try store.missingArtifacts(recordingID: recordingID) where artifact.uploadState == "available" {
                     let target = store.rootDirectory.appendingPathComponent(artifact.relativePath)
                     try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
                     try await client.download(
@@ -190,7 +274,7 @@ final class AppViewModel: ObservableObject {
         guard let store else { return }
         do {
             try store.resetFailedSync()
-            Task { await resumePendingSync() }
+            schedulePendingSync()
         } catch { showError("Failed to retry synchronization", error: error) }
     }
 
@@ -244,6 +328,7 @@ final class AppViewModel: ObservableObject {
     }
 
     func connect(to device: BleDevice, questionnaire: SessionQuestionnaire) {
+        guard !isAccountOperationRunning else { return }
         guard activeRecording == nil, !captureStopInProgress else { return }
         guard let profile = selectedDogProfile, let store else {
             showError("Select or create a dog profile first", error: nil)
@@ -297,6 +382,7 @@ final class AppViewModel: ObservableObject {
     }
 
     func startReplay(from fileURL: URL, questionnaire: SessionQuestionnaire) {
+        guard !isAccountOperationRunning else { return }
         guard activeRecording == nil, !captureStopInProgress else { return }
         guard let profile = selectedDogProfile, let store else {
             showError("Select or create a dog profile first", error: nil)
@@ -675,12 +761,60 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    func saveSessionQuestionnaire(_ questionnaire: SessionQuestionnaire, displayedRecording: WoonaRecording) {
+        guard canEditQuestionnaire(displayedRecording), let store, let profile = try? store.profile(dogID: displayedRecording.dogID, versionID: displayedRecording.profileVersionID),
+              profile.accountID == selectedAccountID else { return }
+        if ["synced", "remote"].contains(displayedRecording.serverSyncState) {
+            isAccountOperationRunning = true
+            Task {
+                defer { isAccountOperationRunning = false; schedulePendingSync() }
+                do {
+                    let detail = try await serverClient(accountID: profile.accountID).updateQuestionnaire(
+                        recordingID: displayedRecording.id, questionnaire: questionnaire,
+                        expectedRevision: displayedRecording.questionnaireRevision)
+                    let canonical = try JSONDecoder().decode(SessionQuestionnaire.self, from: JSONEncoder().encode(detail.sessionQuestionnaire))
+                    try store.saveSessionQuestionnaire(recordingID: detail.id, questionnaire: canonical, revision: detail.questionnaireRevision ?? 1)
+                    reloadRecentRecordings()
+                } catch ServerSyncError.requestFailed(409, _) {
+                    showError("Questionnaire changed on the server. Use Restore questionnaire from server, then reopen the editor before saving", error: ServerSyncError.requestFailed(409, "Revision conflict"))
+                } catch { showError("Questionnaire save failed; reopen to retry", error: error) }
+            }
+        } else {
+            guard !syncingRecordingIDs.contains(displayedRecording.id) else { return }
+            do {
+                try store.saveSessionQuestionnaire(recordingID: displayedRecording.id, questionnaire: questionnaire)
+                reloadRecentRecordings()
+                if let updated = try store.recording(id: displayedRecording.id) { scheduleSync(updated) }
+            } catch { showError("Questionnaire save failed", error: error) }
+        }
+    }
+
+    func restoreSessionQuestionnaire(_ recording: WoonaRecording) {
+        guard canEditQuestionnaire(recording), let store,
+              let profile = try? store.profile(dogID: recording.dogID, versionID: recording.profileVersionID),
+              profile.accountID == selectedAccountID else { return }
+        isAccountOperationRunning = true
+        Task {
+            defer { isAccountOperationRunning = false; schedulePendingSync() }
+            do {
+                let detail = try await serverClient(accountID: profile.accountID).recordingDetail(recording.id)
+                let canonical = try JSONDecoder().decode(SessionQuestionnaire.self, from: JSONEncoder().encode(detail.sessionQuestionnaire))
+                try store.saveSessionQuestionnaire(recordingID: recording.id, questionnaire: canonical, revision: detail.questionnaireRevision ?? 1)
+                _ = try store.restoreRemoteRecording(detail)
+                reloadRecentRecordings()
+            } catch { showError("Server questionnaire restore failed", error: error) }
+        }
+    }
+
+    func canEditQuestionnaire(_ recording: WoonaRecording) -> Bool {
+        !isAccountOperationRunning && scheduledSyncCount == 0 && !syncingRecordingIDs.contains(recording.id) && recording.endedAtUTC != nil
+    }
+
     func saveHeartQuestionnaire(_ heart: HeartQuestionnaire, recordingID: UUID) {
         do {
-            guard let store else { return }
-            try store.saveHeartQuestionnaire(recordingID: recordingID, heart: heart)
-            reloadRecentRecordings()
-            if let recording = try store.recording(id: recordingID) { Task { await sync(recording: recording) } }
+            guard let store, let recording = try store.recording(id: recordingID), var questionnaire = recording.questionnaire else { return }
+            questionnaire.heartQuestionnaire = heart.normalized()
+            saveSessionQuestionnaire(questionnaire, displayedRecording: recording)
         } catch { showError("Не удалось сохранить анкету по сердцебиению", error: error) }
     }
 
@@ -698,7 +832,10 @@ final class AppViewModel: ObservableObject {
     }
 
     func attachReference(recordingID: UUID, type: String, url: URL, metadata: ReferenceMetadata) {
-        guard let root = store?.rootDirectory else { return }
+        guard let root = store?.rootDirectory,
+              let recording = try? store?.recording(id: recordingID),
+              let profile = try? store?.profile(dogID: recording.dogID, versionID: recording.profileVersionID),
+              profile.accountID == selectedAccountID else { return }
         Task {
             do {
                 try await Task.detached(priority: .userInitiated) {
@@ -718,9 +855,14 @@ final class AppViewModel: ObservableObject {
     private func reloadProfiles(selecting preferredID: UUID? = nil) {
         guard let store else { return }
         do {
-            dogProfiles = try store.profiles()
+            let previousDogID = selectedDogProfile?.id
+            let previousAccountID = selectedDogProfile?.accountID
+            let allProfiles = try store.profiles()
+            dogProfiles = allProfiles.filter { $0.accountID == selectedAccountID }
+            unassignedDogProfiles = allProfiles.filter { $0.accountID == nil }
             let id = preferredID ?? selectedDogProfile?.id
             selectedDogProfile = id.flatMap { id in dogProfiles.first { $0.id == id } } ?? dogProfiles.first
+            if previousDogID != selectedDogProfile?.id || previousAccountID != selectedDogProfile?.accountID { serverRecordings = [] }
             if let selectedDogProfile {
                 UserDefaults.standard.set(selectedDogProfile.id.uuidString, forKey: "selectedDogID")
             }
@@ -742,7 +884,9 @@ final class AppViewModel: ObservableObject {
                     FileManager.default.fileExists(atPath: store.rootDirectory.appendingPathComponent($0.relativePath).path)
                 }.count
                 recordingFileCounts[recording.id] = (local, artifacts.count)
-                if local < artifacts.count { downloadableRecordingIDs.insert(recording.id) }
+                if artifacts.contains(where: { $0.uploadState == "available" && !FileManager.default.fileExists(atPath: store.rootDirectory.appendingPathComponent($0.relativePath).path) }) {
+                    downloadableRecordingIDs.insert(recording.id)
+                }
                 if local > 0 && !["preparing", "recording"].contains(recording.status) { exportableRecordingIDs.insert(recording.id) }
                 recordingSyncErrors[recording.id] = try store.recordingSyncError(recordingID: recording.id)
             }
@@ -751,16 +895,22 @@ final class AppViewModel: ObservableObject {
     }
 
     private func serverClient() throws -> WoonaServerClient {
+        try serverClient(accountID: selectedAccountID)
+    }
+
+    private func serverClient(accountID: String?) throws -> WoonaServerClient {
         try WoonaServerClient(
-            configuration: ServerConfiguration(baseURL: serverBaseURL, wifiOnly: serverWifiOnly),
+            configuration: ServerConfiguration(baseURL: serverBaseURL, wifiOnly: serverWifiOnly, accountID: accountID),
             token: serverToken
         )
     }
 
     private func uploadProfile(_ profile: DogProfile) async {
         guard !serverToken.isEmpty, let store else { return }
+        uploadingProfileCount += 1
+        defer { uploadingProfileCount -= 1 }
         do {
-            let revision = try await serverClient().upload(profile: profile, store: store)
+            let revision = try await serverClient(accountID: profile.accountID).upload(profile: profile, store: store)
             try store.setServerRevision(dogID: profile.id, revision: revision)
             reloadProfiles(selecting: profile.id)
         } catch { showError("Profile upload failed", error: error) }
@@ -768,7 +918,12 @@ final class AppViewModel: ObservableObject {
 
     private func reloadServerRecordings() async {
         guard !serverToken.isEmpty, let profile = selectedDogProfile else { serverRecordings = []; return }
-        do { serverRecordings = try await serverClient().recordings(dogID: profile.id, limit: 10) }
+        let accountID = selectedAccountID
+        do {
+            let recordings = try await serverClient(accountID: accountID).recordings(dogID: profile.id, limit: 10)
+            guard selectedAccountID == accountID, selectedDogProfile?.id == profile.id else { return }
+            serverRecordings = recordings
+        }
         catch { appendDiagnostic("Server recordings unavailable: \(error.localizedDescription)") }
     }
 
@@ -845,18 +1000,18 @@ final class AppViewModel: ObservableObject {
     }
 
     private func sync(recording: WoonaRecording) async {
-        guard !serverToken.isEmpty, let store, recording.questionnaire?.readyForSync != false, !syncingRecordingIDs.contains(recording.id) else { return }
+        guard !isAccountOperationRunning, !serverToken.isEmpty, let store, recording.questionnaire?.readyForSync != false, !syncingRecordingIDs.contains(recording.id) else { return }
         syncingRecordingIDs.insert(recording.id)
         defer { syncingRecordingIDs.remove(recording.id) }
         do {
             guard let profile = try store.profile(dogID: recording.dogID, versionID: recording.profileVersionID) else {
                 throw WoonaStoreError.invalidData("Recording profile version is missing")
             }
-            try await serverClient().upload(recording: recording, profile: profile, store: store)
+            try await serverClient(accountID: profile.accountID).upload(recording: recording, profile: profile, store: store)
             reloadRecentRecordings()
             await reloadServerRecordings()
             if let latest = try store.recording(id: recording.id), latest.serverSyncState == "pending" {
-                Task { await self.sync(recording: latest) }
+                scheduleSync(latest)
             }
         } catch {
             reloadRecentRecordings()

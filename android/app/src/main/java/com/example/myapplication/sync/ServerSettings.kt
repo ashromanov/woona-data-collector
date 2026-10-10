@@ -1,5 +1,6 @@
 package com.example.myapplication.sync
 
+import com.example.myapplication.data.normalizeAccountId
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
@@ -17,10 +18,14 @@ data class ServerSettings(
     val token: String,
     val deviceId: String,
     val wifiOnly: Boolean,
+    val accountId: String? = null,
 ) {
     val isConfigured: Boolean
         get() = baseUrl.isNotBlank() && token.isNotBlank()
 }
+
+// Serializes ownership and metadata edits with queued uploads.
+internal val serverOperationLock = java.util.concurrent.locks.ReentrantLock()
 
 enum class ServerSyncStatus {
     NOT_CONFIGURED,
@@ -57,6 +62,7 @@ class ServerSettingsStore(context: Context) {
                 preferences.edit().putString(KEY_DEVICE_ID, it).apply()
             },
         wifiOnly = preferences.getBoolean(KEY_WIFI_ONLY, false),
+        accountId = preferences.getString("account_id", null),
     )
 
     fun save(baseUrl: String, token: String, wifiOnly: Boolean) {
@@ -70,6 +76,10 @@ class ServerSettingsStore(context: Context) {
             .putString(KEY_TOKEN, encrypt(token.trim()))
             .putBoolean(KEY_WIFI_ONLY, wifiOnly)
             .apply()
+    }
+
+    fun setAccount(identifier: String?) {
+        preferences.edit().putString("account_id", identifier?.let(::normalizeAccountId)).commit()
     }
 
     fun setWifiOnly(enabled: Boolean) {

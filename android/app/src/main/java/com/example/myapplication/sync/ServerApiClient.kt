@@ -1,5 +1,6 @@
 package com.example.myapplication.sync
 
+import com.example.myapplication.data.toJson
 import com.example.myapplication.data.ProfileSyncRecord
 import com.example.myapplication.data.RecordingSyncClock
 import com.example.myapplication.data.RecordingSyncRecord
@@ -53,6 +54,18 @@ class ServerApiClient(
         require(settings.isConfigured)
         require(chunkBytes in 1 * 1024 * 1024..16 * 1024 * 1024)
     }
+
+    fun applyAccount(identifier: String) {
+        jsonRequest("PUT", "/v1/accounts/${com.example.myapplication.data.normalizeAccountId(identifier)}", JSONObject())
+    }
+
+    fun linkDogAccount(dogId: String, accountId: String) {
+        jsonRequest("PUT", "/v1/dogs/$dogId/account", JSONObject().put("accountId", accountId))
+    }
+
+    fun editQuestionnaire(recordingId: String, revision: Int, questionnaire: com.example.myapplication.data.SessionQuestionnaire): RemoteRecording =
+        parseRecording(jsonRequest("PUT", "/v1/recordings/$recordingId/questionnaire", JSONObject()
+            .put("expectedRevision", revision).put("questionnaire", JSONObject(questionnaire.toJson()))))
 
     fun uploadProfile(record: ProfileSyncRecord): ProfileServerReceipt {
         val response = jsonRequest(
@@ -299,6 +312,7 @@ class ServerApiClient(
         useCaches = false
         setRequestProperty("Accept", "application/json")
         if (authenticated) setRequestProperty("Authorization", "Bearer ${settings.token}")
+        settings.accountId?.let { setRequestProperty("X-Woona-Account", it) }
     }
 
     private fun error(connection: HttpURLConnection, status: Int): ServerHttpException {
@@ -413,6 +427,7 @@ class ServerApiClient(
         val profile = value.getJSONObject("profileVersion")
         return RemoteDog(
             id = value.getString("id"),
+            accountId = value.nullableString("accountId"),
             numberOrName = value.getString("numberOrName"),
             revision = value.getLong("revision"),
             profile = parseProfile(profile),
@@ -452,6 +467,8 @@ class ServerApiClient(
             questionnaireSchemaVersion = value.getInt("questionnaireSchemaVersion"),
             questionnaireValidationState = value.getString("questionnaireValidationState"),
             sessionQuestionnaireJson = value.getJSONObject("sessionQuestionnaire").toString(),
+            questionnaireRevision = value.optInt("questionnaireRevision", 1),
+            accountId = value.nullableString("accountId"),
             videoRequested = value.getBoolean("videoRequested"),
             sensorHardwareId = value.nullableString("sensorHardwareId"),
             appVersion = value.getString("appVersion"),

@@ -17,6 +17,71 @@ import org.json.JSONObject
 @RunWith(AndroidJUnit4::class)
 class WoonaDatabaseTest {
     @Test
+    fun accountOwnershipPersistsAndLinkIncludesAllSessions() {
+        val old = database.saveProfile(completeDogQuestionnaire("Unassigned"))
+        val one = database.beginRecording(old.id, RecordingSource.LIVE, completeSessionQuestionnaire())
+        database.finishRecording(one.id, RecordingStatus.COMPLETED)
+        val other = database.saveProfile(completeDogQuestionnaire("Other"), accountId = "other")
+        database.linkDogAccount(old.id, " First ")
+        assertEquals("first", database.profile(requireNotNull(database.recording(one.id)).profileId)?.accountId)
+        assertEquals("other", database.profile(other.id)?.accountId)
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) { database.linkDogAccount(old.id, "other") }
+        database.close()
+        database = WoonaDatabase(ApplicationProvider.getApplicationContext(), root)
+        assertEquals("first", database.profile(old.id)?.accountId)
+        assertEquals(one.id, database.recentRecordings(old.id).single().id)
+    }
+
+    @Test
+    fun editingLocalQuestionnairePreservesCaptureFields() {
+        val dog = database.saveProfile(completeDogQuestionnaire("Edit"))
+        val session = completeSessionQuestionnaire()
+        val record = database.beginRecording(dog.id, RecordingSource.LIVE, session)
+        database.finishRecording(record.id, RecordingStatus.COMPLETED)
+        val initial = requireNotNull(database.recording(record.id)?.questionnaire)
+        database.saveSessionQuestionnaire(record.id, initial.copy(sessionLabel = "Edited"))
+        assertEquals("Edited", database.recording(record.id)?.questionnaire?.sessionLabel)
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            database.saveSessionQuestionnaire(record.id, initial.copy(videoRequested = !initial.videoRequested))
+        }
+    }
+
+    @Test
+    fun completedRestoreUpdatesEditedSessionLabelAndRevision() {
+        val local = completedPacketRecording("Restore edit")
+        val original = requireNotNull(database.recording(local.id)?.questionnaire)
+        val remote = remoteCompletedRecording(local).copy(
+            sessionLabel = "Remote edited", sessionQuestionnaireJson = original.copy(sessionLabel = "Remote edited").toJson(), questionnaireRevision = 2)
+        database.restoreServerMetadata(emptyList(), listOf(remote))
+        assertEquals("Remote edited", database.recording(local.id)?.sessionLabel)
+        assertEquals(2, database.recording(local.id)?.questionnaireRevision)
+    }
+
+    @Test
+    fun staleRemoteOwnerCannotRemoveLocalAssignmentOrSessions() {
+        val local = completedPacketRecording("Owned")
+        database.linkDogAccount(local.dogId, "first")
+        val stale = remoteCompletedRecording(local)
+        val result = database.restoreServerMetadata(listOf(RemoteDog(local.dogId, "Stale", 1, stale.profile)), listOf(stale))
+        assertEquals("first", database.profile(local.dogId)?.accountId)
+        assertEquals(local.id, database.recording(local.id)?.id)
+        assertEquals("packet data", database.resolveRelativePath(local.artifacts.single().relativePath).readText())
+        assertTrue(result.conflicts > 0)
+    }
+
+    @Test
+    fun restoredIncompleteCaptureDoesNotQueueButOriginKeepsQueue() {
+        val origin = completedPacketRecording("Origin pending")
+        database.hashPendingArtifacts()
+        val remote = remoteCompletedRecording(origin).copy(id = "remote-incomplete", receiptSha256 = null, verifiedAtUtc = null,
+            artifacts = origin.artifacts.map { RemoteArtifact("remote-${it.id}", it.type, it.fileName, it.mimeType, it.sizeBytes, it.sha256, "uploading") })
+        database.restoreServerMetadata(emptyList(), listOf(remote))
+        assertEquals(origin.sessionQuestionnaireJson, database.recording(remote.id)?.questionnaire?.toJson())
+        assertTrue(origin.id in database.pendingRecordingIds())
+        assertTrue(remote.id !in database.pendingRecordingIds())
+    }
+
+    @Test
     fun unchangedAnswersDoNotCreateAnotherProfileVersion() {
         val original = database.saveProfile(completeDogQuestionnaire("Unchanged"))
         val saved = database.saveProfile(original.questionnaire.copy(savedAtLocal = "2026-10-09T12:00:00"),original.id)

@@ -11,6 +11,24 @@ struct SettingsView: View {
                         Text(error).foregroundStyle(.red).textSelection(.enabled)
                     }
                 }
+                Section(appState.selectedLanguage == .russian ? "Аккаунт" : "Account") {
+                    TextField(appState.selectedLanguage == .russian ? "Уникальный идентификатор" : "Unique identifier", text: $appState.accountInput)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .disabled(!appState.canChangeAccount)
+                    LabeledContent(appState.selectedLanguage == .russian ? "Выбран" : "Selected", value: appState.selectedAccountID ?? (appState.selectedLanguage == .russian ? "Без аккаунта" : "Unassigned"))
+                    Button(appState.selectedLanguage == .russian ? "Применить и загрузить анкеты" : "Apply and load questionnaires") { appState.applyAccount() }
+                        .disabled(!appState.canChangeAccount)
+                    if appState.isAccountOperationRunning { ProgressView() }
+                    Text(appState.selectedLanguage == .russian ? "Без пароля. Пустое поле открывает данные без аккаунта. Один идентификатор на всех ваших устройствах." : "No password. An empty identifier opens unassigned data. Use the same identifier on all your devices.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    if appState.selectedAccountID != nil {
+                        ForEach(appState.unassignedDogProfiles) { dog in
+                            Button(appState.selectedLanguage == .russian ? "Привязать собаку и все сессии: \(dog.numberOrName)" : "Link dog and all sessions: \(dog.numberOrName)") { appState.linkUnassignedDog(dog) }
+                                .disabled(!appState.canChangeAccount)
+                        }
+                    }
+                }
                 Section(appState.text(.bleTransport)) {
                     LabeledContent(appState.text(.profile)) {
                         Text(appState.currentTransportProfileTitle)
@@ -59,11 +77,12 @@ struct SettingsView: View {
                         appState.retryFailedSync()
                     }
                     Text(appState.selectedLanguage == .russian
-                         ? "Все активные Android/iOS токены видят общих собак и завершённые записи."
-                         : "All active Android/iOS tokens share dogs and completed recordings.")
+                         ? "Данные собак и сессий доступны в выбранном аккаунте."
+                         : "Dogs and sessions are available within the selected account.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
+                .disabled(!appState.canChangeAccount)
             }
             .navigationTitle(appState.text(.settings))
         }

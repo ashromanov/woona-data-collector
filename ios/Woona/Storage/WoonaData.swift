@@ -379,6 +379,7 @@ struct DogProfile: Identifiable, Equatable {
     let questionnaire: DogQuestionnaire
     let createdAtUTC: String
     let updatedAtUTC: String
+    var accountID: String? = nil
     var numberOrName: String { questionnaire.numberOrName }
 }
 
@@ -397,6 +398,8 @@ struct WoonaRecording: Identifiable, Equatable {
     let relativeDirectory: String
     let serverSyncState: String
     var appVersion: String? = nil
+    var questionnaireRevision = 1
+    var questionnaireDirty = false
 }
 
 struct LocalArtifact: Identifiable, Equatable {
@@ -447,7 +450,7 @@ final class WoonaStore {
         let statement = try prepare(
             """
             SELECT d.id,d.current_profile_version_id,d.revision,v.content_sha256,
-                   v.questionnaire_json,d.created_at_utc,d.updated_at_utc
+                   v.questionnaire_json,d.created_at_utc,d.updated_at_utc,d.account_id
             FROM dogs d JOIN dog_profile_versions v ON v.id=d.current_profile_version_id
             WHERE d.archived_at_utc IS NULL ORDER BY d.updated_at_utc DESC
             """
@@ -471,7 +474,8 @@ final class WoonaStore {
                     contentSha256: columnText(statement, 3),
                     questionnaire: questionnaire,
                     createdAtUTC: columnText(statement, 5),
-                    updatedAtUTC: columnText(statement, 6)
+                    updatedAtUTC: columnText(statement, 6),
+                    accountID: columnOptionalText(statement, 7)
                 )
             )
         }
@@ -481,7 +485,7 @@ final class WoonaStore {
     func profile(dogID: UUID, versionID: UUID) throws -> DogProfile? {
         let statement = try prepare(
             """
-            SELECT d.id,v.id,d.revision,v.content_sha256,v.questionnaire_json,d.created_at_utc,d.updated_at_utc
+            SELECT d.id,v.id,d.revision,v.content_sha256,v.questionnaire_json,d.created_at_utc,d.updated_at_utc,d.account_id
             FROM dogs d JOIN dog_profile_versions v ON v.dog_id=d.id
             WHERE d.id=? AND v.id=? LIMIT 1
             """,
@@ -496,12 +500,13 @@ final class WoonaStore {
             contentSha256: columnText(statement, 3),
             questionnaire: try JSONDecoder().decode(DogQuestionnaire.self, from: Data(columnText(statement, 4).utf8)),
             createdAtUTC: columnText(statement, 5),
-            updatedAtUTC: columnText(statement, 6)
+            updatedAtUTC: columnText(statement, 6),
+            accountID: columnOptionalText(statement, 7)
         )
     }
 
     @discardableResult
-    func saveProfile(_ questionnaire: DogQuestionnaire, replacing profile: DogProfile? = nil) throws -> DogProfile {
+    func saveProfile(_ questionnaire: DogQuestionnaire, replacing profile: DogProfile? = nil, accountID: String? = nil) throws -> DogProfile {
         let validation = questionnaire.validate()
         guard validation.isValid else { throw WoonaStoreError.invalidData("Dog questionnaire is incomplete") }
         if let profile {
@@ -536,8 +541,16 @@ final class WoonaStore {
                 "INSERT INTO dog_profile_versions(id,dog_id,schema_version,validation_state,questionnaire_json,content_sha256,client_created_at_utc) VALUES(?,?,?,'complete',?,?,?)",
                 [.text(versionID.uuidString), .text(dogID.uuidString), .integer(Int64(questionnaire.schemaVersion)), .text(json), .text(Self.sha256(questionnaireData)), .text(now)]
             )
+            if profile == nil { try execute("UPDATE dogs SET account_id=? WHERE id=?", [accountID.map(SQLiteValue.text) ?? .null, .text(dogID.uuidString)]) }
         }
         return try profiles().first { $0.id == dogID }!
+    }
+
+    func linkDog(dogID: UUID, accountID: String) throws {
+        guard let dog = try profiles().first(where: { $0.id == dogID }), dog.accountID == nil || dog.accountID == accountID else {
+            throw WoonaStoreError.invalidData("Dog already belongs to another account")
+        }
+        try execute("UPDATE dogs SET account_id=? WHERE id=?", [.text(accountID), .text(dogID.uuidString)])
     }
 
     func setServerRevision(dogID: UUID, revision: Int) throws {
@@ -551,10 +564,14 @@ final class WoonaStore {
         revision: Int,
         questionnaire: DogQuestionnaire,
         contentSha256: String,
-        updatedAtUTC: String
+        updatedAtUTC: String,
+        accountID: String? = nil
     ) throws -> DogProfile {
         let json = String(data: try Self.dogQuestionnaireData(questionnaire), encoding: .utf8)!
         let existing = try profiles().first { $0.id == dogID }
+        guard existing?.accountID == nil || existing?.accountID == accountID else {
+            throw WoonaStoreError.invalidData("Remote dog account conflicts with local ownership")
+        }
         let preserveLocal = existing.map {
             $0.profileVersionID != profileVersionID && ($0.revision == 0 || $0.revision >= revision)
         } ?? false
@@ -600,6 +617,7 @@ final class WoonaStore {
                     .text(contentSha256), .text(updatedAtUTC), preserveLocal ? .text(updatedAtUTC) : .null,
                 ]
             )
+            try execute("UPDATE dogs SET account_id=? WHERE id=?", [accountID.map(SQLiteValue.text) ?? .null, .text(dogID.uuidString)])
         }
         return try profiles().first { $0.id == dogID }!
     }
@@ -679,12 +697,15 @@ final class WoonaStore {
         guard try profiles().contains(where: { $0.id == remote.dogId }) else {
             throw WoonaStoreError.invalidData("Remote recording references an unknown dog")
         }
+        guard try profiles().first(where: { $0.id == remote.dogId })?.accountID == remote.accountId else { throw WoonaStoreError.invalidData("Recording account conflicts with dog") }
         let existingRecording = try recording(id: remote.id)
         if let existingRecording,
            remote.ingestStatus != "complete" && (existingRecording.dogID != remote.dogId || existingRecording.profileVersionID != remote.profileVersion.id) {
             throw WoonaStoreError.invalidData("Remote recording conflicts with local metadata")
         }
         let didExist = existingRecording != nil
+        let restoredSyncState = remote.ingestStatus == "complete" && existingRecording?.questionnaireDirty != true
+            ? "synced" : (existingRecording?.serverSyncState ?? "remote")
         let relative = "recordings/\(remote.dogId.uuidString)/\(remote.startedAtUtc.prefix(10))/\(remote.id.uuidString)"
         try FileManager.default.createDirectory(
             at: rootDirectory.appendingPathComponent(relative, isDirectory: true),
@@ -734,12 +755,15 @@ final class WoonaStore {
                 "INSERT OR IGNORE INTO recording_sync(recording_id,sync_json,updated_at_utc) VALUES(?,?,?)",
                 [.text(remote.id.uuidString), .text(syncJSON), .text(now)]
             )
-            if existingRecording != nil && remote.ingestStatus == "complete" {
-                try execute("UPDATE recordings SET dog_id=?,dog_profile_version_id=?,questionnaire_json=? WHERE id=?",
-                            [.text(remote.dogId.uuidString),.text(remote.profileVersion.id.uuidString),.text(sessionJSON),.text(remote.id.uuidString)])
-                try execute("UPDATE recording_sync SET sync_json=?,updated_at_utc=? WHERE recording_id=?",
-                            [.text(syncJSON),.text(now),.text(remote.id.uuidString)])
+            if existingRecording != nil && existingRecording?.questionnaireDirty != true {
+                try execute("UPDATE recordings SET dog_id=?,dog_profile_version_id=?,questionnaire_json=?,session_label=? WHERE id=?",
+                            [.text(remote.dogId.uuidString),.text(remote.profileVersion.id.uuidString),.text(sessionJSON),.text(remote.sessionLabel),.text(remote.id.uuidString)])
+                if remote.ingestStatus == "complete" || existingRecording?.serverSyncState == "remote" {
+                    try execute("UPDATE recording_sync SET sync_json=?,updated_at_utc=? WHERE recording_id=?",
+                                [.text(syncJSON),.text(now),.text(remote.id.uuidString)])
+                }
             }
+            if existingRecording?.questionnaireDirty != true { try execute("UPDATE recordings SET questionnaire_revision=? WHERE id=?", [.integer(Int64(remote.questionnaireRevision ?? 1)), .text(remote.id.uuidString)]) }
             if let appVersion = remote.appVersion {
                 try execute("UPDATE recordings SET app_version=? WHERE id=?", [.text(appVersion), .text(remote.id.uuidString)])
             }
@@ -792,12 +816,12 @@ final class WoonaStore {
             try execute(
                 """
                 INSERT INTO server_sync_state(recording_id,state,attempt_count,updated_at_utc)
-                VALUES(?,'synced',0,?)
-                ON CONFLICT(recording_id) DO UPDATE SET state='synced',updated_at_utc=excluded.updated_at_utc
+                VALUES(?,?,0,?)
+                ON CONFLICT(recording_id) DO UPDATE SET state=excluded.state,updated_at_utc=excluded.updated_at_utc
                 """,
-                [.text(remote.id.uuidString), .text(now)]
+                [.text(remote.id.uuidString), .text(restoredSyncState), .text(now)]
             )
-            try execute("UPDATE recordings SET server_sync_state='synced' WHERE id=?", [.text(remote.id.uuidString)])
+            try execute("UPDATE recordings SET server_sync_state=? WHERE id=?", [.text(restoredSyncState), .text(remote.id.uuidString)])
         }
         return !didExist
     }
@@ -809,20 +833,38 @@ final class WoonaStore {
         )
     }
 
+    func saveSessionQuestionnaire(recordingID: UUID, questionnaire: SessionQuestionnaire, revision: Int? = nil) throws {
+        guard let recording = try recording(id: recordingID), recording.endedAtUTC != nil,
+              let original = recording.questionnaire,
+              questionnaire.validate().isValid, questionnaire.readyForSync,
+              questionnaire.animalId == original.animalId, questionnaire.videoRequested == original.videoRequested,
+              questionnaire.sessionKind == original.sessionKind else {
+            throw WoonaStoreError.invalidData("Session questionnaire is invalid or capture fields changed")
+        }
+        let json = String(decoding: try Self.sessionQuestionnaireData(questionnaire), as: UTF8.self)
+        try transaction {
+            try execute("UPDATE recordings SET questionnaire_json=?,session_label=?,questionnaire_revision=COALESCE(?,questionnaire_revision),questionnaire_dirty=? WHERE id=?",
+                        [.text(json), .text(questionnaire.sessionLabel), revision.map { .integer(Int64($0)) } ?? .null, .integer(revision == nil ? 1 : 0), .text(recordingID.uuidString)])
+            if revision == nil {
+                try execute("UPDATE recordings SET server_sync_state='pending' WHERE id=?", [.text(recordingID.uuidString)])
+                try execute("UPDATE server_sync_state SET state='pending',last_error_message=NULL WHERE recording_id=?", [.text(recordingID.uuidString)])
+            }
+        }
+    }
+
     func saveHeartQuestionnaire(recordingID: UUID, heart: HeartQuestionnaire) throws {
         guard heart.validate().isValid, let recording = try recording(id: recordingID), recording.endedAtUTC != nil,
-              var questionnaire = recording.questionnaire, questionnaire.sessionKind == "heart", questionnaire.heartQuestionnaire == nil else {
-            throw WoonaStoreError.invalidData("Анкета не заполнена или уже сохранена")
+              var questionnaire = recording.questionnaire, questionnaire.sessionKind == "heart" else {
+            throw WoonaStoreError.invalidData("Анкета не заполнена или запись ещё не завершена")
         }
         questionnaire.heartQuestionnaire = heart.normalized()
-        let json = String(data: try Self.sessionQuestionnaireData(questionnaire), encoding: .utf8)!
-        try execute("UPDATE recordings SET questionnaire_json=? WHERE id=?", [.text(json), .text(recordingID.uuidString)])
+        try saveSessionQuestionnaire(recordingID: recordingID, questionnaire: questionnaire)
     }
 
     func attachReference(recordingID: UUID, type: String, sourceURL: URL, metadata: ReferenceMetadata) throws {
         guard ["ecg", "heart_rate", "rr"].contains(type), metadata.validate().isValid,
-              let recording = try recording(id: recordingID), recording.endedAtUTC != nil else {
-            throw WoonaStoreError.invalidData("Укажите контрольную запись и временную привязку")
+              let recording = try recording(id: recordingID), recording.endedAtUTC != nil, recording.serverSyncState != "remote" else {
+            throw WoonaStoreError.invalidData("Завершите исходную выгрузку и укажите контрольную запись с временной привязкой")
         }
         let access = sourceURL.startAccessingSecurityScopedResource()
         defer { if access { sourceURL.stopAccessingSecurityScopedResource() } }
@@ -854,7 +896,7 @@ final class WoonaStore {
             """
             SELECT id,dog_id,dog_profile_version_id,source,status,session_label,
                    video_requested,started_at_utc,ended_at_utc,timezone,
-                   questionnaire_json,relative_directory,server_sync_state,app_version
+                   questionnaire_json,relative_directory,server_sync_state,app_version,questionnaire_revision,questionnaire_dirty
             FROM recordings WHERE dog_id=? ORDER BY started_at_utc DESC LIMIT ?
             """,
             [.text(dogID.uuidString), .integer(Int64(limit.map { max($0, 0) } ?? -1))]
@@ -877,7 +919,8 @@ final class WoonaStore {
     }
 
     @discardableResult
-    func applyServerDeletions(_ entities: [ServerDeletion]) throws -> Int {
+    func applyServerDeletions(_ entities: [ServerDeletion], accountID: String? = nil) throws -> Int {
+        let scopedDogIDs = Set(try profiles().filter { $0.accountID == accountID }.map { $0.id.uuidString })
         func retired(_ kind: String, _ id: String) -> Bool {
             let hash = Self.sha256(Data(id.lowercased().utf8))
             return entities.contains { $0.kind == kind && $0.id_sha256 == hash }
@@ -886,7 +929,7 @@ final class WoonaStore {
         var ids: [String] = []
         var paths: [URL] = []
         while sqlite3_step(statement) == SQLITE_ROW {
-            if ["preparing", "recording"].contains(columnText(statement, 2)) { continue }
+            if !scopedDogIDs.contains(columnText(statement, 1)) || ["preparing", "recording"].contains(columnText(statement, 2)) { continue }
             if retired("recording", columnText(statement, 0)) || retired("dog", columnText(statement, 1)) {
                 ids.append(columnText(statement, 0))
                 let path = rootDirectory.appendingPathComponent(columnText(statement, 3)).resolvingSymlinksInPath().standardizedFileURL
@@ -901,10 +944,10 @@ final class WoonaStore {
         for path in paths where FileManager.default.fileExists(atPath: path.path) { try FileManager.default.removeItem(at: path) }
         try transaction {
             for id in ids { try execute("DELETE FROM recordings WHERE id=?", [.text(id)]) }
-            let artifacts = try prepare("SELECT id,relative_path FROM artifacts WHERE recording_id NOT IN (SELECT id FROM recordings WHERE status IN ('preparing','recording'))")
+            let artifacts = try prepare("SELECT a.id,a.relative_path,r.dog_id FROM artifacts a JOIN recordings r ON r.id=a.recording_id WHERE r.status NOT IN ('preparing','recording')")
             var deletedArtifacts: [(String,URL)] = []
             while sqlite3_step(artifacts) == SQLITE_ROW {
-                if retired("artifact",columnText(artifacts,0)) {
+                if scopedDogIDs.contains(columnText(artifacts,2)) && retired("artifact",columnText(artifacts,0)) {
                     let path=rootDirectory.appendingPathComponent(columnText(artifacts,1)).resolvingSymlinksInPath().standardizedFileURL
                     guard path.path.hasPrefix(rootDirectory.resolvingSymlinksInPath().standardizedFileURL.path+"/") else {
                         sqlite3_finalize(artifacts);throw WoonaStoreError.invalidData("Invalid retired artifact path")
@@ -924,13 +967,13 @@ final class WoonaStore {
             let versions = try prepare("SELECT id,dog_id FROM dog_profile_versions WHERE id NOT IN (SELECT dog_profile_version_id FROM recordings)")
             var deletedVersions: [String] = []
             while sqlite3_step(versions) == SQLITE_ROW {
-                if retired("dog", columnText(versions, 1)) || (retired("profile",columnText(versions,0)) && !currentVersions.contains(columnText(versions,0))) { deletedVersions.append(columnText(versions, 0)) }
+                if scopedDogIDs.contains(columnText(versions, 1)) && (retired("dog", columnText(versions, 1)) || (retired("profile",columnText(versions,0)) && !currentVersions.contains(columnText(versions,0)))) { deletedVersions.append(columnText(versions, 0)) }
             }
             sqlite3_finalize(versions)
             for id in deletedVersions { try execute("DELETE FROM dog_profile_versions WHERE id=?", [.text(id)]) }
             let dogs = try prepare("SELECT id FROM dogs WHERE id NOT IN (SELECT dog_id FROM recordings) AND id NOT IN (SELECT dog_id FROM dog_profile_versions)")
             var deletedDogs: [String] = []
-            while sqlite3_step(dogs) == SQLITE_ROW { if retired("dog", columnText(dogs, 0)) { deletedDogs.append(columnText(dogs, 0)) } }
+            while sqlite3_step(dogs) == SQLITE_ROW { if scopedDogIDs.contains(columnText(dogs, 0)) && retired("dog", columnText(dogs, 0)) { deletedDogs.append(columnText(dogs, 0)) } }
             sqlite3_finalize(dogs)
             for id in deletedDogs { try execute("DELETE FROM dogs WHERE id=?", [.text(id)]) }
         }
@@ -942,7 +985,7 @@ final class WoonaStore {
             """
             SELECT id,dog_id,dog_profile_version_id,source,status,session_label,
                    video_requested,started_at_utc,ended_at_utc,timezone,
-                   questionnaire_json,relative_directory,server_sync_state,app_version
+                   questionnaire_json,relative_directory,server_sync_state,app_version,questionnaire_revision,questionnaire_dirty
             FROM recordings WHERE id=? LIMIT 1
             """,
             [.text(id.uuidString)]
@@ -1142,7 +1185,7 @@ final class WoonaStore {
             """
             SELECT id,dog_id,dog_profile_version_id,source,status,session_label,
                    video_requested,started_at_utc,ended_at_utc,timezone,
-                   questionnaire_json,relative_directory,server_sync_state,app_version
+                   questionnaire_json,relative_directory,server_sync_state,app_version,questionnaire_revision,questionnaire_dirty
             FROM recordings
             WHERE status IN ('completed','failed','interrupted')
               AND server_sync_state IN ('pending','retryable_error')
@@ -1222,7 +1265,9 @@ final class WoonaStore {
             questionnaire: try? JSONDecoder().decode(SessionQuestionnaire.self, from: Data(columnText(statement, 10).utf8)),
             relativeDirectory: columnText(statement, 11),
             serverSyncState: columnText(statement, 12),
-            appVersion: columnOptionalText(statement, 13)
+            appVersion: columnOptionalText(statement, 13),
+            questionnaireRevision: Int(sqlite3_column_int64(statement, 14)),
+            questionnaireDirty: sqlite3_column_int(statement, 15) == 1
         )
     }
 
@@ -1243,7 +1288,7 @@ final class WoonaStore {
     }
 
     private func migrate() throws {
-        try execute("PRAGMA user_version=5")
+        try execute("PRAGMA user_version=6")
         try execute(
             """
             CREATE TABLE IF NOT EXISTS dogs(
@@ -1313,6 +1358,13 @@ final class WoonaStore {
         var hasAppVersion = false
         while sqlite3_step(columns) == SQLITE_ROW { if columnText(columns, 1) == "app_version" { hasAppVersion = true } }
         if !hasAppVersion { try execute("ALTER TABLE recordings ADD COLUMN app_version TEXT") }
+        for (table, column, definition) in [("dogs", "account_id", "TEXT"), ("recordings", "questionnaire_revision", "INTEGER NOT NULL DEFAULT 1"), ("recordings", "questionnaire_dirty", "INTEGER NOT NULL DEFAULT 0")] {
+            let columns = try prepare("PRAGMA table_info(\(table))")
+            var found = false
+            while sqlite3_step(columns) == SQLITE_ROW { if columnText(columns, 1) == column { found = true } }
+            sqlite3_finalize(columns)
+            if !found { try execute("ALTER TABLE \(table) ADD COLUMN \(column) \(definition)") }
+        }
     }
 
     private func ensureReferenceColumn() throws {

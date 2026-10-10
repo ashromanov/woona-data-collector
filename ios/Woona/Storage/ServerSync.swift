@@ -4,6 +4,7 @@ import Security
 struct ServerConfiguration: Equatable {
     var baseURL: String
     var wifiOnly: Bool
+    var accountID: String? = nil
 }
 
 struct ServerRecordingSummary: Codable, Identifiable, Equatable {
@@ -56,6 +57,8 @@ struct ServerRecordingDetail: Decodable {
     let sync: JSONValue
     let artifacts: [ServerArtifact]
     var appVersion: String? = nil
+    var accountId: String? = nil
+    var questionnaireRevision: Int? = nil
 }
 
 enum JSONValue: Codable {
@@ -169,6 +172,7 @@ final class KeychainTokenStore {
 final class WoonaServerClient {
     private let baseURL: URL
     private let token: String
+    private let accountID: String?
     private let session: URLSession
 
     init(configuration: ServerConfiguration, token: String, sessionConfiguration: URLSessionConfiguration = .default) throws {
@@ -179,10 +183,42 @@ final class WoonaServerClient {
         guard !token.isEmpty else { throw ServerSyncError.tokenMissing }
         self.baseURL = url
         self.token = token
+        self.accountID = configuration.accountID
         sessionConfiguration.allowsCellularAccess = !configuration.wifiOnly
         sessionConfiguration.allowsExpensiveNetworkAccess = !configuration.wifiOnly
         sessionConfiguration.waitsForConnectivity = true
         self.session = URLSession(configuration: sessionConfiguration)
+    }
+
+    static func normalizedAccount(_ input: String) throws -> String? {
+        let value = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return nil }
+        guard value.range(of: "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", options: .regularExpression) != nil else {
+            throw WoonaStoreError.invalidData("Account: use 1–64 Latin letters, digits, dots, underscores or hyphens")
+        }
+        return value.lowercased()
+    }
+
+    func applyAccount() async throws {
+        guard let accountID else { return }
+        struct Account: Decodable { let identifier: String }
+        let _: Account = try await json(method: "PUT", path: "/v1/accounts/\(accountID)", body: Data("{}".utf8), as: Account.self)
+    }
+
+    func linkDog(_ dogID: UUID) async throws {
+        guard let accountID else { throw WoonaStoreError.invalidData("Select an account first") }
+        _ = try await rawRequest(method: "PUT", path: "/v1/dogs/\(dogID.uuidString)/account",
+                                 body: JSONSerialization.data(withJSONObject: ["accountId": accountID]), contentType: "application/json")
+    }
+
+    func recordingDetail(_ recordingID: UUID) async throws -> ServerRecordingDetail {
+        try await json(method: "GET", path: "/v1/recordings/\(recordingID.uuidString)", body: nil, as: ServerRecordingDetail.self)
+    }
+
+    func updateQuestionnaire(recordingID: UUID, questionnaire: SessionQuestionnaire, expectedRevision: Int) async throws -> ServerRecordingDetail {
+        let answers = try JSONSerialization.jsonObject(with: WoonaStore.sessionQuestionnaireData(questionnaire))
+        let body = try JSONSerialization.data(withJSONObject: ["expectedRevision": expectedRevision, "questionnaire": answers])
+        return try await json(method: "PUT", path: "/v1/recordings/\(recordingID.uuidString)/questionnaire", body: body, as: ServerRecordingDetail.self)
     }
 
     func deviceID() async throws -> UUID {
@@ -191,7 +227,7 @@ final class WoonaServerClient {
     }
 
     func upload(profile: DogProfile, store: WoonaStore) async throws -> Int {
-        try store.applyServerDeletions(try await deletions())
+        try store.applyServerDeletions(try await deletions(), accountID: accountID)
         let questionnaire = try JSONSerialization.jsonObject(with: WoonaStore.dogQuestionnaireData(profile.questionnaire))
         let payload: [String: Any] = [
             "dog": [
@@ -229,6 +265,7 @@ final class WoonaServerClient {
             let id: UUID
             let numberOrName: String
             let revision: Int
+            let accountId: String?
             let updatedAtUtc: String?
             let profileVersion: ServerProfileVersion
             let profileVersions: [ServerProfileVersion]
@@ -252,7 +289,8 @@ final class WoonaServerClient {
                     revision: dog.revision,
                     questionnaire: dog.profileVersion.questionnaire,
                     contentSha256: dog.profileVersion.contentSha256,
-                    updatedAtUTC: dog.updatedAtUtc ?? dog.profileVersion.clientCreatedAtUtc
+                    updatedAtUTC: dog.updatedAtUtc ?? dog.profileVersion.clientCreatedAtUtc,
+                    accountID: dog.accountId
                 )
                 for version in dog.profileVersions where version.id != dog.profileVersion.id {
                     try store.restoreRemoteProfileVersion(dogID: dog.id, version: version)
@@ -260,8 +298,8 @@ final class WoonaServerClient {
             }
             cursor = page.nextCursor
         } while cursor != nil
-        try store.applyServerDeletions(try await deletions())
-        return try store.profiles()
+        try store.applyServerDeletions(try await deletions(), accountID: accountID)
+        return try store.profiles().filter { $0.accountID == accountID }
     }
 
     func recordings(dogID: UUID, limit: Int = 10) async throws -> [ServerRecordingSummary] {
@@ -289,7 +327,7 @@ final class WoonaServerClient {
                     body: Optional<Data>.none,
                     as: Page.self
                 )
-                for summary in page.items where summary.ingestStatus == "complete" {
+                for summary in page.items {
                     let detail: ServerRecordingDetail = try await json(
                         method: "GET",
                         path: "/v1/recordings/\(summary.id.uuidString)",
@@ -306,11 +344,16 @@ final class WoonaServerClient {
 
     func upload(recording: WoonaRecording, profile: DogProfile, store: WoonaStore) async throws {
         do {
-            try store.applyServerDeletions(try await deletions())
+            try store.applyServerDeletions(try await deletions(), accountID: accountID)
             guard try store.recording(id: recording.id) != nil else { return }
             let existing: RecordingUploadStatus?
             do { existing = try await json(method: "GET", path: "/v1/recordings/\(recording.id.uuidString)/sync-status", body: nil, as: RecordingUploadStatus.self) }
             catch ServerSyncError.requestFailed(404, _) { existing = nil }
+            if recording.questionnaireDirty, existing != nil, let questionnaire = recording.questionnaire {
+                let accepted = try await updateQuestionnaire(recordingID: recording.id, questionnaire: questionnaire, expectedRevision: recording.questionnaireRevision)
+                let canonical = try JSONDecoder().decode(SessionQuestionnaire.self, from: JSONEncoder().encode(accepted.sessionQuestionnaire))
+                try store.saveSessionQuestionnaire(recordingID: recording.id, questionnaire: canonical, revision: accepted.questionnaireRevision ?? 1)
+            }
             let alreadyComplete = existing?.ingestStatus == "complete"
             if alreadyComplete {
                 let canonical: ServerRecordingDetail = try await json(method:"GET",path:"/v1/recordings/\(recording.id.uuidString)",body:Optional<Data>.none,as:ServerRecordingDetail.self)
@@ -448,7 +491,8 @@ final class WoonaServerClient {
             }
             let accepted: ServerRecordingDetail = try await json(method: "GET", path: "/v1/recordings/\(recording.id.uuidString)", body: Optional<Data>.none, as: ServerRecordingDetail.self)
             try store.acceptServerProfile(dogID: accepted.dogId, version: accepted.profileVersion)
-            try store.acceptServerSession(recordingID: accepted.id, questionnaire: accepted.sessionQuestionnaire)
+            let canonical = try JSONDecoder().decode(SessionQuestionnaire.self, from: JSONEncoder().encode(accepted.sessionQuestionnaire))
+            try store.saveSessionQuestionnaire(recordingID: accepted.id, questionnaire: canonical, revision: accepted.questionnaireRevision ?? 1)
             try store.updateRecordingSync(recording.id, state: "synced")
         } catch {
             let state: String
@@ -546,6 +590,7 @@ final class WoonaServerClient {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        if let accountID { request.setValue(accountID, forHTTPHeaderField: "X-Woona-Account") }
         request.setValue(UUID().uuidString, forHTTPHeaderField: "X-Request-ID")
         return request
     }

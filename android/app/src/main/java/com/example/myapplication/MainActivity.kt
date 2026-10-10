@@ -23,6 +23,9 @@ import com.example.myapplication.ble.BleTransportProfilePreferences
 import com.example.myapplication.data.DogProfile
 import com.example.myapplication.data.Recording
 import com.example.myapplication.data.RecordingSource
+import com.example.myapplication.data.profileSyncRecord
+import com.example.myapplication.data.normalizeAccountId
+import com.example.myapplication.data.acceptServerRecording
 import com.example.myapplication.data.SessionQuestionnaire
 import com.example.myapplication.data.WoonaDatabase
 import com.example.myapplication.data.artifactDownloadTarget
@@ -46,6 +49,8 @@ import com.example.myapplication.profile.SessionQuestionnaireDialog
 import com.example.myapplication.profile.HeartQuestionnaireDialog
 import com.example.myapplication.profile.ReferenceAttachmentDialog
 import com.example.myapplication.data.heartQuestionnaireDraft
+import com.example.myapplication.sync.serverOperationLock
+import kotlin.concurrent.withLock
 import com.example.myapplication.sync.ServerSettingsDialog
 import com.example.myapplication.sync.ServerSettingsStore
 import com.example.myapplication.sync.ServerApiClient
@@ -101,6 +106,8 @@ class MainActivity : ComponentActivity() {
     private var isDogQuestionnaireVisible by mutableStateOf(false)
     private var editingProfile by mutableStateOf<DogProfile?>(null)
     private var isSessionQuestionnaireVisible by mutableStateOf(false)
+    private var editingRecording by mutableStateOf<com.example.myapplication.data.Recording?>(null)
+    private var accountBusy by mutableStateOf(false)
     private var heartQuestionnaireRecordingId by mutableStateOf<String?>(null)
     private var referenceRecordingId: String? = null
     private var referenceUri by mutableStateOf<android.net.Uri?>(null)
@@ -154,6 +161,7 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.GetContent(),
     ) { uri ->
         if (uri == null) return@registerForActivityResult
+        if (accountBusy) { toast("Дождитесь применения аккаунта"); return@registerForActivityResult }
         val profileId = selectedProfileId ?: return@registerForActivityResult
         val questionnaire = pendingReplayQuestionnaire ?: return@registerForActivityResult
         val recording = runCatching {
@@ -346,6 +354,13 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                         overviewProfileContent = {
+                            AccountControls(
+                                accountId = serverSettingsStore.get().accountId,
+                                language = selectedLanguage,
+                                enabled = !accountBusy && !isServerRestoreInProgress && !deviceFeatureController.isCaptureActive() && serverSyncState.uploading == 0,
+                                unassigned = woonaDatabase.profiles().filter { it.accountId == null },
+                                onApply = ::applyAccount, onLink = ::linkDogAccount,
+                            )
                             ProfilesOverview(
                                 profiles = dogProfiles,
                                 selectedProfileId = selectedProfileId,
@@ -390,15 +405,19 @@ class MainActivity : ComponentActivity() {
                                     deviceFeatureController.onPolarConnectRequested(device.address, device.name)
                                 },
                                 onPolarDisconnect = deviceFeatureController::onPolarDisconnectRequested,
-                                onHeartQuestionnaire = { heartQuestionnaireRecordingId = it },
+                                onHeartQuestionnaire = { editingRecording = woonaDatabase.recording(it); heartQuestionnaireRecordingId = it },
+                                onEditQuestionnaire = { recording ->
+                                    editingRecording = recording
+                                    if (recording.questionnaire?.sessionKind == "heart") heartQuestionnaireRecordingId = recording.id
+                                },
                                 onAddReference = { referenceRecordingId = it; referencePicker.launch("*/*") },
                             )
                         },
                     )
-                    if (dogProfiles.isEmpty() || isDogQuestionnaireVisible) {
+                    if (isDogQuestionnaireVisible) {
                         DogQuestionnaireDialog(
                             initial = editingProfile?.questionnaire,
-                            required = dogProfiles.isEmpty(),
+                            required = false,
                             language = selectedLanguage,
                             onDismiss = {
                                 editingProfile = null
@@ -408,6 +427,7 @@ class MainActivity : ComponentActivity() {
                                 val saved = woonaDatabase.saveProfile(
                                     questionnaire = questionnaire,
                                     profileId = editingProfile?.id,
+                                    accountId = serverSettingsStore.get().accountId,
                                 )
                                 editingProfile = null
                                 isDogQuestionnaireVisible = false
@@ -443,14 +463,18 @@ class MainActivity : ComponentActivity() {
                     heartQuestionnaireRecordingId?.let { id ->
                         HeartQuestionnaireDialog(
                             language = selectedLanguage,
-                            initial = woonaDatabase.heartQuestionnaireDraft(id),
-                            onDismiss = { heartQuestionnaireRecordingId = null },
+                            initial = editingRecording?.questionnaire?.heartQuestionnaire ?: woonaDatabase.heartQuestionnaireDraft(id),
+                            onDismiss = { heartQuestionnaireRecordingId = null; editingRecording = null },
                             onSave = {
-                                woonaDatabase.saveHeartQuestionnaire(id, it)
-                                heartQuestionnaireRecordingId = null
-                                handleRecordingChanged()
+                                val displayed = editingRecording ?: woonaDatabase.recording(id)
+                                displayed?.questionnaire?.let { q -> saveEditedQuestionnaire(displayed, q.copy(heartQuestionnaire = it)) }
                             },
                         )
+                    }
+                    editingRecording?.takeIf { it.questionnaire?.sessionKind != "heart" }?.let { recording ->
+                        SessionQuestionnaireDialog(language = selectedLanguage, initial = recording.questionnaire,
+                            onDismiss = { editingRecording = null },
+                            onSave = { saveEditedQuestionnaire(recording, it) })
                     }
                     referenceUri?.let { uri ->
                         val name = contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
@@ -477,11 +501,17 @@ class MainActivity : ComponentActivity() {
                             language = selectedLanguage,
                             onDismiss = { isServerSettingsVisible = false },
                             onSave = { url, token ->
+                                if (accountBusy || isServerRestoreInProgress || deviceFeatureController.isCaptureActive() || woonaDatabase.serverSyncCounts().uploading > 0) {
+                                    toast("Дождитесь завершения записи и синхронизации"); return@ServerSettingsDialog
+                                }
+                                if (!serverOperationLock.tryLock()) { toast("Дождитесь завершения синхронизации"); return@ServerSettingsDialog }
+                                try {
                                 serverSettingsStore.save(
                                     baseUrl = url,
                                     token = token,
                                     wifiOnly = serverSettingsStore.get().wifiOnly,
                                 )
+                                } finally { serverOperationLock.unlock() }
                                 isServerSettingsVisible = false
                                 woonaDatabase.resetFailedSync()
                                 refreshServerState()
@@ -588,6 +618,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startLiveRecording(address: String, questionnaire: SessionQuestionnaire) {
+        if (accountBusy) { toast("Дождитесь применения аккаунта"); return }
         val profileId = selectedProfileId ?: return
         runCatching {
             val recording = woonaDatabase.beginRecording(
@@ -620,7 +651,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun refreshProfilesAndRecordings(preferredProfileId: String? = null) {
-        val profiles = woonaDatabase.profiles()
+        val profiles = woonaDatabase.profiles().filter { it.accountId == serverSettingsStore.get().accountId }
         dogProfiles = profiles
         val storedId = profilePreferences.getString(LAST_PROFILE_ID_KEY, null)
         val selectedId = sequenceOf(preferredProfileId, selectedProfileId, storedId)
@@ -631,7 +662,7 @@ class MainActivity : ComponentActivity() {
         if (selectedId == null) {
             recentRecordings = emptyList()
             editingProfile = null
-            isDogQuestionnaireVisible = true
+            isDogQuestionnaireVisible = false
         } else {
             profilePreferences.edit().putString(LAST_PROFILE_ID_KEY, selectedId).apply()
             recentRecordings = woonaDatabase.recentRecordings(selectedId)
@@ -643,7 +674,7 @@ class MainActivity : ComponentActivity() {
             refreshProfilesAndRecordings()
             recentRecordings.firstOrNull {
                 it.endedAtUtc != null && it.questionnaire?.sessionKind == "heart" && it.questionnaire.heartQuestionnaire == null
-            }?.let { if (heartQuestionnaireRecordingId == null) heartQuestionnaireRecordingId = it.id }
+            }?.let { if (heartQuestionnaireRecordingId == null) { editingRecording = it; heartQuestionnaireRecordingId = it.id } }
             ServerSyncScheduler.enqueuePending(applicationContext)
             refreshServerState()
         }
@@ -670,19 +701,92 @@ class MainActivity : ComponentActivity() {
         )
     }
 
+    private fun applyAccount(value: String) {
+        if (accountBusy || isServerRestoreInProgress || deviceFeatureController.isCaptureActive() || woonaDatabase.serverSyncCounts().uploading > 0) return
+        val identifier = try { value.takeIf { it.isNotBlank() }?.let(::normalizeAccountId) }
+            catch (error: Exception) { toast(error.message.orEmpty()); return }
+        accountBusy = true
+        val settings = serverSettingsStore.get().copy(accountId = identifier)
+        backgroundExecutor.execute {
+            val result = runCatching { serverOperationLock.withLock {
+                if (identifier != null && settings.isConfigured) ServerApiClient(settings).applyAccount(identifier)
+                if (settings.isConfigured) ServerApiClient(settings).fetchRestoreSnapshot() else null
+            }
+            }
+            runOnUiThread {
+                accountBusy = false
+                result.onSuccess { snapshot ->
+                    if (deviceFeatureController.isCaptureActive()) { toast("Дождитесь завершения записи"); return@onSuccess }
+                    snapshot?.let { woonaDatabase.restoreServerMetadata(it.dogs, it.recordings) }
+                    serverSettingsStore.setAccount(identifier)
+                    editingProfile = null; editingRecording = null; heartQuestionnaireRecordingId = null
+                    isDogQuestionnaireVisible = false
+                    refreshProfilesAndRecordings(); refreshServerState()
+                }.onFailure { toast("Не удалось применить аккаунт: ${it.message}") }
+            }
+        }
+    }
+
+    private fun linkDogAccount(dogId: String) {
+        val settings = serverSettingsStore.get()
+        val account = settings.accountId ?: return
+        if (accountBusy || deviceFeatureController.isCaptureActive() || woonaDatabase.serverSyncCounts().uploading > 0) return
+        accountBusy = true
+        backgroundExecutor.execute {
+            val result = runCatching { serverOperationLock.withLock {
+                val revision = woonaDatabase.profileSyncRecord(requireNotNull(woonaDatabase.profile(dogId)).profileVersionId)?.expectedRevision ?: 0L
+                require(settings.isConfigured || revision == 0L) { "Подключитесь к серверу для связывания этой собаки" }
+                if (settings.isConfigured) {
+                    try { ServerApiClient(settings).linkDogAccount(dogId, account) }
+                    catch (error: com.example.myapplication.sync.ServerHttpException) { if (error.status != 404 || revision != 0L) throw error }
+                }
+                woonaDatabase.linkDogAccount(dogId, account)
+            }
+            }
+            runOnUiThread {
+                accountBusy = false
+                result.onSuccess { refreshProfilesAndRecordings(dogId); ServerSyncScheduler.enqueuePending(applicationContext) }
+                    .onFailure { toast("Не удалось связать собаку: ${it.message}") }
+            }
+        }
+    }
+
+    private fun saveEditedQuestionnaire(displayed: com.example.myapplication.data.Recording, questionnaire: SessionQuestionnaire) {
+        val settings = serverSettingsStore.get().copy(accountId = woonaDatabase.profile(displayed.profileId)?.accountId)
+        backgroundExecutor.execute {
+            val result = runCatching { serverOperationLock.withLock {
+                require(woonaDatabase.recording(displayed.id)?.serverSyncState != "uploading") { "Дождитесь завершения выгрузки" }
+                if (settings.isConfigured) {
+                    try {
+                        woonaDatabase.acceptServerRecording(ServerApiClient(settings).editQuestionnaire(displayed.id, displayed.questionnaireRevision, questionnaire))
+                    } catch (error: com.example.myapplication.sync.ServerHttpException) {
+                        if (error.status != 404 || displayed.serverSyncState == "synced") throw error
+                        woonaDatabase.saveSessionQuestionnaire(displayed.id, questionnaire)
+                    }
+                } else woonaDatabase.saveSessionQuestionnaire(displayed.id, questionnaire)
+            }
+            }
+            runOnUiThread {
+                result.onSuccess { editingRecording = null; heartQuestionnaireRecordingId = null; handleRecordingChanged() }
+                    .onFailure { error -> toast(if (error is com.example.myapplication.sync.ServerHttpException && error.status == 409)
+                        "Анкета изменена на сервере. Закройте редактор и восстановите данные, затем повторите изменения." else "Анкета не сохранена: ${error.message}") }
+            }
+        }
+    }
+
     private fun restoreServerData() {
-        if (isServerRestoreInProgress) return
+        if (accountBusy || isServerRestoreInProgress || deviceFeatureController.isCaptureActive()) return
         val settings = serverSettingsStore.get()
         if (!settings.isConfigured) return
         isServerRestoreInProgress = true
         refreshServerState()
         backgroundExecutor.execute {
-            val outcome = runCatching {
+            val outcome = runCatching { serverOperationLock.withLock {
                 val snapshot = ServerApiClient(settings).fetchRestoreSnapshot()
                 val restored = woonaDatabase.restoreServerMetadata(snapshot.dogs, snapshot.recordings)
                 woonaDatabase.applyServerDeletions(snapshot.deletions)
                 restored
-            }
+            } }
             runOnUiThread {
                 isServerRestoreInProgress = false
                 refreshProfilesAndRecordings()
