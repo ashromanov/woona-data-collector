@@ -672,9 +672,9 @@ final class WoonaDataTests: XCTestCase {
         XCTAssertEqual(pending.sessionLabel, "Corrected")
         XCTAssertEqual(try store.pendingRecordings().map(\.id), [recording.id])
         XCTAssertEqual(try store.syncJSON(recordingID: recording.id), syncBefore)
-        edited.videoRequested = true
+        edited.videoRequested.toggle()
         XCTAssertThrowsError(try store.saveSessionQuestionnaire(recordingID: recording.id, questionnaire: edited))
-        edited.videoRequested = false
+        edited.videoRequested.toggle()
         try store.saveSessionQuestionnaire(recordingID: recording.id, questionnaire: edited, revision: 2)
         XCTAssertFalse(try XCTUnwrap(store.recording(id: recording.id)).questionnaireDirty)
         XCTAssertEqual(try store.recording(id: recording.id)?.questionnaireRevision, 2)
