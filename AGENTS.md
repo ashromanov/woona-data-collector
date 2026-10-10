@@ -26,6 +26,10 @@
 - Treat client/server contract updates as one release: deploy and verify the
   compatible production API and migrations before distributing dependent mobile
   builds; update affected clients when a server change requires it.
+- Release Android and iOS together with matching functionality and marketing
+  versions, including platform-specific fixes. Build and distribute both clients
+  for every mobile release; verify TestFlight upload separately from simulator
+  artifacts and do not claim tester availability without checking Apple processing.
 
 ## Agent workflow
 
