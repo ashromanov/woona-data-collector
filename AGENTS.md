@@ -23,6 +23,9 @@
   video, and recording state. Do not trade data safety for a smaller diff.
 - Emulator tests never prove real BLE behavior, camera behavior, `video.mp4`
   quality, or hardware synchronization. Report those as physical-device checks.
+- Treat client/server contract updates as one release: deploy and verify the
+  compatible production API and migrations before distributing dependent mobile
+  builds; update affected clients when a server change requires it.
 
 ## Agent workflow
 
